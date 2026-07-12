@@ -1,0 +1,695 @@
+<?php
+/**
+ * EST Desktop 2.0 history-export importer/probe.
+ * Emulates the EST Desktop server-backed export flow:
+ *   GET  /dop/connect
+ *   GET  /dop/{customer}/workgroup/customerNumber/{customerNumber}      (optional workgroup discovery)
+ *   GET  /dop/workgroup/{workgroup}/mobos                              (optional diagnostic)
+ *   GET  /ship/desktop/{customer}/{workgroup}/{catgroup}/order/{from}/{to}/{moboCustomerId}
+ *   POST /ship/desktop/{customer}/{workgroup}/{catgroup}/exportorderhistory?filetypes=2
+ *
+ * The raw EST responses are saved under data/est-export/ and a normalized
+ * data/tracking.csv is generated when ManifestItems rows can be parsed.
+ */
+
+set_time_limit(0);
+ini_set('display_errors', 'stderr');
+
+$root = getenv('APP_ROOT') ?: realpath(dirname(__DIR__));
+$dataDir = getenv('DATA_DIR') ?: ($root . DIRECTORY_SEPARATOR . 'data');
+$stopFile = getenv('STOP_FILE') ?: ($dataDir . DIRECTORY_SEPARATOR . 'stop-requested.txt');
+$outputFile = getenv('TRACKING_CSV') ?: ($dataDir . DIRECTORY_SEPARATOR . 'tracking.csv');
+$exportDir = $dataDir . DIRECTORY_SEPARATOR . 'est-export';
+$userIni = file_exists($root . DIRECTORY_SEPARATOR . 'user.ini')
+    ? ($root . DIRECTORY_SEPARATOR . 'user.ini')
+    : ($dataDir . DIRECTORY_SEPARATOR . 'user.ini');
+$cacert = file_exists($root . DIRECTORY_SEPARATOR . 'cacert.pem')
+    ? ($root . DIRECTORY_SEPARATOR . 'cacert.pem')
+    : ($dataDir . DIRECTORY_SEPARATOR . 'cacert.pem');
+$developerMode = in_array(strtolower((string) getenv('DEVELOPER_MODE')), array('1', 'true', 'yes', 'on'), true);
+
+function emit_event($type, $payload = array()) {
+    echo json_encode(array_merge(array('type' => $type), $payload), JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    flush();
+}
+
+function developer_mode_enabled() {
+    return !empty($GLOBALS['developerMode']);
+}
+
+function redact_sensitive($text) {
+    $text = (string) $text;
+    $text = preg_replace('/Authorization:\s*Basic\s+[^\r\n]+/i', 'Authorization: Basic [REDACTED]', $text);
+    $text = preg_replace('/(EST_PASSWORD|CANADAPOST_PASSWORD|password)=([^\s&]+)/i', '$1=[REDACTED]', $text);
+    $text = preg_replace('#<(?:[A-Za-z0-9_]+:)?password[^>]*>.*?</(?:[A-Za-z0-9_]+:)?password>#Usi', '<password>[REDACTED]</password>', $text);
+    return $text;
+}
+
+function redact_value($value) {
+    if (is_array($value)) {
+        $out = array();
+        foreach ($value as $key => $childValue) $out[$key] = redact_value($childValue);
+        return $out;
+    }
+    if (is_object($value)) {
+        $out = new stdClass();
+        foreach (get_object_vars($value) as $key => $childValue) $out->{$key} = redact_value($childValue);
+        return $out;
+    }
+    return redact_sensitive((string) $value);
+}
+
+function emit_debug_raw($payload) {
+    if (!developer_mode_enabled()) return;
+    emit_event('debug_raw', redact_value($payload));
+}
+
+function fail_event($message, $code = 1) {
+    emit_event('error', array('message' => $message));
+    exit($code);
+}
+
+function warn_event($message, $payload = array()) {
+    emit_event('est_warning', array_merge(array('message' => $message), $payload));
+}
+
+function stop_requested($stopFile) {
+    return $stopFile && file_exists($stopFile);
+}
+
+function one_line($value) {
+    return preg_replace('/\s+/', ' ', trim((string) $value));
+}
+
+function compact_number($value) {
+    return preg_replace('/\D+/', '', trim((string) $value));
+}
+
+function normalize_date_iso($value, $fieldName) {
+    $value = trim((string) $value);
+    if ($value === '') fail_event("Missing $fieldName date.");
+
+    if (preg_match('/^\d{8}$/', $value)) {
+        $dt = DateTime::createFromFormat('!Ymd', $value);
+    } else {
+        $dt = DateTime::createFromFormat('!Y-m-d', $value);
+    }
+
+    if (!$dt) {
+        $timestamp = strtotime($value);
+        if ($timestamp === false) fail_event("Invalid $fieldName date: $value. Use YYYY-MM-DD.");
+        $dt = new DateTime('@' . $timestamp);
+        $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+    }
+
+    return $dt->format('Y-m-d');
+}
+
+function iso_to_yyyymmdd($iso) {
+    $dt = DateTime::createFromFormat('!Y-m-d', $iso);
+    return $dt ? $dt->format('Ymd') : preg_replace('/\D+/', '', $iso);
+}
+
+function normalize_postal_code($value) {
+    return strtoupper(preg_replace('/\s+/', '', trim((string) $value)));
+}
+
+function starts_with_digit($value) {
+    return preg_match('/^\d/', trim((string) $value));
+}
+
+function safe_est_url($url) {
+    $url = trim((string) $url);
+    if (!preg_match('#^https://ws\.postescanada-canadapost\.ca/(?:dop|ship/desktop)(?:/|$)#i', $url)) {
+        fail_event('Refusing unexpected EST Desktop URL: ' . $url);
+    }
+    return $url;
+}
+
+function http_request($method, $url, $accept, $username, $password, $cacert, $body = null, $contentType = null, $extraHeaders = array()) {
+    $url = safe_est_url($url);
+    $headers = array(
+        'Accept: ' . $accept,
+        'Accept-Language: en-CA',
+        'User-Agent: EST Desktop 2.0 compatible history importer',
+    );
+    if ($contentType) $headers[] = 'Content-Type: ' . $contentType;
+    foreach ($extraHeaders as $header) $headers[] = $header;
+
+    emit_debug_raw(array(
+        'label' => 'EST HTTP request',
+        'method' => $method,
+        'url' => $url,
+        'accept' => $accept,
+        'requestBody' => $body ?: '',
+    ));
+
+    if (!extension_loaded('curl')) {
+        throw new Exception('PHP curl extension is required for the EST Desktop exporter.');
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+        CURLOPT_CUSTOMREQUEST => strtoupper($method),
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_USERPWD => $username . ':' . $password,
+        CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 20,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_ENCODING => '',
+    ));
+    if ($cacert && file_exists($cacert)) curl_setopt($ch, CURLOPT_CAINFO, $cacert);
+    if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+
+    $raw = curl_exec($ch);
+    if ($raw === false) {
+        $error = curl_error($ch);
+        curl_close($ch);
+        emit_debug_raw(array(
+            'label' => 'EST HTTP error',
+            'method' => $method,
+            'url' => $url,
+            'accept' => $accept,
+            'error' => $error,
+        ));
+        throw new Exception('EST HTTP request failed: ' . $error);
+    }
+
+    $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $responseHeaders = substr($raw, 0, $headerSize);
+    $responseBody = substr($raw, $headerSize);
+    curl_close($ch);
+
+    emit_debug_raw(array(
+        'label' => 'EST HTTP response',
+        'method' => $method,
+        'url' => $url,
+        'accept' => $accept,
+        'status' => $status,
+        'responseHeaders' => $responseHeaders,
+        'responseBody' => $responseBody,
+    ));
+
+    if ($status < 200 || $status >= 300) {
+        $summary = substr(one_line(strip_tags($responseBody)), 0, 800);
+        throw new Exception('EST Desktop endpoint returned HTTP ' . $status . ': ' . $summary);
+    }
+
+    return array('status' => $status, 'headers' => $responseHeaders, 'body' => $responseBody);
+}
+
+function dom_from_xml($xml, $label = 'XML') {
+    $dom = new DOMDocument();
+    $previous = libxml_use_internal_errors(true);
+    $loaded = $dom->loadXML($xml);
+    $errors = libxml_get_errors();
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+    if (!$loaded) {
+        $message = count($errors) ? trim($errors[0]->message) : 'unknown XML parse error';
+        throw new Exception('Could not parse ' . $label . ': ' . $message);
+    }
+    return $dom;
+}
+
+function xp_query($context, $query) {
+    $doc = ($context instanceof DOMDocument) ? $context : $context->ownerDocument;
+    $xp = new DOMXPath($doc);
+    return $xp->query($query, $context);
+}
+
+function leaf_texts_from_xml($xml, $label) {
+    $dom = dom_from_xml($xml, $label);
+    $nodes = xp_query($dom, '//*[not(*)]');
+    $values = array();
+    foreach ($nodes as $node) {
+        $text = one_line($node->textContent);
+        if ($text !== '') $values[] = $text;
+    }
+    return $values;
+}
+
+function unique_values($values) {
+    $seen = array();
+    $out = array();
+    foreach ($values as $value) {
+        $key = trim((string) $value);
+        if ($key === '' || isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = $key;
+    }
+    return $out;
+}
+
+function extract_numeric_ids($xml, $label, $minDigits = 1) {
+    $texts = leaf_texts_from_xml($xml, $label);
+    $ids = array();
+    foreach ($texts as $text) {
+        if (preg_match_all('/\b\d{' . (int) $minDigits . ',}\b/', $text, $m)) {
+            foreach ($m[0] as $id) $ids[] = $id;
+        }
+    }
+    return unique_values($ids);
+}
+
+function extract_order_ids($responseBody) {
+    $body = trim((string) $responseBody);
+    if ($body === '') return array();
+
+    $ids = array();
+    if (starts_with_digit($body) || strpos($body, "\n") !== false) {
+        foreach (preg_split('/\R+/', $body) as $line) {
+            $line = trim($line);
+            if ($line !== '' && preg_match('/^[A-Za-z0-9_.:-]+$/', $line)) $ids[] = $line;
+        }
+    }
+
+    if (preg_match('/^\s*</', $body)) {
+        try {
+            $texts = leaf_texts_from_xml($body, 'order list');
+            foreach ($texts as $text) {
+                if (preg_match('/^[A-Za-z0-9_.:-]+$/', $text)) $ids[] = $text;
+            }
+        } catch (Exception $e) {
+            warn_event('Could not parse order-list XML. Falling back to regex extraction: ' . $e->getMessage());
+        }
+    }
+
+    // Keep only plausible opaque IDs. This intentionally allows numeric and UUID-like order IDs.
+    $filtered = array();
+    foreach ($ids as $id) {
+        $id = trim($id);
+        if ($id === '' || strlen($id) > 128) continue;
+        if (preg_match('/^(true|false|null)$/i', $id)) continue;
+        $filtered[] = $id;
+    }
+    return unique_values($filtered);
+}
+
+function xml_for_string_list($items) {
+    $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<list>\n";
+    foreach ($items as $item) {
+        $xml .= '  <string>' . htmlspecialchars((string) $item, ENT_XML1 | ENT_COMPAT, 'UTF-8') . "</string>\n";
+    }
+    $xml .= "</list>\n";
+    return $xml;
+}
+
+function extract_export_blocks($text) {
+    $lines = preg_split('/\R/', (string) $text);
+    $blocks = array();
+    $i = 0;
+    $count = count($lines);
+    while ($i < $count) {
+        $name = trim($lines[$i]);
+        $i++;
+        if ($name === '') continue;
+        if ($i >= $count) break;
+        $countLine = trim($lines[$i]);
+        if (!preg_match('/^-?\d+$/', $countLine)) {
+            // Not in EST block format.
+            return array();
+        }
+        $i++;
+        $n = (int) $countLine;
+        if ($n < 0) return array();
+        $rows = array();
+        for ($j = 0; $j < $n && $i < $count; $j++, $i++) {
+            $rows[] = $lines[$i];
+        }
+        $blocks[$name] = $rows;
+        if ($i < $count && trim($lines[$i]) === '') $i++;
+    }
+    return $blocks;
+}
+
+function normalize_header_name($name) {
+    return strtolower(preg_replace('/[^a-z0-9]+/i', '', trim((string) $name)));
+}
+
+function find_header_index($rows) {
+    foreach ($rows as $idx => $line) {
+        $fields = str_getcsv($line);
+        $norm = array_map('normalize_header_name', $fields);
+        $joined = implode('|', $norm);
+        if (strpos($joined, 'barcodeid') !== false || strpos($joined, 'postalzipcode') !== false || strpos($joined, 'importedorderid') !== false) {
+            return $idx;
+        }
+    }
+    return -1;
+}
+
+function index_by_candidates($header, $candidates) {
+    $normHeader = array_map('normalize_header_name', $header);
+    foreach ($candidates as $candidate) {
+        $needle = normalize_header_name($candidate);
+        foreach ($normHeader as $idx => $value) {
+            if ($value === $needle) return $idx;
+        }
+    }
+    foreach ($candidates as $candidate) {
+        $needle = normalize_header_name($candidate);
+        foreach ($normHeader as $idx => $value) {
+            if ($value !== '' && strpos($value, $needle) !== false) return $idx;
+        }
+    }
+    return -1;
+}
+
+function looks_like_tracking_pin($value) {
+    $v = preg_replace('/\s+/', '', trim((string) $value));
+    return preg_match('/^[A-Z0-9]{10,35}$/i', $v) && preg_match('/\d{6,}/', $v);
+}
+
+function looks_like_postal_code($value) {
+    $v = normalize_postal_code($value);
+    return preg_match('/^[A-Z]\d[A-Z]\d[A-Z]\d$/', $v) || preg_match('/^\d{5}(?:\d{4})?$/', $v);
+}
+
+function parse_manifest_item_rows($rows) {
+    $rows = array_values(array_filter($rows, function($line) { return trim((string) $line) !== ''; }));
+    if (count($rows) === 0) return array();
+
+    $headerIndex = find_header_index($rows);
+    $pinIdx = -1;
+    $postalIdx = -1;
+    $refIdx = -1;
+    $serviceIdx = -1;
+    $eventDateIdx = -1;
+    $eventDescIdx = -1;
+
+    if ($headerIndex >= 0) {
+        $header = str_getcsv($rows[$headerIndex]);
+        $pinIdx = index_by_candidates($header, array('Bar Code Id', 'Barcode Id', 'Barcode', 'Tracking PIN', 'Tracking Number', 'PIN'));
+        $postalIdx = index_by_candidates($header, array('Postal Zip Code', 'Postal Code', 'Zip Code', 'Destination Postal Code'));
+        $refIdx = index_by_candidates($header, array('Imported Order ID', 'Imported Order Id', 'Item Ref #2', 'Item Reference 2', 'Reference #', 'Customer Reference 1'));
+        $serviceIdx = index_by_candidates($header, array('Service Code', 'Product Code'));
+        $eventDateIdx = index_by_candidates($header, array('Date Time Trace Inquiry Event'));
+        $eventDescIdx = index_by_candidates($header, array('Description Significant Event'));
+        $dataRows = array_slice($rows, $headerIndex + 1);
+    } else {
+        $dataRows = $rows;
+    }
+
+    $shipments = array();
+    $seen = array();
+
+    foreach ($dataRows as $line) {
+        $fields = str_getcsv($line);
+        if (count($fields) < 2) continue;
+
+        $pin = $pinIdx >= 0 && isset($fields[$pinIdx]) ? trim((string) $fields[$pinIdx]) : '';
+        $postal = $postalIdx >= 0 && isset($fields[$postalIdx]) ? normalize_postal_code($fields[$postalIdx]) : '';
+        $ref = $refIdx >= 0 && isset($fields[$refIdx]) ? trim((string) $fields[$refIdx]) : '';
+        $service = $serviceIdx >= 0 && isset($fields[$serviceIdx]) ? trim((string) $fields[$serviceIdx]) : '';
+        $eventDate = $eventDateIdx >= 0 && isset($fields[$eventDateIdx]) ? trim((string) $fields[$eventDateIdx]) : '';
+        $eventDesc = $eventDescIdx >= 0 && isset($fields[$eventDescIdx]) ? trim((string) $fields[$eventDescIdx]) : '';
+
+        // Fallback: detect a PIN and postal code by pattern if headers are absent or different.
+        if ($pin === '') {
+            foreach ($fields as $field) {
+                $candidate = preg_replace('/\s+/', '', trim((string) $field));
+                if (looks_like_tracking_pin($candidate)) {
+                    $pin = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($postal === '') {
+            foreach ($fields as $field) {
+                if (looks_like_postal_code($field)) {
+                    $postal = normalize_postal_code($field);
+                    break;
+                }
+            }
+        }
+        if ($ref === '') {
+            // Prefer the first non-empty non-PIN/non-postal short-ish value as a weak fallback.
+            foreach ($fields as $field) {
+                $candidate = trim((string) $field);
+                if ($candidate === '' || $candidate === $pin || normalize_postal_code($candidate) === $postal) continue;
+                if (strlen($candidate) <= 80) {
+                    $ref = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $pin = preg_replace('/\s+/', '', $pin);
+        if ($pin === '' || !looks_like_tracking_pin($pin)) continue;
+        if (isset($seen[$pin])) continue;
+        $seen[$pin] = true;
+
+        $shipments[] = array(
+            'trackingPin' => $pin,
+            'postalCode' => $postal,
+            'reference' => $ref,
+            'serviceCode' => $service,
+            'eventDate' => $eventDate,
+            'eventDescription' => $eventDesc,
+        );
+    }
+
+    return $shipments;
+}
+
+function write_tracking_csv($shipments, $outputFile, $dataDir) {
+    if (count($shipments) === 0) return;
+    $tmpFile = $outputFile . '.tmp';
+    $handle = fopen($tmpFile, 'w');
+    if ($handle === false) fail_event('Could not write temporary tracking CSV: ' . $tmpFile);
+
+    fputcsv($handle, array(
+        'Tracking PIN',
+        'Destination Postal Code',
+        'Reference #',
+        'Service Code',
+        'EST Event Date',
+        'EST Event Description',
+        'Source',
+    ));
+    foreach ($shipments as $row) {
+        fputcsv($handle, array(
+            $row['trackingPin'],
+            $row['postalCode'],
+            $row['reference'],
+            $row['serviceCode'],
+            $row['eventDate'],
+            $row['eventDescription'],
+            'EST Desktop exportorderhistory',
+        ));
+    }
+    fclose($handle);
+
+    if (file_exists($outputFile)) {
+        $backup = $dataDir . DIRECTORY_SEPARATOR . 'tracking-backup-before-est-history-import-' . date('Ymd-His') . '.csv';
+        @copy($outputFile, $backup);
+        emit_event('est_backup', array('path' => $backup));
+    }
+    rename($tmpFile, $outputFile);
+}
+
+if (!extension_loaded('dom')) fail_event('PHP DOM extension is not enabled.');
+if (!extension_loaded('libxml')) fail_event('PHP libxml extension is not enabled.');
+if (!extension_loaded('curl')) fail_event('PHP curl extension is not enabled.');
+
+@mkdir($dataDir, 0775, true);
+@mkdir($exportDir, 0775, true);
+
+$userProperties = file_exists($userIni) ? parse_ini_file($userIni) : array();
+if (!is_array($userProperties)) $userProperties = array();
+
+$fromIso = normalize_date_iso(getenv('EST_FROM') ?: '', 'from');
+$toIso = normalize_date_iso(getenv('EST_TO') ?: '', 'to');
+if ($fromIso > $toIso) fail_event('EST history date range is invalid: from date is after to date.');
+
+$customerNumber = compact_number(getenv('EST_CUSTOMER_NUMBER') ?: ($userProperties['customerNumber'] ?? ''));
+$workgroupInput = trim((string) (getenv('EST_WORKGROUP') ?: ''));
+$moboInput = trim((string) (getenv('EST_MOBO') ?: '-2'));
+if ($moboInput === '') $moboInput = '-2';
+$categoryGroup = strtoupper(trim((string) (getenv('EST_CATEGORY_GROUP') ?: 'SHP')));
+$fileTypes = trim((string) (getenv('EST_FILETYPES') ?: '2'));
+$username = trim((string) (getenv('EST_USERNAME') ?: getenv('CANADAPOST_USERNAME') ?: ($userProperties['estUsername'] ?? $userProperties['username'] ?? '')));
+$password = (string) (getenv('EST_PASSWORD') ?: getenv('CANADAPOST_PASSWORD') ?: ($userProperties['estPassword'] ?? $userProperties['password'] ?? ''));
+
+if ($customerNumber === '') fail_event('Missing Canada Post customer number for EST export.');
+if ($username === '' || $password === '') fail_event('Missing EST/Canada Post web username or password. Fill the Canada Post Web Username/Password fields.');
+if (!in_array($categoryGroup, array('SHP', 'OSS'), true)) fail_event('EST category group must be SHP or OSS.');
+if (!preg_match('/^\d+(?:,\d+)*$/', $fileTypes)) fail_event('EST filetypes must be comma-separated numeric IDs, usually 2.');
+
+$baseDop = 'https://ws.postescanada-canadapost.ca/dop';
+$baseShip = 'https://ws.postescanada-canadapost.ca/ship/desktop';
+$dopAccept = 'application/vnd.cpc.dop-v1+xml';
+$shipXmlAccept = 'application/vnd.cpc.ship-v1+xml';
+$shipTextAccept = 'application/vnd.cpc.ship-v1+text';
+
+emit_event('est_endpoint', array(
+    'message' => 'EST Desktop API endpoint: production https://ws.postescanada-canadapost.ca',
+    'host' => 'ws.postescanada-canadapost.ca',
+));
+
+emit_event('est_start', array(
+    'from' => $fromIso,
+    'to' => $toIso,
+    'customerNumber' => $customerNumber,
+    'workgroup' => $workgroupInput !== '' ? $workgroupInput : 'auto',
+    'mobo' => $moboInput,
+    'categoryGroup' => $categoryGroup,
+    'fileTypes' => $fileTypes,
+));
+
+try {
+    $connect = http_request('GET', $baseDop . '/connect', $dopAccept, $username, $password, $cacert);
+    file_put_contents($exportDir . DIRECTORY_SEPARATOR . 'raw-connect.xml', $connect['body']);
+    emit_event('est_connect', array('status' => $connect['status'], 'savedTo' => $exportDir . DIRECTORY_SEPARATOR . 'raw-connect.xml'));
+} catch (Exception $e) {
+    fail_event('EST Desktop connect failed: ' . $e->getMessage());
+}
+
+$workgroups = array();
+if ($workgroupInput !== '') {
+    $workgroups = array($workgroupInput);
+    emit_event('est_workgroups', array('count' => 1, 'mode' => 'manual', 'workgroups' => $workgroups));
+} else {
+    $workgroupUrl = $baseDop . '/' . rawurlencode($customerNumber) . '/workgroup/customerNumber/' . rawurlencode($customerNumber);
+    try {
+        $wgResponse = http_request('GET', $workgroupUrl, $dopAccept, $username, $password, $cacert);
+        file_put_contents($exportDir . DIRECTORY_SEPARATOR . 'raw-workgroups.xml', $wgResponse['body']);
+        $ids = extract_numeric_ids($wgResponse['body'], 'workgroups', 1);
+        // Workgroup IDs are often numeric. Avoid treating the main customer number as the only workgroup unless it is all we have.
+        $workgroups = unique_values($ids);
+        emit_event('est_workgroups', array('count' => count($workgroups), 'mode' => 'auto', 'workgroups' => $workgroups, 'savedTo' => $exportDir . DIRECTORY_SEPARATOR . 'raw-workgroups.xml'));
+    } catch (Exception $e) {
+        warn_event('Workgroup auto-discovery failed: ' . $e->getMessage());
+    }
+}
+if (count($workgroups) === 0) {
+    warn_event('No workgroup was discovered. Falling back to customer number as workgroup for one probe attempt.');
+    $workgroups = array($customerNumber);
+}
+
+$allShipments = array();
+$allSeenPins = array();
+$totalOrders = 0;
+$totalExports = 0;
+$dateFormats = array(
+    array('label' => 'iso', 'from' => $fromIso, 'to' => $toIso),
+    array('label' => 'yyyymmdd', 'from' => iso_to_yyyymmdd($fromIso), 'to' => iso_to_yyyymmdd($toIso)),
+);
+
+foreach ($workgroups as $wgIndex => $workgroup) {
+    if (stop_requested($stopFile)) break;
+    $workgroup = trim((string) $workgroup);
+    if ($workgroup === '') continue;
+
+    // Diagnostic only. The export uses moboInput, default -2 means EST's "all customers" option.
+    try {
+        $moboListUrl = $baseDop . '/workgroup/' . rawurlencode($workgroup) . '/mobos';
+        $moboResponse = http_request('GET', $moboListUrl, $dopAccept, $username, $password, $cacert);
+        file_put_contents($exportDir . DIRECTORY_SEPARATOR . 'raw-mobos-' . preg_replace('/[^A-Za-z0-9_.-]+/', '_', $workgroup) . '.xml', $moboResponse['body']);
+        $moboIds = extract_numeric_ids($moboResponse['body'], 'mobos', 1);
+        emit_event('est_mobos', array('workgroup' => $workgroup, 'count' => count($moboIds), 'mobos' => $moboIds));
+    } catch (Exception $e) {
+        warn_event('MOBO diagnostic lookup failed for workgroup ' . $workgroup . ': ' . $e->getMessage(), array('workgroup' => $workgroup));
+    }
+
+    $orderIds = array();
+    $usedDateFormat = '';
+    foreach ($dateFormats as $dateFormat) {
+        if (stop_requested($stopFile)) break 2;
+        $orderUrl = $baseShip . '/' . rawurlencode($customerNumber) . '/' . rawurlencode($workgroup) . '/' . rawurlencode($categoryGroup) . '/order/' . rawurlencode($dateFormat['from']) . '/' . rawurlencode($dateFormat['to']) . '/' . rawurlencode($moboInput);
+        emit_event('est_probe', array('message' => 'Looking up EST order IDs.', 'workgroup' => $workgroup, 'dateFormat' => $dateFormat['label'], 'url' => $orderUrl));
+        try {
+            $orderResponse = http_request('GET', $orderUrl, $shipXmlAccept, $username, $password, $cacert);
+            $safeWg = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $workgroup);
+            $orderFile = $exportDir . DIRECTORY_SEPARATOR . 'raw-order-list-' . $safeWg . '-' . $dateFormat['label'] . '.xml';
+            file_put_contents($orderFile, $orderResponse['body']);
+            $orderIds = extract_order_ids($orderResponse['body']);
+            emit_event('est_orders', array('workgroup' => $workgroup, 'dateFormat' => $dateFormat['label'], 'count' => count($orderIds), 'savedTo' => $orderFile));
+            if (count($orderIds) > 0) {
+                $usedDateFormat = $dateFormat['label'];
+                break;
+            }
+        } catch (Exception $e) {
+            warn_event('EST order lookup failed for workgroup ' . $workgroup . ' using ' . $dateFormat['label'] . ' dates: ' . $e->getMessage(), array('workgroup' => $workgroup));
+        }
+    }
+
+    $totalOrders += count($orderIds);
+    if (count($orderIds) === 0) continue;
+
+    $chunks = array_chunk($orderIds, 200);
+    foreach ($chunks as $chunkIndex => $chunk) {
+        if (stop_requested($stopFile)) break 2;
+        $bodyXml = xml_for_string_list($chunk);
+        $exportUrl = $baseShip . '/' . rawurlencode($customerNumber) . '/' . rawurlencode($workgroup) . '/' . rawurlencode($categoryGroup) . '/exportorderhistory?filetypes=' . rawurlencode($fileTypes);
+        emit_event('est_export', array('workgroup' => $workgroup, 'chunk' => $chunkIndex + 1, 'chunks' => count($chunks), 'orders' => count($chunk), 'fileTypes' => $fileTypes));
+        try {
+            $exportResponse = http_request('POST', $exportUrl, $shipTextAccept, $username, $password, $cacert, $bodyXml, $shipXmlAccept);
+            $safeWg = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $workgroup);
+            $rawFile = $exportDir . DIRECTORY_SEPARATOR . 'raw-export-' . $safeWg . '-chunk-' . ($chunkIndex + 1) . '.txt';
+            file_put_contents($rawFile, $exportResponse['body']);
+            $totalExports++;
+
+            $blocks = extract_export_blocks($exportResponse['body']);
+            $rows = array();
+            foreach ($blocks as $blockName => $blockRows) {
+                if (normalize_header_name($blockName) === 'manifestitems' || $fileTypes === '2') {
+                    $rows = array_merge($rows, $blockRows);
+                }
+            }
+            if (count($rows) === 0 && trim($exportResponse['body']) !== '') {
+                // Fallback if the server returns raw ManifestItems rows directly instead of block format.
+                $rows = preg_split('/\R/', trim($exportResponse['body']));
+            }
+
+            $shipments = parse_manifest_item_rows($rows);
+            foreach ($shipments as $shipment) {
+                $pin = $shipment['trackingPin'];
+                if (isset($allSeenPins[$pin])) continue;
+                $allSeenPins[$pin] = true;
+                $allShipments[] = $shipment;
+                emit_event('est_imported', array(
+                    'pin' => $shipment['trackingPin'],
+                    'postalCode' => $shipment['postalCode'],
+                    'reference' => $shipment['reference'],
+                    'current' => count($allShipments),
+                ));
+            }
+            emit_event('est_export', array('workgroup' => $workgroup, 'chunk' => $chunkIndex + 1, 'orders' => count($chunk), 'manifestItemsParsed' => count($shipments), 'savedTo' => $rawFile, 'dateFormat' => $usedDateFormat));
+        } catch (Exception $e) {
+            warn_event('EST export failed for workgroup ' . $workgroup . ': ' . $e->getMessage(), array('workgroup' => $workgroup, 'chunk' => $chunkIndex + 1));
+        }
+    }
+}
+
+if (stop_requested($stopFile)) {
+    emit_event('est_stopped', array('imported' => count($allShipments), 'orders' => $totalOrders));
+    exit(130);
+}
+
+if ($totalOrders === 0) {
+    emit_event('est_complete', array('imported' => 0, 'orders' => 0, 'exports' => 0, 'exportDir' => $exportDir, 'trackingCsv' => $outputFile));
+    exit(2);
+}
+
+if (count($allShipments) === 0) {
+    emit_event('est_complete', array('imported' => 0, 'orders' => $totalOrders, 'exports' => $totalExports, 'exportDir' => $exportDir, 'trackingCsv' => $outputFile));
+    exit(3);
+}
+
+write_tracking_csv($allShipments, $outputFile, $dataDir);
+
+emit_event('est_complete', array(
+    'imported' => count($allShipments),
+    'orders' => $totalOrders,
+    'exports' => $totalExports,
+    'exportDir' => $exportDir,
+    'trackingCsv' => $outputFile,
+));
+exit(0);

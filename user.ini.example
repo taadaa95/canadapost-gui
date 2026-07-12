@@ -1,0 +1,7 @@
+; Copy this file to the app's per-user data folder as user.ini.
+; Open that folder with the app's "Open data folder" button.
+; These are Canada Post Developer Program SOAP API credentials, not the web login.
+username=YOUR_API_USERNAME
+password=YOUR_API_PASSWORD
+customerNumber=YOUR_CUSTOMER_NUMBER
+; mobo=OPTIONAL_MAILED_ON_BEHALF_OF_NUMBER

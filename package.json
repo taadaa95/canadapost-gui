@@ -1,0 +1,19 @@
+{
+  "name": "canadapost-gui",
+  "version": "0.2.0",
+  "description": "Hardened local Canada Post tracking eligibility and late-delivery claim workflow.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check scripts/submit-claims.js && php -l scripts/get-tracking-cli.php && php -l scripts/import-est-history-cli.php && php -l scripts/import-shipping-history-cli.php",
+    "test": "npm run check && php tests/eligibility-test.php && node tests/storage-test.js && node tests/claim-selection-test.js",
+    "install-browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "1.61.1"
+  },
+  "devDependencies": {
+    "electron": "43.0.0"
+  }
+}

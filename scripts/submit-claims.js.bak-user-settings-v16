@@ -1,0 +1,593 @@
+const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path');
+
+const DUPLICATE_CLAIM_FIX_VERSION = 'duplicate-claim-fix-v3-captcha-screenshot-v15';
+
+function emit(type, payload = {}) {
+  process.stdout.write(JSON.stringify({ type, ...payload }) + '\n');
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current);
+  return values.map(value => value.trim());
+}
+
+function readClaims(csvPath) {
+  const csvText = fs.readFileSync(csvPath, 'utf8').replace(/^\uFEFF/, '').trim();
+  const lines = csvText.split(/\r?\n/).filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0]);
+
+  return lines.slice(1).map((line, index) => {
+    const values = parseCsvLine(line);
+    const row = { _csvRowNumber: index + 2 };
+    headers.forEach((header, headerIndex) => {
+      row[header] = values[headerIndex] || '';
+    });
+    return row;
+  });
+}
+
+function required(row, columnName) {
+  const value = row[columnName];
+  if (!value) throw new Error(`Missing required column value "${columnName}" on CSV row ${row._csvRowNumber}`);
+  return String(value).trim();
+}
+
+function normalizePostalCode(value) {
+  return String(value).replace(/\s+/g, '').toUpperCase();
+}
+
+function stopRequested() {
+  const stopFile = process.env.STOP_FILE;
+  return stopFile && fs.existsSync(stopFile);
+}
+
+function getClaimsToRun(allClaims) {
+  let selected = allClaims;
+  const maxClaimsRaw = process.env.MAX_CLAIMS;
+  if (maxClaimsRaw) {
+    const maxClaims = Number.parseInt(maxClaimsRaw, 10);
+    if (Number.isInteger(maxClaims) && maxClaims > 0) selected = selected.slice(0, maxClaims);
+  }
+  return selected;
+}
+
+function oneLine(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function hasAnyPattern(text, patterns) {
+  return patterns.some(pattern => pattern.test(text));
+}
+
+const DUPLICATE_PATTERNS = [
+  /inquiry of this type already exists/i,
+  /already received a refund request/i,
+  /refund request for this package/i,
+  /refund request.*already.*(?:received|submitted|exists)/i,
+  /(?:claim|inquiry|request).*already.*(?:exists|submitted|received)/i,
+  /already.*(?:claim|inquiry|refund request).*tracking number/i
+];
+
+const SUCCESS_PATTERNS = [
+  /(?:service\s*)?ticket\s*(?:number|#)\s*[:#]?\s*[a-z0-9-]{4,}/i,
+  /confirmation\s*(?:number|#)\s*[:#]?\s*[a-z0-9-]{4,}/i,
+  /your\s+(?:service\s*)?ticket\s+(?:has been|was)\s+(?:created|submitted|received)/i,
+  /thank you[^.]{0,160}(?:request|ticket|inquiry)[^.]{0,120}(?:submitted|received|created)/i,
+  /(?:request|inquiry)[^.]{0,120}(?:has been|was)\s+(?:submitted|received|created)/i
+];
+
+const FAILURE_PATTERNS = [
+  /there (?:is|are) (?:an? )?(?:error|errors) on (?:the|this) page/i,
+  /(?:unable|not able) to (?:create|submit|process)/i,
+  /(?:cannot|can not|can't) (?:create|submit|process)/i,
+  /not eligible/i,
+  /something went wrong/i,
+  /please give us a call/i,
+  /try again later/i,
+  /technical (?:error|problem|issue)/i
+];
+
+async function login(page, username, password) {
+  emit('log', { message: 'Opening Canada Post login page.' });
+  await page.goto('https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en');
+
+  await page.getByRole('textbox', { name: 'Username' }).click();
+  await page.getByRole('textbox', { name: 'Username' }).fill(username);
+  await page.getByRole('textbox', { name: 'Password' }).click();
+  await page.getByRole('textbox', { name: 'Password' }).fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForLoadState('domcontentloaded').catch(() => {});
+  emit('log', { message: 'Login submitted.' });
+}
+
+async function navigateToLatePackageTicketLauncher(page) {
+  emit('log', { message: 'Navigating to late package ticket launcher.' });
+  await page.getByRole('link', { name: 'Support', exact: true }).click();
+  await page.getByRole('button', { name: 'Lost, late or damaged' }).click();
+  await page.getByRole('link', { name: 'Package delivered late' }).click();
+}
+
+async function openTicketPopup(page) {
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('link', { name: 'Open a ticket. Opens in new' }).click();
+  const claimPage = await popupPromise;
+  await claimPage.waitForLoadState('domcontentloaded').catch(() => {});
+  return claimPage;
+}
+
+async function getCaptchaState(page) {
+  return page.evaluate(() => {
+    const normalize = value => String(value || '').toLowerCase();
+    const bodyText = normalize(document.body ? document.body.innerText : '');
+    const html = normalize(document.documentElement ? document.documentElement.innerHTML : '');
+
+    const captchaTextPattern = /(captcha|recaptcha|hcaptcha|verify you are human|not a robot|select all squares|select all images|privacy\s*-\s*terms)/i;
+    const captchaAttrPattern = /(captcha|recaptcha|hcaptcha|arkose|challenge|api2\/anchor|api2\/bframe)/i;
+
+    const visible = element => {
+      if (!element) return false;
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number.parseFloat(style.opacity || '1') > 0
+        && rect.width > 20
+        && rect.height > 20;
+    };
+
+    const captchaFrames = [...document.querySelectorAll('iframe')]
+      .map(frame => {
+        const haystack = [
+          frame.getAttribute('src'),
+          frame.getAttribute('title'),
+          frame.getAttribute('name'),
+          frame.getAttribute('id'),
+          frame.className
+        ].map(normalize).join(' ');
+        const rect = frame.getBoundingClientRect();
+        return {
+          match: captchaAttrPattern.test(haystack),
+          visible: visible(frame),
+          src: frame.getAttribute('src') || '',
+          title: frame.getAttribute('title') || '',
+          width: Math.round(rect.width),
+          height: Math.round(rect.height)
+        };
+      })
+      .filter(frame => frame.match && frame.visible);
+
+    const visibleCaptchaWidgets = [...document.querySelectorAll('.g-recaptcha, [data-sitekey], [class*="captcha"], [id*="captcha"]')]
+      .filter(visible)
+      .length;
+
+    const bodyLooksLikeCaptcha = captchaTextPattern.test(bodyText);
+    const htmlLooksLikeCaptcha = /(www\.google\.com\/recaptcha|recaptcha\/api|hcaptcha\.com)/i.test(html);
+    const present = captchaFrames.length > 0 || visibleCaptchaWidgets > 0 || bodyLooksLikeCaptcha;
+
+    return {
+      present,
+      frameCount: captchaFrames.length,
+      widgetCount: visibleCaptchaWidgets,
+      bodyLooksLikeCaptcha,
+      htmlLooksLikeCaptcha,
+      frames: captchaFrames.slice(0, 5)
+    };
+  }).catch(() => ({ present: false, frameCount: 0, widgetCount: 0, bodyLooksLikeCaptcha: false, htmlLooksLikeCaptcha: false, frames: [] }));
+}
+
+async function isCaptchaPresent(page) {
+  const state = await getCaptchaState(page);
+  return !!state.present;
+}
+
+async function waitForCaptchaScreenshotReady(page, maxWaitMs = 15000) {
+  const startedAt = Date.now();
+  let bestState = await getCaptchaState(page);
+  let largeChallengeSeenAt = 0;
+  let lastStableSignature = '';
+  let stableSince = 0;
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    if (stopRequested()) break;
+
+    await page.waitForTimeout(500);
+    const state = await getCaptchaState(page);
+    bestState = state;
+
+    // The first reCAPTCHA checkbox/anchor iframe can be small and visible before
+    // the real image challenge opens. Wait for the larger challenge iframe so
+    // the saved screenshot actually shows the CAPTCHA tiles/prompt.
+    const frames = Array.isArray(state.frames) ? state.frames : [];
+    const largeChallengeVisible = frames.some(frame => {
+      const src = String(frame.src || '').toLowerCase();
+      const title = String(frame.title || '').toLowerCase();
+      return frame.visible
+        && (frame.width >= 250 || frame.height >= 180)
+        && (frame.height >= 180 || src.includes('/bframe') || title.includes('challenge'));
+    });
+
+    const textChallengeVisible = !!state.bodyLooksLikeCaptcha && !!state.present;
+    const signature = JSON.stringify(frames.map(frame => [frame.width, frame.height, frame.title]).slice(0, 5));
+
+    if (signature !== lastStableSignature) {
+      lastStableSignature = signature;
+      stableSince = Date.now();
+    }
+
+    if (largeChallengeVisible || textChallengeVisible) {
+      if (!largeChallengeSeenAt) largeChallengeSeenAt = Date.now();
+      const visibleForMs = Date.now() - largeChallengeSeenAt;
+      const stableForMs = Date.now() - stableSince;
+
+      // Let the challenge image grid finish painting before the screenshot.
+      if (visibleForMs >= 1800 && stableForMs >= 800) {
+        await page.waitForTimeout(750);
+        return state;
+      }
+    }
+  }
+
+  return bestState;
+}
+
+async function waitForCaptchaToClear(page, trackingNumber, rowNumber, dataDir) {
+  const screenshotPath = path.resolve(dataDir, `claim-captcha-row-${rowNumber}.png`);
+
+  await page.bringToFront().catch(() => {});
+  emit('captcha_waiting', {
+    trackingNumber,
+    row: rowNumber,
+    waitedSeconds: 0,
+    message: `CAPTCHA detected for ${trackingNumber}. Waiting briefly for the challenge to fully render before saving the screenshot.`
+  });
+
+  const state = await waitForCaptchaScreenshotReady(page, 15000);
+  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+
+  emit('captcha_detected', {
+    trackingNumber,
+    row: rowNumber,
+    screenshotPath,
+    frameCount: state.frameCount || 0,
+    widgetCount: state.widgetCount || 0,
+    message: 'CAPTCHA detected. Solve it manually in the visible browser window. The app is paused and will resume after the CAPTCHA clears.'
+  });
+
+  const startedAt = Date.now();
+  let lastReminderAt = startedAt;
+
+  while (true) {
+    if (stopRequested()) {
+      throw new Error('Stop requested while waiting for CAPTCHA.');
+    }
+
+    const currentState = await getCaptchaState(page);
+    if (!currentState.present) {
+      const waitedSeconds = Math.round((Date.now() - startedAt) / 1000);
+      emit('captcha_cleared', {
+        trackingNumber,
+        row: rowNumber,
+        waitedSeconds,
+        message: `CAPTCHA cleared after ${waitedSeconds} seconds. Resuming claim result detection.`
+      });
+      return;
+    }
+
+    if (Date.now() - lastReminderAt >= 30000) {
+      lastReminderAt = Date.now();
+      const waitedSeconds = Math.round((Date.now() - startedAt) / 1000);
+      emit('captcha_waiting', {
+        trackingNumber,
+        row: rowNumber,
+        waitedSeconds,
+        message: `Still waiting for manual CAPTCHA solve for ${trackingNumber}. Waited ${waitedSeconds} seconds.`
+      });
+    }
+
+    await page.waitForTimeout(1000);
+  }
+}
+
+async function fillClaim(claimPage, claim) {
+  const receiverPostalCode = normalizePostalCode(required(claim, 'Destination Postal Code'));
+  const trackingNumber = required(claim, 'Tracking PIN');
+  const referenceNumber = required(claim, 'Reference #');
+
+  await claimPage.getByLabel('Receiver\'s country *').selectOption('CA');
+
+  await claimPage.getByRole('textbox', { name: 'Receiver\'s postal code *' }).click();
+  await claimPage.getByRole('textbox', { name: 'Receiver\'s postal code *' }).fill(receiverPostalCode);
+
+  await claimPage.getByRole('textbox', { name: 'Tracking number *' }).click();
+  await claimPage.getByRole('textbox', { name: 'Tracking number *' }).fill(trackingNumber);
+
+  await claimPage.getByRole('button', { name: 'Continue' }).click();
+
+  await claimPage.getByRole('textbox', { name: 'Reference Number 1' }).click();
+  await claimPage.getByRole('textbox', { name: 'Reference Number 1' }).fill(referenceNumber);
+
+  await claimPage.getByRole('button', { name: 'Continue' }).click();
+
+  await claimPage.getByRole('textbox', { name: 'Street Number *' }).click();
+  await claimPage.getByRole('textbox', { name: 'Street Number *' }).fill('496');
+
+  await claimPage.getByLabel('Street Name *').selectOption('CHARLES-PIMPARÉ/RUE/');
+
+  await claimPage.getByRole('button', { name: 'Continue' }).click();
+  await claimPage.getByRole('button', { name: 'Continue' }).click();
+}
+
+async function clickCreateTicket(claimPage) {
+  const createTicketLink = claimPage.getByRole('link', { name: /Create\s+Ticket/i });
+
+  await createTicketLink.waitFor({ state: 'visible', timeout: 30000 });
+  await createTicketLink.scrollIntoViewIfNeeded();
+  await createTicketLink.click();
+}
+
+async function collectVisibleText(page) {
+  const chunks = [];
+
+  // Main document text.
+  chunks.push(await page.locator('body').innerText({ timeout: 2500 }).catch(() => ''));
+
+  // Some Canada Post pages render error banners inside frames. Collect frame text too.
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame()) continue;
+    const frameText = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '');
+    if (frameText) chunks.push(frameText);
+  }
+
+  // HTML fallback catches text that innerText may miss because of rendering/state quirks.
+  chunks.push(await page.content().catch(() => ''));
+
+  return oneLine(chunks.filter(Boolean).join(' '));
+}
+
+function classifyClaimOutcome(text) {
+  if (hasAnyPattern(text, DUPLICATE_PATTERNS)) {
+    return {
+      status: 'already_submitted',
+      ok: false,
+      message: 'Claim already submitted: Canada Post says an inquiry/refund request already exists for this tracking number.'
+    };
+  }
+
+  // Success is intentionally strict. The runner must see a real confirmation/ticket number.
+  // Remaining on the Confirm and submit page is not a success.
+  if (hasAnyPattern(text, SUCCESS_PATTERNS)) {
+    return {
+      status: 'submitted',
+      ok: true,
+      message: 'Canada Post accepted the claim and displayed a confirmation/ticket result.'
+    };
+  }
+
+  if (hasAnyPattern(text, FAILURE_PATTERNS)) {
+    return {
+      status: 'failed',
+      ok: false,
+      message: 'Canada Post displayed an error/rejection after Create Ticket.'
+    };
+  }
+
+  return null;
+}
+
+async function waitForClaimOutcome(claimPage, timeoutMs, trackingNumber, rowNumber, dataDir) {
+  let startedAt = Date.now();
+  let lastText = '';
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await claimPage.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+
+    if (await isCaptchaPresent(claimPage)) {
+      await waitForCaptchaToClear(claimPage, trackingNumber, rowNumber, dataDir);
+      // Do not count manual CAPTCHA time against the Canada Post result timeout.
+      startedAt = Date.now();
+      continue;
+    }
+
+    lastText = await collectVisibleText(claimPage);
+
+    const outcome = classifyClaimOutcome(lastText);
+    if (outcome) return { ...outcome, pageText: lastText.slice(0, 4000) };
+
+    await claimPage.waitForTimeout(750);
+  }
+
+  return {
+    status: 'unknown',
+    ok: false,
+    message: `No Canada Post confirmation or known rejection was detected within ${Math.round(timeoutMs / 1000)} seconds. This was not counted as submitted.`,
+    pageText: lastText.slice(0, 4000)
+  };
+}
+
+async function saveClaimArtifacts(claimPage, dataDir, prefix, rowNumber, pageText = '') {
+  const screenshotPath = path.resolve(dataDir, `${prefix}-row-${rowNumber}.png`);
+  const textPath = path.resolve(dataDir, `${prefix}-row-${rowNumber}.txt`);
+
+  await claimPage.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+  if (pageText) fs.writeFileSync(textPath, pageText + '\n');
+
+  return { screenshotPath, textPath: pageText ? textPath : '' };
+}
+
+async function processClaim(page, claim, index, total) {
+  const dataDir = process.env.DATA_DIR || process.cwd();
+  const trackingNumber = required(claim, 'Tracking PIN');
+  const receiverPostalCode = normalizePostalCode(required(claim, 'Destination Postal Code'));
+  const referenceNumber = required(claim, 'Reference #');
+  const afterSubmitMs = Number.parseInt(process.env.AFTER_SUBMIT_MS || '20000', 10);
+
+  emit('claim_start', { index: index + 1, total, row: claim._csvRowNumber, trackingNumber, receiverPostalCode, referenceNumber });
+
+  const claimPage = await openTicketPopup(page);
+
+  try {
+    await fillClaim(claimPage, claim);
+
+    emit('log', { message: `Clicking Create Ticket for ${trackingNumber}.` });
+    await clickCreateTicket(claimPage);
+
+    const resultTimeoutMs = Math.max(afterSubmitMs, 45000);
+    emit('claim_wait', { trackingNumber, ms: resultTimeoutMs, mode: 'wait_for_canada_post_confirmation_or_duplicate_error' });
+
+    const outcome = await waitForClaimOutcome(claimPage, resultTimeoutMs, trackingNumber, claim._csvRowNumber, dataDir);
+
+    if (outcome.status === 'submitted') {
+      const artifacts = await saveClaimArtifacts(claimPage, dataDir, 'claim-submitted', claim._csvRowNumber, outcome.pageText);
+      emit('claim_submitted', {
+        row: claim._csvRowNumber,
+        trackingNumber,
+        message: outcome.message,
+        screenshotPath: artifacts.screenshotPath,
+        textPath: artifacts.textPath
+      });
+      return {
+        ok: true,
+        status: 'submitted',
+        row: claim._csvRowNumber,
+        trackingNumber,
+        message: outcome.message,
+        screenshotPath: artifacts.screenshotPath,
+        textPath: artifacts.textPath
+      };
+    }
+
+    if (outcome.status === 'already_submitted') {
+      const artifacts = await saveClaimArtifacts(claimPage, dataDir, 'claim-already-submitted', claim._csvRowNumber, outcome.pageText);
+      emit('claim_already_submitted', {
+        row: claim._csvRowNumber,
+        trackingNumber,
+        message: outcome.message,
+        screenshotPath: artifacts.screenshotPath,
+        textPath: artifacts.textPath
+      });
+      return {
+        ok: false,
+        status: 'already_submitted',
+        row: claim._csvRowNumber,
+        trackingNumber,
+        error: outcome.message,
+        screenshotPath: artifacts.screenshotPath,
+        textPath: artifacts.textPath
+      };
+    }
+
+    const artifacts = await saveClaimArtifacts(claimPage, dataDir, 'claim-error', claim._csvRowNumber, outcome.pageText);
+    const errorMessage = outcome.pageText ? `${outcome.message} Page text saved to ${artifacts.textPath}` : outcome.message;
+    emit('claim_error', {
+      row: claim._csvRowNumber,
+      trackingNumber,
+      message: errorMessage,
+      screenshotPath: artifacts.screenshotPath,
+      textPath: artifacts.textPath
+    });
+    return {
+      ok: false,
+      status: outcome.status || 'failed',
+      row: claim._csvRowNumber,
+      trackingNumber,
+      error: errorMessage,
+      screenshotPath: artifacts.screenshotPath,
+      textPath: artifacts.textPath
+    };
+  } catch (error) {
+    const screenshotPath = path.resolve(dataDir, `claim-error-row-${claim._csvRowNumber}.png`);
+    await claimPage.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+    emit('claim_error', { row: claim._csvRowNumber, trackingNumber, message: error.message, screenshotPath });
+    return { ok: false, status: 'failed', row: claim._csvRowNumber, trackingNumber, error: error.message, screenshotPath };
+  } finally {
+    await claimPage.close().catch(() => {});
+  }
+}
+
+(async () => {
+  const dataDir = process.env.DATA_DIR || process.cwd();
+  const csvPath = process.env.CLAIMS_CSV || path.resolve(dataDir, 'claims.csv');
+  const allClaims = readClaims(csvPath);
+  const claimsToRun = getClaimsToRun(allClaims);
+
+  const username = process.env.CANADAPOST_USERNAME;
+  const password = process.env.CANADAPOST_PASSWORD;
+
+  if (!username || !password) throw new Error('Missing CANADAPOST_USERNAME or CANADAPOST_PASSWORD.');
+  if (claimsToRun.length === 0) {
+    emit('submit_complete', { total: 0, succeeded: 0, alreadySubmitted: 0, failed: 0 });
+    return;
+  }
+
+  emit('submit_start', { total: claimsToRun.length, claimsCsv: csvPath, version: DUPLICATE_CLAIM_FIX_VERSION });
+  emit('log', { message: `Duplicate-claim detector active: ${DUPLICATE_CLAIM_FIX_VERSION}` });
+
+  const browser = await chromium.launch({ headless: String(process.env.HEADLESS || '').toLowerCase() === 'true' });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const results = [];
+
+  try {
+    await login(page, username, password);
+    await navigateToLatePackageTicketLauncher(page);
+
+    for (let i = 0; i < claimsToRun.length; i++) {
+      if (stopRequested()) {
+        emit('submit_stopped', { index: i, total: claimsToRun.length });
+        break;
+      }
+
+      const result = await processClaim(page, claimsToRun[i], i, claimsToRun.length);
+      results.push(result);
+
+      if (i < claimsToRun.length - 1 && !stopRequested()) {
+        const delayMs = Number.parseInt(process.env.BETWEEN_CLAIMS_MS || '2000', 10);
+        await page.waitForTimeout(delayMs);
+      }
+    }
+  } finally {
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+  }
+
+  const summaryPath = path.resolve(dataDir, 'claim-run-summary.json');
+  fs.writeFileSync(summaryPath, JSON.stringify(results, null, 2));
+
+  const succeeded = results.filter(result => result.ok).length;
+  const alreadySubmitted = results.filter(result => result.status === 'already_submitted').length;
+  const failed = results.filter(result => !result.ok && result.status !== 'already_submitted').length;
+  emit('submit_complete', { total: results.length, succeeded, alreadySubmitted, failed, summaryPath });
+
+  // Already-submitted is a valid Canada Post business result, not an automation crash.
+  // Exit non-zero only for unknown/real failures.
+  if (failed > 0) process.exitCode = 1;
+})().catch(error => {
+  emit('error', { message: error.message, stack: error.stack });
+  process.exitCode = 1;
+});
