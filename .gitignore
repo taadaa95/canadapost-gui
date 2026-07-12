@@ -32,3 +32,6 @@ eligibility-review.csv
 Thumbs.db
 *.swp
 *.tmp
+
+*.bak*
+*copy*
