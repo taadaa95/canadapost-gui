@@ -1111,7 +1111,7 @@
 
     .status-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 2px;
       margin-top: 5px;
     }
@@ -1746,6 +1746,158 @@
       overflow: hidden;
     }
 
+
+    .history-panel.active {
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .history-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .history-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) repeat(5, auto);
+      gap: 4px;
+      align-items: end;
+    }
+
+    .history-toolbar .field { min-width: 0; }
+    .history-toolbar button { white-space: nowrap; }
+
+    .health-result {
+      min-height: 36px;
+      padding: 8px 10px;
+      background: var(--field);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .health-result.good { border-color: var(--success); color: var(--success-text); background: var(--success-soft); }
+    .health-result.warn { border-color: var(--warning); color: var(--warning-text); background: var(--warning-soft); }
+    .health-result.bad { border-color: var(--danger); color: var(--danger-text); background: var(--danger-soft); }
+
+    .history-content {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(380px, .9fr) minmax(0, 1.4fr);
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .history-section {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 6px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 8px;
+      overflow: hidden;
+    }
+
+    .history-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .history-section-head h3 {
+      margin: 0;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .history-list {
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: var(--field);
+    }
+
+    .history-row,
+    .reconciliation-row {
+      display: grid;
+      align-items: center;
+      gap: 6px;
+      min-width: 900px;
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .history-row { grid-template-columns: 1.15fr 1fr .8fr 1fr 2.3fr; }
+    .reconciliation-row { grid-template-columns: 1.1fr 1fr .7fr 2fr 2.2fr; }
+
+    .history-row.head,
+    .reconciliation-row.head {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--panel-strong);
+      color: var(--text);
+      font-weight: 1000;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .history-row:last-child,
+    .reconciliation-row:last-child { border-bottom: 0; }
+
+    .history-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+    }
+
+    .history-actions button,
+    .history-row button {
+      padding: 6px 8px;
+      min-height: 30px;
+      font-size: 11px;
+    }
+
+    .history-empty {
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .history-details {
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 8px;
+    }
+
+    .history-details summary {
+      cursor: pointer;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    .manual-entry-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .manual-entry-grid .wide { grid-column: span 2; }
+
+    @media (max-width: 1250px) {
+      .history-toolbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .history-toolbar .field:first-child { grid-column: span 2; }
+      .history-content { grid-template-columns: 1fr; overflow: auto; }
+      .history-section { min-height: 300px; }
+    }
+
     @media (max-width: 980px) {
       body { overflow: auto; }
       main {
@@ -1818,7 +1970,7 @@
 
     .step-tabs {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 2px;
     }
 
@@ -2423,9 +2575,14 @@
       .step-actions-3,
       .settings-grid,
       .settings-two-col,
-      .settings-three-col {
+      .settings-three-col,
+      .history-summary,
+      .manual-entry-grid {
         grid-template-columns: 1fr;
       }
+      .history-toolbar { grid-template-columns: 1fr; }
+      .history-toolbar .field:first-child,
+      .manual-entry-grid .wide { grid-column: auto; }
       #step3 .step3-workspace {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: minmax(360px, 1fr) auto 128px;
@@ -2437,6 +2594,1141 @@
       .tab-panel { overflow: visible; }
       .step-workspace { min-height: 520px; }
     }
+  
+
+    /* UI refresh v0.3.2 */
+    :root {
+      --ui-gap: 16px;
+      --ui-gap-sm: 10px;
+      --ui-radius: 0px;
+      --ui-shadow: 0 10px 24px rgba(0,0,0,.14);
+      --ui-border: 1px solid var(--line);
+      --ui-max-width: 1600px;
+    }
+
+    body {
+      background:
+        linear-gradient(180deg, rgba(59,130,246,.07), transparent 220px),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--appbar) 92%, transparent);
+      padding: 18px 24px;
+    }
+
+    .topbar {
+      max-width: var(--ui-max-width);
+      margin: 0 auto;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: -.02em;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+      max-width: 720px;
+    }
+
+    .theme-control {
+      display: grid;
+      gap: 6px;
+      min-width: 240px;
+    }
+
+    .theme-control label {
+      margin: 0;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+    }
+
+    main.tabbed-main {
+      padding: 18px;
+      height: auto;
+      min-height: calc(100vh - 92px);
+      align-content: start;
+    }
+
+    .app-shell {
+      max-width: var(--ui-max-width);
+      width: 100%;
+      margin: 0 auto;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      gap: 14px;
+    }
+
+    .setup-head {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .compact-actions {
+      justify-self: stretch;
+      width: 100%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .workflow-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .workflow-chip {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--ui-shadow);
+    }
+
+    .workflow-chip strong {
+      width: 32px;
+      height: 32px;
+      display: inline-grid;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+      font-size: 14px;
+    }
+
+    .workflow-chip span {
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .step-tabs {
+      gap: 10px;
+      background: transparent;
+      padding: 0;
+    }
+
+    .step-tab {
+      min-height: 72px;
+      padding: 12px 14px;
+      text-align: left;
+      box-shadow: var(--ui-shadow);
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .step-tab span {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      line-height: 1.3;
+    }
+
+    .step-tab.active {
+      background: var(--panel-strong);
+      color: var(--text);
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent), var(--ui-shadow);
+    }
+
+    .step-tab.active span {
+      color: var(--muted);
+    }
+
+    .tab-panel {
+      padding: 20px;
+      gap: 16px;
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+      box-shadow: var(--ui-shadow);
+      overflow: auto;
+    }
+
+    .tab-panel.active,
+    .step-panel.active,
+    .settings-panel.active,
+    .results-panel.active,
+    .history-panel.active,
+    #step3.step-panel.active {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .panel-intro {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+      max-width: 980px;
+    }
+
+    .panel-intro code {
+      font-family: var(--font-mono);
+      color: var(--text);
+      background: var(--field);
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+    }
+
+    .step-title-row {
+      align-items: start;
+      gap: 14px;
+      min-height: auto;
+    }
+
+    .step-title-row h2 {
+      font-size: 23px;
+      line-height: 1.2;
+    }
+
+    .settings-grid,
+    .step-fields,
+    .history-summary,
+    .history-toolbar,
+    .history-content,
+    .manual-entry-grid,
+    .step-workspace,
+    .settings-two-col,
+    .settings-three-col,
+    .step-actions,
+    .step-actions-3 {
+      gap: 14px;
+    }
+
+    .settings-grid {
+      grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+      padding-right: 0;
+    }
+
+    .settings-section,
+    .history-section,
+    .history-details,
+    .step-status-card,
+    .step-log-card,
+    .step-browser-card,
+    .step3-progress-card,
+    .operations-panel,
+    .detail-card,
+    .detail-toolbar,
+    .detail-meta,
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--ui-shadow);
+    }
+
+    .settings-section,
+    .history-section,
+    .history-details,
+    .step-status-card,
+    .step-log-card,
+    .step-browser-card,
+    .step3-progress-card,
+    .operations-panel {
+      padding: 16px;
+    }
+
+    .settings-section h3,
+    .history-section-head h3,
+    .detail-title {
+      font-size: 18px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .settings-note {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .field,
+    .checkbox-field,
+    .step-checks,
+    .step-copy-box,
+    .current-action,
+    .health-result,
+    .log,
+    .history-list,
+    .ops-table,
+    .browser-slot {
+      border: 1px solid var(--line);
+      background: var(--field);
+      box-shadow: none;
+    }
+
+    .field {
+      gap: 6px;
+    }
+
+    .field label,
+    .progress-label,
+    .detail-label,
+    .label,
+    .step-copy-box,
+    .app-version {
+      color: var(--muted);
+    }
+
+    input, select, textarea {
+      min-height: 44px;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--line);
+      background: var(--field);
+      color: var(--text);
+    }
+
+    button {
+      min-height: 46px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      transition: filter .15s ease, transform .15s ease;
+    }
+
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px); }
+
+    .step-top,
+    #step3 .step-top {
+      grid-template-rows: auto;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .step-fields,
+    #step3 .step-fields {
+      min-height: auto;
+      align-items: start;
+    }
+
+    .step-actions,
+    .step-actions-3 {
+      height: auto;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .step-actions button { min-height: 52px; }
+
+    .step-workspace {
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      align-items: stretch;
+    }
+
+    .step-status-card {
+      grid-template-rows: auto auto auto auto;
+      gap: 12px;
+    }
+
+    .step-status-card .status-grid {
+      gap: 12px;
+      height: auto;
+      margin: 0;
+    }
+
+    .step-status-card .stat,
+    .history-summary .stat {
+      min-height: 88px;
+      padding: 14px;
+    }
+
+    .stat .num {
+      font-size: 30px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .current-action {
+      min-height: 64px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      line-height: 1.45;
+    }
+
+    progress {
+      height: 14px;
+    }
+
+    .log {
+      min-height: 0;
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: var(--font-mono);
+    }
+
+    #step3 .step3-workspace {
+      grid-template-rows: minmax(360px, 1fr) auto minmax(180px, 220px);
+      gap: 14px;
+    }
+
+    #step3 .step3-log-card {
+      min-height: 180px;
+      gap: 12px;
+    }
+
+    #step3 .browser-slot {
+      border-radius: 0;
+      min-height: 360px;
+    }
+
+    .history-summary {
+      gap: 14px;
+    }
+
+    .history-toolbar {
+      grid-template-columns: minmax(240px, 1fr) minmax(180px, 220px) repeat(5, auto);
+      align-items: end;
+    }
+
+    .history-content {
+      grid-template-columns: minmax(360px, .95fr) minmax(0, 1.2fr);
+    }
+
+    .history-row,
+    .reconciliation-row {
+      min-width: 860px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .manual-entry-grid {
+      margin-top: 14px;
+    }
+
+    .results-panel .operations-panel,
+    .detail-card {
+      padding: 16px;
+    }
+
+    .detail-grid {
+      gap: 14px;
+    }
+
+    .detail-section-title {
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 1250px) {
+      .workflow-strip,
+      .step-tabs,
+      .compact-actions,
+      .history-toolbar,
+      .step2-fields,
+      .step3-fields,
+      .settings-grid,
+      .settings-two-col,
+      .settings-three-col,
+      .manual-entry-grid,
+      .step-workspace,
+      .history-content {
+        grid-template-columns: 1fr;
+      }
+
+      .history-toolbar .field:first-child,
+      .manual-entry-grid .wide {
+        grid-column: auto;
+      }
+
+      #step3 .step3-workspace {
+        grid-template-rows: minmax(320px, 1fr) auto minmax(180px, 220px);
+      }
+    }
+
+    @media (max-width: 800px) {
+      header { padding: 16px; }
+      .topbar { flex-direction: column; align-items: stretch; }
+      .theme-control { min-width: 0; }
+      main.tabbed-main { padding: 12px; }
+      .compact-actions,
+      .step-tabs,
+      .step-actions,
+      .step-actions-3,
+      .history-summary,
+      .history-toolbar,
+      .workflow-strip {
+        grid-template-columns: 1fr;
+      }
+      .tab-panel { padding: 16px; }
+    }
+
+  
+
+    /* UI stabilization v0.3.2 */
+    .step-tabs {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 12px !important;
+      align-items: stretch !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      min-height: auto !important;
+      overflow: visible !important;
+    }
+
+    .step-tab,
+    .step-tab.active {
+      flex: 1 1 calc((100% - 60px) / 6) !important;
+      min-width: 160px !important;
+      max-width: none !important;
+      height: 96px !important;
+      min-height: 96px !important;
+      max-height: 96px !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      align-items: flex-start !important;
+      align-self: stretch !important;
+      padding: 16px 16px 14px !important;
+      gap: 8px !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      border: 1px solid var(--line) !important;
+      background: var(--panel) !important;
+      box-shadow: none !important;
+      white-space: normal !important;
+      line-height: 1.2 !important;
+      transform: none !important;
+      outline: none !important;
+    }
+
+    .step-tab.active {
+      border-color: var(--accent) !important;
+      background: color-mix(in srgb, var(--panel-strong) 92%, var(--accent) 8%) !important;
+      box-shadow: inset 0 0 0 1px var(--accent) !important;
+    }
+
+    .step-tab span,
+    .step-tab.active span {
+      display: block !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      line-height: 1.3 !important;
+      color: var(--muted) !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+      text-wrap: balance;
+    }
+
+    .tab-panel {
+      margin-top: 2px !important;
+      overflow: auto !important;
+    }
+
+    .workflow-strip {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 12px !important;
+      margin-bottom: 2px !important;
+    }
+
+    .workflow-chip {
+      min-height: 50px !important;
+      padding: 12px 14px !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+      box-shadow: none !important;
+      background: color-mix(in srgb, var(--panel) 96%, transparent) !important;
+    }
+
+    .workflow-chip span {
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+
+    .topbar {
+      align-items: start !important;
+    }
+
+    .topbar h1 {
+      font-size: 24px !important;
+      line-height: 1.1 !important;
+    }
+
+    .subtitle {
+      font-size: 13px !important;
+      line-height: 1.4 !important;
+      max-width: 760px !important;
+    }
+
+    .settings-grid,
+    .history-summary,
+    .history-toolbar,
+    .history-content,
+    .manual-entry-grid,
+    .step-workspace,
+    .settings-two-col,
+    .settings-three-col,
+    .step-actions,
+    .step-actions-3,
+    .step-fields {
+      gap: 12px !important;
+    }
+
+    .settings-section,
+    .history-section,
+    .history-details,
+    .step-status-card,
+    .step-log-card,
+    .step-browser-card,
+    .step3-progress-card,
+    .operations-panel,
+    .detail-card,
+    .detail-toolbar,
+    .detail-meta,
+    .stat {
+      box-shadow: none !important;
+    }
+
+    .step-title-row h2 {
+      font-size: 18px !important;
+      letter-spacing: .02em !important;
+    }
+
+    .settings-section h3,
+    .history-section-head h3,
+    .detail-title {
+      font-size: 15px !important;
+      font-weight: 800 !important;
+    }
+
+    .ops-value,
+    .detail-value,
+    .current-action,
+    .settings-note,
+    .step-copy-box,
+    .health-result,
+    .history-row > div,
+    .reconciliation-row > div,
+    .pill,
+    .warning-item,
+    .detail-copy {
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+
+    .ops-value {
+      overflow: visible !important;
+      text-overflow: unset !important;
+      font-size: 15px !important;
+      line-height: 1.35 !important;
+    }
+
+    .pill {
+      min-height: auto !important;
+      padding: 6px 10px !important;
+      line-height: 1.2 !important;
+      text-align: center !important;
+    }
+
+    .history-toolbar {
+      grid-template-columns: minmax(220px, 1.25fr) minmax(160px, .8fr) repeat(5, auto) !important;
+    }
+
+    @media (max-width: 1320px) {
+      .step-tab,
+      .step-tab.active {
+        flex-basis: calc((100% - 24px) / 3) !important;
+      }
+      .history-toolbar {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .workflow-strip,
+      .compact-actions,
+      .history-toolbar,
+      .history-summary,
+      .step-workspace,
+      .step2-fields,
+      .step3-fields,
+      .settings-grid,
+      .settings-two-col,
+      .settings-three-col,
+      .manual-entry-grid,
+      .history-content,
+      .step-actions,
+      .step-actions-3 {
+        grid-template-columns: 1fr !important;
+      }
+      .step-tab,
+      .step-tab.active {
+        flex-basis: 100% !important;
+        height: auto !important;
+        min-height: 84px !important;
+        max-height: none !important;
+      }
+    }
+
+  
+
+    /* Layout stack repair v0.3.2 */
+    html,
+    body {
+      height: auto !important;
+      min-height: 100% !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+    }
+
+    body {
+      display: block !important;
+    }
+
+    main.tabbed-main {
+      display: block !important;
+      height: auto !important;
+      min-height: calc(100vh - 92px) !important;
+      overflow: visible !important;
+    }
+
+    main.tabbed-main > .app-shell,
+    .app-shell {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      grid-template-rows: none !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      gap: 12px !important;
+    }
+
+    .setup-head,
+    .workflow-strip,
+    .step-tabs,
+    .tab-panel {
+      flex: 0 0 auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      position: relative !important;
+    }
+
+    .step-tabs {
+      z-index: 2 !important;
+      margin-bottom: 0 !important;
+    }
+
+    .tab-panel {
+      display: none !important;
+      z-index: 1 !important;
+      margin: 0 !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      align-self: stretch !important;
+    }
+
+    .tab-panel.active,
+    .step-panel.active,
+    .settings-panel.active,
+    .history-panel.active,
+    .results-panel.active,
+    #step3.step-panel.active {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) !important;
+      grid-template-rows: auto !important;
+      align-content: start !important;
+      gap: 14px !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    .step-top,
+    #step3 .step-top {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) !important;
+      grid-template-rows: auto !important;
+      align-content: start !important;
+      height: auto !important;
+      min-height: 0 !important;
+      gap: 12px !important;
+    }
+
+    .step-fields,
+    #step3 .step-fields,
+    .step-actions,
+    .step-actions-3 {
+      height: auto !important;
+      min-height: 0 !important;
+    }
+
+    .step-workspace,
+    #step3 .step3-workspace {
+      min-height: 420px !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    .settings-grid {
+      overflow: visible !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+
+    .history-content {
+      min-height: 520px !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    .history-section {
+      min-height: 480px !important;
+      height: auto !important;
+      overflow: hidden !important;
+    }
+
+    .history-list {
+      min-height: 400px !important;
+      max-height: 620px !important;
+      overflow: auto !important;
+    }
+
+    .results-panel .operations-grid,
+    .results-panel .detail-screen,
+    .operations-panel {
+      height: auto !important;
+      min-height: 360px !important;
+    }
+
+    .results-panel .ops-table {
+      min-height: 280px !important;
+      height: auto !important;
+    }
+
+    .step-tab,
+    .step-tab.active {
+      position: relative !important;
+      z-index: 3 !important;
+    }
+
+    @media (max-width: 980px) {
+      .step-workspace,
+      #step3 .step3-workspace,
+      .history-content,
+      .history-section,
+      .history-list,
+      .results-panel .operations-grid,
+      .results-panel .detail-screen,
+      .operations-panel,
+      .results-panel .ops-table {
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+      }
+    }
+
+  
+
+    /* UI refinement v0.3.2 compact-workspace */
+    .workflow-strip {
+      display: none !important;
+    }
+
+    main.tabbed-main > .app-shell,
+    .app-shell {
+      gap: 10px !important;
+    }
+
+    .step-tabs {
+      margin-bottom: 0 !important;
+    }
+
+    .tab-panel {
+      margin-top: 0 !important;
+    }
+
+    /* Preserve screen height for the actual workflow rather than navigation. */
+    .step-panel.active,
+    .results-panel.active {
+      min-height: calc(100vh - 255px) !important;
+    }
+
+    .step-panel.active {
+      grid-template-rows: auto minmax(520px, 1fr) !important;
+    }
+
+    .results-panel.active {
+      grid-template-rows: auto minmax(520px, 1fr) !important;
+    }
+
+    .step-workspace,
+    #step3 .step3-workspace {
+      min-height: 520px !important;
+    }
+
+    .results-panel .operations-grid,
+    .results-panel .detail-screen,
+    .results-panel .operations-panel,
+    .results-panel .ops-table {
+      min-height: 500px !important;
+    }
+
+    /* Badge styling must override generic tab subtitle span rules. */
+    .step-tab .notification-badge {
+      position: absolute !important;
+      top: 8px !important;
+      right: 8px !important;
+      width: 22px !important;
+      min-width: 22px !important;
+      max-width: 22px !important;
+      height: 22px !important;
+      min-height: 22px !important;
+      max-height: 22px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      box-sizing: border-box !important;
+      border-radius: 0 !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      line-height: 1 !important;
+      text-align: center !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      word-break: normal !important;
+      overflow-wrap: normal !important;
+    }
+
+    .step-tab .notification-badge.hidden {
+      display: none !important;
+    }
+
+    /* Settings form: labels are plain text; only editable controls are boxed. */
+    .settings-section .field {
+      display: grid !important;
+      grid-template-rows: auto auto !important;
+      gap: 6px !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+    }
+
+    .settings-section .field label {
+      display: block !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 2px !important;
+      line-height: 1.35 !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+
+    .settings-section .field input,
+    .settings-section .field select,
+    .settings-section .field textarea {
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    .settings-section .checkbox-field {
+      padding: 12px !important;
+    }
+
+    .settings-section .checkbox-label {
+      min-width: 0 !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+
+    @media (max-width: 980px) {
+      .step-panel.active,
+      .results-panel.active {
+        min-height: 0 !important;
+      }
+      .step-workspace,
+      #step3 .step3-workspace,
+      .results-panel .operations-grid,
+      .results-panel .detail-screen,
+      .results-panel .operations-panel,
+      .results-panel .ops-table {
+        min-height: 420px !important;
+      }
+    }
+
+  
+
+    /* Step 3 workspace and browser activity v0.3.2 */
+    #step3 .step3-workspace {
+      min-height: clamp(720px, 80vh, 1040px) !important;
+      grid-template-rows: minmax(540px, 1fr) auto minmax(150px, 190px) !important;
+      gap: 12px !important;
+    }
+
+    #step3 .step-browser-card {
+      grid-template-rows: auto 30px minmax(0, 1fr) !important;
+      gap: 8px !important;
+      min-height: 580px !important;
+    }
+
+    #step3 .browser-slot {
+      min-height: 520px !important;
+    }
+
+    #step3 .step3-log-card {
+      min-height: 150px !important;
+      max-height: 190px !important;
+    }
+
+    .browser-activity {
+      min-height: 30px;
+      display: grid;
+      grid-template-columns: auto minmax(120px, 1fr);
+      align-items: center;
+      gap: 12px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      background: var(--field);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+      overflow: hidden;
+    }
+
+    .browser-activity-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .browser-activity-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border: 1px solid var(--line-strong);
+      background: var(--muted-2);
+    }
+
+    .browser-activity-track {
+      position: relative;
+      height: 4px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+    }
+
+    .browser-activity-track span {
+      position: absolute;
+      inset-block: 0;
+      left: -35%;
+      width: 35%;
+      background: var(--accent);
+      opacity: 0;
+    }
+
+    .browser-activity.active {
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    }
+
+    .browser-activity.active .browser-activity-dot {
+      background: var(--accent);
+      border-color: var(--accent-2);
+      animation: browserActivityPulse 1s ease-in-out infinite;
+    }
+
+    .browser-activity.active .browser-activity-track span {
+      opacity: 1;
+      animation: browserActivitySlide 1.15s linear infinite;
+    }
+
+    .browser-activity.error {
+      color: var(--danger-text);
+      border-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .browser-activity.error .browser-activity-dot {
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+
+    @keyframes browserActivitySlide {
+      from { transform: translateX(0); }
+      to { transform: translateX(390%); }
+    }
+
+    @keyframes browserActivityPulse {
+      0%, 100% { opacity: .45; }
+      50% { opacity: 1; }
+    }
+
+    @media (max-width: 980px) {
+      #step3 .step3-workspace {
+        min-height: 680px !important;
+        grid-template-rows: minmax(460px, 1fr) auto minmax(150px, 190px) !important;
+      }
+      #step3 .step-browser-card {
+        min-height: 500px !important;
+      }
+      #step3 .browser-slot {
+        min-height: 440px !important;
+      }
+      .browser-activity {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+    }
+
+  
+
+    .step3-log-header {
+      display: flex;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .compact-button {
+      min-height: 34px !important;
+      padding: 6px 10px !important;
+      font-size: 12px !important;
+      white-space: normal !important;
+    }
+
   </style>
 </head>
 <body>
@@ -2444,7 +3736,7 @@
     <div class="topbar">
       <div>
         <h1>Canada Post Claim Runner</h1>
-        <div class="subtitle">Tracking checks → late claims → ticket submission</div>
+        <div class="subtitle">Import history, check eligibility, and submit claims in one place.</div>
       </div>
       <div class="theme-control">
         <label for="themeSelect">Theme</label>
@@ -2488,24 +3780,25 @@
     <section class="card app-shell">
       <div class="setup-head">
         <div class="file-grid compact-actions">
-          <button id="selectCsv" class="secondary">Select tracking.csv</button>
-          <button id="openData" class="secondary">Open Data</button>
-          <button id="openLogs" class="secondary">Open Logs</button>
-          <button id="fullRefresh" class="warning">Full Refresh / Reset UI</button>
+          <button id="selectCsv" class="secondary">Import CSV</button>
+          <button id="openData" class="secondary">Data Folder</button>
+          <button id="openLogs" class="secondary">Logs</button>
+          <button id="fullRefresh" class="warning">Reset UI</button>
         </div>
       </div>
 
       <div class="step-tabs" role="tablist" aria-label="Claim runner sections">
-        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0">User Settings<br><span>Setup + Account</span></button>
-        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>EST Data</span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Tracking Check</span></button>
-        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit Claims</span></button>
-        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Notifications<br><span>Claim output + screenshots</span><span id="notificationsBadge" class="notification-badge hidden">0</span></button>
+        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0">Settings<br><span>Account, sender info, defaults</span></button>
+        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>Import EST history</span></button>
+        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Check delivery eligibility</span></button>
+        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit eligible claims</span></button>
+        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span><span id="reconciliationBadge" class="notification-badge hidden" aria-label="History notifications"></span></button>
+        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Results<br><span>Evidence, outcomes, screenshots</span><span id="notificationsBadge" class="notification-badge hidden" aria-label="Result notifications"></span></button>
       </div>
 
       <section id="settingsTab" class="tab-panel settings-panel active" role="tabpanel" aria-labelledby="tabSettings">
         <div class="step-title-row">
-          <h2>User Settings / Setup</h2>
+          <h2>Settings</h2>
           <span id="settingsStatus" class="pill">Not saved</span>
         </div>
 
@@ -2521,9 +3814,9 @@
               <input id="webPassword" type="password" placeholder="Web login password" autocomplete="current-password" />
             </div>
             <div class="check-row">
-              <label><input id="rememberSettings" type="checkbox" checked /> Remember me / save password using OS encryption</label>
+              <label><input id="rememberSettings" type="checkbox" checked /> Remember me / save password securely on this device</label>
             </div>
-            <div class="settings-note">The password is never returned to the interface after saving. It is stored only when secure OS credential encryption is available. Other settings are kept in your per-user application data folder.</div>
+            <div class="settings-note">The password is never returned to the interface after saving. OS keyring encryption is preferred; when it is unavailable, the app uses AES-256-GCM device-local encryption protected by your user account file permissions. Other settings are kept in your per-user application data folder.</div>
           </div>
 
           <div class="settings-section">
@@ -2587,12 +3880,11 @@
               <input id="claimContactEmail" type="email" placeholder="Optional, e.g. user@example.com" />
             </div>
           </div>
-
-          <div class="settings-section wide">
-            <button id="saveUserSettings" class="success" type="button">Save User Settings</button>
+<div class="settings-section wide">
+            <button id="saveUserSettings" class="success" type="button">Save Settings</button>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.2.0 hardening</strong></div>
+              <div class="app-version">Version <strong id="appVersion">0.3.6</strong></div>
             </div>
           </div>
         </div>
@@ -2601,7 +3893,7 @@
       <section id="step1" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep1">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 1 — Retrieve EST Data / tracking.csv</h2>
+            <h2>Step 1 — Import EST history</h2>
             <span class="pill">Creates data/tracking.csv</span>
           </div>
           <div class="step-fields step1-fields">
@@ -2701,17 +3993,20 @@
       <section id="step3" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep3">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 3 — Submit Claims</h2>
+            <h2>Step 3 — Submit eligible claims</h2>
             <span class="pill">Reads eligible delivered-late claims only</span>
           </div>
           <div class="step-fields step3-fields compact-step3-fields">
             <div class="field checkbox-field builtin-browser-field">
               <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked /> Use built-in browser inside the app <span class="muted-inline">full-width browser, compact log below</span></label>
             </div>
+            <div class="field checkbox-field">
+              <label class="checkbox-label"><input id="dryRun" type="checkbox" /> Dry run — fill fields only; stop before final review or submission</label>
+            </div>
           </div>
           <input id="freshRun" type="checkbox" hidden />
           <div class="step-actions step-actions-3">
-            <button id="runSubmitOnly" class="success">Run Step 3 — Submit Claims</button>
+            <button id="runSubmitOnly" class="success">Run Step 3 — Submit eligible claims</button>
             <button id="stop" class="warning">Stop After Current Item</button>
             <button id="forceStopStep3" class="danger" data-force-stop="step3">Force Stop</button>
           </div>
@@ -2721,6 +4016,13 @@
             <div class="row step-browser-header" style="justify-content: space-between;">
               <h2 style="margin:0;">Step 3 Built-in Browser</h2>
               <span id="builtinBrowserStatus" class="pill">Ready</span>
+            </div>
+            <div id="builtinBrowserActivity" class="browser-activity" aria-live="polite" aria-atomic="true">
+              <div class="browser-activity-copy">
+                <span class="browser-activity-dot" aria-hidden="true"></span>
+                <span id="builtinBrowserActivityText">Browser idle</span>
+              </div>
+              <div class="browser-activity-track" aria-hidden="true"><span></span></div>
             </div>
             <div id="builtinBrowserSlot" class="browser-slot">
               <div class="browser-slot-placeholder">
@@ -2735,28 +4037,103 @@
             </div>
           </div>
           <div class="card step-log-card step3-log-card">
-            <h2>Step 3 Live Log</h2>
+            <div class="row step3-log-header" style="justify-content: space-between; align-items: center;">
+              <h2 style="margin:0;">Step 3 Live Log</h2>
+              <button id="openStep3Diagnostics" class="secondary compact-button" type="button">Open Detailed Diagnostics</button>
+            </div>
             <div id="step3Log" class="log"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="historyTab" class="tab-panel history-panel" role="tabpanel" aria-labelledby="tabHistory">
+        <div class="step-title-row">
+          <h2>History, Recovery & Maintenance</h2>
+          <span id="databaseIntegrity" class="pill">Checking database…</span>
+        </div>
+
+        <div class="history-summary">
+          <div class="stat"><div id="historyShipments" class="num">0</div><div class="label">Shipments recorded</div></div>
+          <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label">Submitted</div></div>
+          <div class="stat"><div id="historyReconciliation" class="num">0</div><div class="label">Need reconciliation</div></div>
+          <div class="stat"><div id="historyFailed" class="num">0</div><div class="label">Retryable failures</div></div>
+        </div>
+
+        <div>
+          <div class="history-toolbar">
+            <div class="field">
+              <label for="historySearch">Search tracking, reference or confirmation</label>
+              <input id="historySearch" type="search" placeholder="Search claim history" />
+            </div>
+            <div class="field">
+              <label for="historyStatusFilter">Status</label>
+              <select id="historyStatusFilter">
+                <option value="all">All statuses</option>
+                <option value="submitted">Submitted</option>
+                <option value="submitted_manual">Manually confirmed submitted</option>
+                <option value="already_submitted">Already submitted</option>
+                <option value="failed">Failed</option>
+                <option value="unknown">Unknown outcome</option>
+                <option value="not_submitted">Verified not submitted</option>
+                <option value="retry_approved">Retry approved</option>
+                <option value="dry_run_ready">Dry-run ready</option>
+                <option value="dry_run_interrupted">Dry-run interrupted</option>
+              </select>
+            </div>
+            <button id="refreshHistory" class="secondary" type="button">Refresh</button>
+            <button id="exportHistory" class="secondary" type="button">Export CSV</button>
+            <button id="createBackup" class="secondary" type="button">Create Backup</button>
+            <button id="restoreBackup" class="warning" type="button">Restore Backup</button>
+            <button id="createDiagnostics" class="secondary" type="button">Diagnostic ZIP</button>
+          </div>
+          <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto minmax(0,1fr);">
+            <button id="runSiteHealth" class="success" type="button">Run Canada Post Workflow Health Check</button>
+            <div id="siteHealthResult" class="health-result">Not checked in this session.</div>
+          </div>
+          <details class="history-details">
+            <summary>Manually add or annotate a shipment</summary>
+            <div class="manual-entry-grid">
+              <div class="field"><label for="manualTracking">Tracking number *</label><input id="manualTracking" type="text" /></div>
+              <div class="field"><label for="manualReference">Reference number</label><input id="manualReference" type="text" /></div>
+              <div class="field"><label for="manualService">Service code</label><input id="manualService" type="text" /></div>
+              <div class="field"><label for="manualPostal">Destination postal code</label><input id="manualPostal" type="text" /></div>
+              <div class="field"><label for="manualExpected">Expected date</label><input id="manualExpected" type="date" /></div>
+              <div class="field"><label for="manualDelivery">Delivery date</label><input id="manualDelivery" type="date" /></div>
+              <div class="field wide"><label for="manualNote">Note</label><input id="manualNote" type="text" /></div>
+              <button id="addManualShipment" class="secondary" type="button">Save Shipment</button>
+            </div>
+            <div id="manualShipmentList" class="history-list compact" aria-live="polite"></div>
+          </details>
+        </div>
+
+        <div class="history-content">
+          <div class="history-section">
+            <div class="history-section-head"><h3>Reconciliation Queue</h3><span id="reconciliationCountPill" class="pill">0 unresolved</span></div>
+            <div id="reconciliationList" class="history-list"></div>
+          </div>
+          <div class="history-section">
+            <div class="history-section-head"><h3>Claim Attempts</h3><span class="pill">SQLite audit history</span></div>
+            <div id="historyList" class="history-list"></div>
           </div>
         </div>
       </section>
 
       <section id="resultsTab" class="tab-panel results-panel" role="tabpanel" aria-labelledby="tabResults">
         <div class="step-title-row">
-          <h2>Notifications</h2>
+          <h2>Results & Evidence</h2>
           <span id="notificationsCountPill" class="pill">0 notifications</span>
         </div>
 
         <div id="opsListScreen" class="operations-grid">
           <div class="operations-panel">
-            <div class="mini-title">Notifications — click any row for details</div>
+            <div class="mini-title">Results & Evidence — click any row for details</div>
             <div class="ops-table" id="resultsList"></div>
           </div>
         </div>
 
         <div id="detailScreen" class="detail-screen hidden">
           <div class="detail-toolbar">
-            <button id="backToOperations" class="secondary">← Back to Notifications</button>
+            <button id="backToOperations" class="secondary">← Back to Results & Evidence</button>
             <span id="detailBadge" class="pill">Result Detail</span>
           </div>
 

@@ -10,6 +10,7 @@ release/
 config.local.json
 config.json
 credentials.json
+credential-key.bin
 user.ini
 .env
 .env.*
@@ -26,6 +27,9 @@ tracking.csv
 claims.csv
 overdue-undelivered.csv
 eligibility-review.csv
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Editor/OS files
 .DS_Store
@@ -33,5 +37,7 @@ Thumbs.db
 *.swp
 *.tmp
 
-*.bak*
-*copy*
+# Local release and update artifacts
+canadapost-gui-v*/
+*.zip
+SHA256SUMS.txt

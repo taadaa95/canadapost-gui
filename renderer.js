@@ -55,6 +55,9 @@ function activateTab(tabId) {
   if (target === 'resultsTab') {
     operations.unreadNotifications = 0;
   }
+  if (target === 'historyTab') {
+    refreshHistory().catch((error) => console.error(error));
+  }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout();
 }
@@ -62,7 +65,7 @@ function activateTab(tabId) {
 function stepForStage(stage) {
   if (stage === 'est-history' || stage === 'history') return 'step1';
   if (stage === 'tracking') return 'step2';
-  if (stage === 'submit') return 'step3';
+  if (stage === 'submit' || stage === 'health') return 'step3';
   return currentProcessStep || activeTabId || 'step1';
 }
 
@@ -107,6 +110,8 @@ function initStepTabs() {
 }
 
 let builtinBrowserLayoutFrame = 0;
+let builtinBrowserRepositionFrame = 0;
+let builtinBrowserResizeObserver = null;
 
 function useBuiltinBrowser() {
   return $('builtinBrowser') ? $('builtinBrowser').checked : false;
@@ -117,6 +122,33 @@ function setBuiltinBrowserStatus(text, kind = '') {
   if (!status) return;
   status.textContent = text;
   status.className = `pill ${kind}`.trim();
+}
+
+let browserActivityHideTimer = 0;
+
+function setBuiltinBrowserActivity(active, text = '', kind = '') {
+  const container = $('builtinBrowserActivity');
+  const label = $('builtinBrowserActivityText');
+  if (!container || !label) return;
+
+  if (browserActivityHideTimer) {
+    clearTimeout(browserActivityHideTimer);
+    browserActivityHideTimer = 0;
+  }
+
+  label.textContent = text || (active ? 'Canada Post is working…' : 'Browser idle');
+  container.classList.toggle('active', Boolean(active));
+  container.classList.toggle('error', kind === 'error');
+  container.setAttribute('aria-busy', active ? 'true' : 'false');
+}
+
+function finishBuiltinBrowserActivity(text = 'Browser ready', kind = '') {
+  setBuiltinBrowserActivity(false, text, kind);
+  browserActivityHideTimer = window.setTimeout(() => {
+    if (!$('builtinBrowserActivity')?.classList.contains('active')) {
+      setBuiltinBrowserActivity(false, 'Browser idle');
+    }
+  }, 1800);
 }
 
 function syncBuiltinBrowserClass() {
@@ -130,6 +162,9 @@ function builtinBrowserBounds() {
   if (!slot) return null;
   const rect = slot.getBoundingClientRect();
   if (rect.width < 80 || rect.height < 80) return null;
+
+  // Keep the native BrowserView anchored to the actual DOM slot. Signed x/y
+  // values are intentional: Electron clips portions that move outside the window.
   return {
     x: Math.round(rect.left),
     y: Math.round(rect.top),
@@ -170,7 +205,39 @@ function resizeBuiltinBrowserToSlot() {
   if (bounds) window.cpApp.setBuiltinBrowserBounds(bounds).catch(() => {});
 }
 
-window.addEventListener('resize', () => requestBuiltinBrowserLayout());
+function scheduleBuiltinBrowserReposition() {
+  if (builtinBrowserRepositionFrame) return;
+  builtinBrowserRepositionFrame = requestAnimationFrame(async () => {
+    builtinBrowserRepositionFrame = 0;
+
+    if (activeTabId !== 'step3' || !useBuiltinBrowser()) {
+      await window.cpApp?.hideBuiltinBrowser?.().catch(() => {});
+      return;
+    }
+
+    const bounds = builtinBrowserBounds();
+    if (!bounds) {
+      await window.cpApp?.hideBuiltinBrowser?.().catch(() => {});
+      return;
+    }
+
+    await window.cpApp?.setBuiltinBrowserBounds?.(bounds).catch(() => {});
+  });
+}
+
+function initBuiltinBrowserPositionTracking() {
+  // Capture scroll events from the window and every nested scroll container.
+  window.addEventListener('scroll', scheduleBuiltinBrowserReposition, { capture: true, passive: true });
+  window.addEventListener('resize', requestBuiltinBrowserLayout);
+  window.visualViewport?.addEventListener('scroll', scheduleBuiltinBrowserReposition, { passive: true });
+  window.visualViewport?.addEventListener('resize', scheduleBuiltinBrowserReposition, { passive: true });
+
+  const slot = $('builtinBrowserSlot');
+  if (slot && typeof ResizeObserver === 'function') {
+    builtinBrowserResizeObserver = new ResizeObserver(scheduleBuiltinBrowserReposition);
+    builtinBrowserResizeObserver.observe(slot);
+  }
+}
 
 const state = {
   step1Orders: 0,
@@ -193,7 +260,9 @@ const state = {
   failed: 0,
   submitTotal: 0,
   developerMode: false,
-  passwordStored: false
+  passwordStored: false,
+  evidenceRetentionDays: 90,
+  dryRunDefault: false
 };
 
 const operations = {
@@ -987,6 +1056,28 @@ function describeEvent(stage, event) {
     return formatDeveloperRaw(stage, event);
   }
 
+  if (stage === 'health') {
+    const resultEl = $('siteHealthResult');
+    if (type === 'health_start') {
+      setSiteHealthRunning(true);
+      if (resultEl) {
+        resultEl.textContent = event.message || 'Checking Canada Post workflow…';
+        resultEl.className = 'health-result warn';
+      }
+      return event.message || 'Canada Post workflow health check started.';
+    }
+    if (type === 'health_complete') {
+      setSiteHealthRunning(false);
+      const status = event.status === 'healthy' ? 'good' : (event.status === 'warning' ? 'warn' : 'bad');
+      if (resultEl) {
+        resultEl.textContent = `${event.code || 'RESULT'}: ${event.message || 'Health check completed.'}`;
+        resultEl.className = `health-result ${status}`;
+      }
+      refreshHistory().catch(() => {});
+      return `${event.code || 'Health check'}: ${event.message || 'completed'}`;
+    }
+  }
+
   if (stage === 'est-history') {
     if (type === 'est_endpoint') return event.message || `EST Desktop API endpoint: ${event.host || ''}`;
     if (type === 'est_start') {
@@ -1138,7 +1229,14 @@ function describeEvent(stage, event) {
   }
 
   if (stage === 'submit') {
+    if (type === 'diagnostics_started') {
+      return `Detailed diagnostics started: ${event.directory || 'Step 3 diagnostics folder'}`;
+    }
+    if (type === 'diagnostics_complete') {
+      return `Detailed diagnostics complete: ${event.summaryPath || event.directory || 'saved'}`;
+    }
     if (type === 'submit_start') {
+      setBuiltinBrowserActivity(true, 'Preparing Canada Post claim workflow…');
       operations.submitStartedAt = Date.now();
       state.submitTotal = event.total || 0;
       setStatus('Running', 'warn', 'step3');
@@ -1146,6 +1244,7 @@ function describeEvent(stage, event) {
       return `Claim submission started. ${state.submitTotal} claims.`;
     }
     if (type === 'claim_start') {
+      setBuiltinBrowserActivity(true, `Opening claim ${event.index || ''}${event.total ? ` of ${event.total}` : ''}…`);
       updateCurrentItem({
         tracking: event.trackingNumber || '—',
         row: event.row || '—',
@@ -1160,6 +1259,7 @@ function describeEvent(stage, event) {
       return `Claim ${event.index}/${event.total}: ${event.trackingNumber}`;
     }
     if (type === 'captcha_detected') {
+      finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
       updateCurrentItem({ step: 'CAPTCHA detected', result: 'Paused for manual solve', kind: 'captcha' });
       setStatus('CAPTCHA', 'bad', 'step3');
       setAction('CAPTCHA detected. Solve it manually in the visible browser window. The app is paused and will resume after it clears.', 'step3');
@@ -1177,22 +1277,26 @@ function describeEvent(stage, event) {
       return `CAPTCHA detected for ${event.trackingNumber || 'current claim'} — solve it manually in the visible browser. The app is paused.${event.screenshotPath ? ` Screenshot saved: ${event.screenshotPath}` : ' Screenshot skipped in built-in browser mode to keep focus.'}`;
     }
     if (type === 'captcha_waiting') {
+      finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
       updateCurrentItem({ step: 'CAPTCHA still active', result: 'Waiting for manual solve', kind: 'already' });
       setAction(event.message || 'Still waiting for CAPTCHA solve.', 'step3');
       return event.message || `Still waiting for CAPTCHA solve for ${event.trackingNumber || 'current claim'}.`;
     }
     if (type === 'captcha_cleared') {
+      setBuiltinBrowserActivity(true, 'CAPTCHA cleared — resuming…');
       updateCurrentItem({ step: 'CAPTCHA cleared', result: 'Resuming', kind: '' });
       setStatus('Running', 'warn', 'step3');
       setAction(event.message || 'CAPTCHA cleared. Resuming claim submission.', 'step3');
       return event.message || `CAPTCHA cleared for ${event.trackingNumber || 'current claim'}. Resuming.`;
     }
     if (type === 'claim_wait') {
+      setBuiltinBrowserActivity(true, 'Waiting for Canada Post confirmation…');
       updateCurrentItem({ tracking: event.trackingNumber || operations.current.tracking, step: 'Waiting for Canada Post result', result: 'In progress', kind: '' });
       setAction(`Waiting for Canada Post result for ${event.trackingNumber}. Timeout: ${Math.round((event.ms || 0) / 1000)} seconds.`);
       return `Waiting for Canada Post result: ${Math.round((event.ms || 0) / 1000)} seconds`;
     }
     if (type === 'claim_submitted') {
+      finishBuiltinBrowserActivity('Claim submitted');
       state.submitted += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1206,6 +1310,7 @@ function describeEvent(stage, event) {
       return `Submitted: ${event.trackingNumber}`;
     }
     if (type === 'claim_already_submitted') {
+      finishBuiltinBrowserActivity('Claim already submitted');
       state.alreadySubmitted += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1221,6 +1326,7 @@ function describeEvent(stage, event) {
       return `ALREADY SUBMITTED row ${event.row}, ${event.trackingNumber}: ${event.message}`;
     }
     if (type === 'claim_error') {
+      finishBuiltinBrowserActivity('Claim failed', 'error');
       state.failed += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1236,12 +1342,18 @@ function describeEvent(stage, event) {
       return `ERROR row ${event.row}, ${event.trackingNumber}: ${event.message}`;
     }
     if (type === 'submit_complete') {
+      finishBuiltinBrowserActivity('Submission run complete');
       operations.finishedAt = Date.now();
-      updateCurrentItem({ step: 'Submission complete', result: 'Done', kind: '' });
+      const dryReady = Number(event.dryRunReady || 0);
+      updateCurrentItem({ step: 'Submission complete', result: dryReady ? `${dryReady} dry-run ready` : 'Done', kind: '' });
       setStatus('Complete', 'good', 'step3');
-      setAction(`Submission complete. Succeeded: ${event.succeeded}, Already submitted: ${event.alreadySubmitted || 0}, Failed: ${event.failed}.`, 'step3');
+      const summary = dryReady
+        ? `Dry run complete. Ready: ${dryReady}, Failed: ${event.failed || 0}. No claims were submitted.`
+        : `Submission complete. Succeeded: ${event.succeeded}, Already submitted: ${event.alreadySubmitted || 0}, Failed: ${event.failed}.`;
+      setAction(summary, 'step3');
       stopOperationsTimer();
-      return `Submission complete. Succeeded: ${event.succeeded}, Already submitted: ${event.alreadySubmitted || 0}, Failed: ${event.failed}`;
+      refreshHistory().catch(() => {});
+      return summary;
     }
   }
 
@@ -1266,6 +1378,296 @@ function describeEvent(stage, event) {
     return event.message;
   }
   return JSON.stringify(event);
+}
+
+
+function historyDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function historyCell(text, className = '') {
+  const cell = document.createElement('div');
+  cell.className = className;
+  cell.textContent = text === undefined || text === null || text === '' ? '—' : String(text);
+  return cell;
+}
+
+function updateReconciliationBadge(count) {
+  const badge = $('reconciliationBadge');
+  const pill = $('reconciliationCountPill');
+  if (badge) {
+    badge.textContent = String(count || 0);
+    badge.classList.toggle('hidden', !count);
+  }
+  if (pill) pill.textContent = `${count || 0} unresolved`;
+}
+
+function renderHistory(items = []) {
+  const root = $('historyList');
+  if (!root) return;
+  root.replaceChildren();
+  const head = document.createElement('div');
+  head.className = 'history-row head';
+  ['Tracking', 'Attempt time', 'Status', 'Confirmation', 'Message'].forEach(value => head.appendChild(historyCell(value)));
+  root.appendChild(head);
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.textContent = 'No claim attempts match the current filters.';
+    root.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    row.appendChild(historyCell(item.trackingNumber));
+    row.appendChild(historyCell(historyDate(item.attemptedAt)));
+    row.appendChild(historyCell(item.status));
+    row.appendChild(historyCell(item.confirmationNumber));
+    const messageCell = document.createElement('div');
+    messageCell.textContent = item.message || '—';
+    if (item.screenshotPath || item.textPath) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = 'View evidence';
+      button.style.marginLeft = '8px';
+      button.addEventListener('click', async () => {
+        const detail = {
+          kind: item.status === 'submitted' ? 'submitted' : (item.status === 'already_submitted' ? 'already' : 'failed'),
+          tracking: item.trackingNumber,
+          row: item.id,
+          result: item.status,
+          status: item.status,
+          message: item.message,
+          screenshotPath: item.screenshotPath,
+          textPath: item.textPath,
+          source: 'History database',
+          createdAt: item.attemptedAt
+        };
+        const registered = registerDetailItem(detail);
+        activateTab('resultsTab');
+        openDetail(registered.id);
+      });
+      messageCell.appendChild(button);
+    }
+    row.appendChild(messageCell);
+    root.appendChild(row);
+  }
+}
+
+function reconciliationActionButton(item, label, action, className = 'secondary') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', async () => {
+    let confirmationNumber = '';
+    if (action === 'submitted') {
+      const confirmation = window.prompt(`Confirmation or ticket number for ${item.trackingNumber} (optional):`, item.confirmationNumber || '');
+      if (confirmation === null) return;
+      confirmationNumber = confirmation.trim();
+    }
+    const noteValue = window.prompt(`Optional reconciliation note for ${item.trackingNumber}:`, '');
+    if (noteValue === null) return;
+    const result = await window.cpApp.reconcileAttempt({ attemptId: item.id, action, note: noteValue.trim(), confirmationNumber });
+    if (!result.ok) {
+      window.alert(result.error || 'Could not update reconciliation state.');
+      return;
+    }
+    await refreshHistory();
+  });
+  return button;
+}
+
+function renderManualShipments(items = []) {
+  const root = $('manualShipmentList');
+  if (!root) return;
+  root.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.textContent = 'No manually entered shipments.';
+    root.appendChild(empty);
+    return;
+  }
+  const head = document.createElement('div');
+  head.className = 'history-row head';
+  ['Tracking', 'Reference', 'Service', 'Expected', 'Note'].forEach(value => head.appendChild(historyCell(value)));
+  root.appendChild(head);
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    row.appendChild(historyCell(item.trackingNumber));
+    row.appendChild(historyCell(item.referenceNumber));
+    row.appendChild(historyCell(item.serviceCode));
+    row.appendChild(historyCell(item.expectedDate));
+    row.appendChild(historyCell(item.note));
+    root.appendChild(row);
+  }
+}
+
+function renderReconciliation(items = []) {
+  const root = $('reconciliationList');
+  if (!root) return;
+  root.replaceChildren();
+  const head = document.createElement('div');
+  head.className = 'reconciliation-row head';
+  ['Tracking', 'Attempt time', 'Status', 'Reason', 'Actions'].forEach(value => head.appendChild(historyCell(value)));
+  root.appendChild(head);
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.textContent = 'No uncertain or interrupted claims require reconciliation.';
+    root.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'reconciliation-row';
+    row.appendChild(historyCell(item.trackingNumber));
+    row.appendChild(historyCell(historyDate(item.attemptedAt)));
+    row.appendChild(historyCell(item.status));
+    row.appendChild(historyCell(`${item.errorCode ? `${item.errorCode}: ` : ''}${item.message || 'Remote outcome is uncertain.'}`));
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+    if (item.screenshotPath || item.textPath) {
+      const evidence = document.createElement('button');
+      evidence.type = 'button';
+      evidence.className = 'secondary';
+      evidence.textContent = 'Evidence';
+      evidence.addEventListener('click', async () => {
+        const loaded = await window.cpApp.loadEvidence({ screenshotPath: item.screenshotPath, textPath: item.textPath });
+        if (loaded.ok && item.screenshotPath) await window.cpApp.openEvidence(item.screenshotPath);
+        else window.alert(loaded.error || loaded.pageText || 'No evidence available.');
+      });
+      actions.appendChild(evidence);
+    }
+    actions.appendChild(reconciliationActionButton(item, 'Mark submitted', 'submitted', 'success'));
+    actions.appendChild(reconciliationActionButton(item, 'Mark not submitted', 'not_submitted', 'warning'));
+    actions.appendChild(reconciliationActionButton(item, 'Approve retry', 'retry', 'secondary'));
+    row.appendChild(actions);
+    root.appendChild(row);
+  }
+}
+
+async function refreshHistory() {
+  if (!window.cpApp?.listHistory) return;
+  const search = getFieldValue('historySearch');
+  const status = $('historyStatusFilter')?.value || 'all';
+  const [history, reconciliation, dashboard, manualShipments] = await Promise.all([
+    window.cpApp.listHistory({ search, status, limit: 500 }),
+    window.cpApp.listReconciliation(),
+    window.cpApp.getDashboard(),
+    window.cpApp.listManualShipments({ search, limit: 250 })
+  ]);
+  if (history.ok) renderHistory(history.items || []);
+  if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
+  if (reconciliation.ok) {
+    renderReconciliation(reconciliation.items || []);
+    updateReconciliationBadge((reconciliation.items || []).length);
+  }
+  if (dashboard.ok) {
+    const data = dashboard.dashboard || {};
+    setText('historyShipments', data.shipments || 0);
+    setText('historySubmitted', data.submitted || 0);
+    setText('historyReconciliation', data.reconciliation || 0);
+    setText('historyFailed', data.failed || 0);
+    const integrity = $('databaseIntegrity');
+    if (integrity) {
+      integrity.textContent = dashboard.integrity?.ok ? 'Database healthy' : 'Database check failed';
+      integrity.className = dashboard.integrity?.ok ? 'pill good' : 'pill bad';
+    }
+  }
+}
+
+function setSiteHealthRunning(running) {
+  const button = $('runSiteHealth');
+  if (!button) return;
+  button.disabled = Boolean(running);
+  button.textContent = running ? 'Health Check Running…' : 'Run Canada Post Workflow Health Check';
+}
+
+async function runSiteHealthCheck() {
+  currentProcessStep = 'step3';
+  const resultEl = $('siteHealthResult');
+  setSiteHealthRunning(true);
+  if (resultEl) resultEl.textContent = 'Checking Canada Post workflow…';
+  requestBuiltinBrowserLayout();
+  const bounds = builtinBrowserBounds();
+  try {
+    const result = await window.cpApp.runSiteHealth({ ...collectUserSettingsOptions(), bounds: bounds || {} });
+    if (!result.ok) {
+      setSiteHealthRunning(false);
+      if (resultEl) resultEl.textContent = result.error || 'Could not start workflow health check.';
+    }
+  } catch (error) {
+    setSiteHealthRunning(false);
+    if (resultEl) resultEl.textContent = error.message || 'Could not start workflow health check.';
+  }
+}
+
+async function createAppBackup() {
+  const result = await window.cpApp.createBackup();
+  if (result.ok) window.alert(`Backup created:
+${result.path}`);
+  else if (!result.canceled) window.alert(result.error || 'Could not create backup.');
+}
+
+async function restoreAppBackup() {
+  if (!window.confirm('Restore a backup? The current database and replaced data files will be preserved in rollback copies.')) return;
+  const result = await window.cpApp.restoreBackup();
+  if (result.ok) {
+    window.alert(`Backup restored. ${result.restoredDataFiles || 0} data/evidence files restored.`);
+    await refreshConfig();
+    await refreshHistory();
+  } else if (!result.canceled) {
+    window.alert(result.error || 'Could not restore backup.');
+  }
+}
+
+async function createDiagnosticZip() {
+  const result = await window.cpApp.createDiagnostics();
+  if (result.ok) window.alert(`Sanitized diagnostic ZIP created:
+${result.path}`);
+  else if (!result.canceled) window.alert(result.error || 'Could not create diagnostic ZIP.');
+}
+
+async function exportClaimHistory() {
+  const result = await window.cpApp.exportHistory({
+    search: getFieldValue('historySearch'),
+    status: $('historyStatusFilter')?.value || 'all'
+  });
+  if (result.ok) window.alert(`Claim history exported:
+${result.path}`);
+  else if (!result.canceled) window.alert(result.error || 'Could not export claim history.');
+}
+
+async function addManualShipment() {
+  const trackingNumber = getFieldValue('manualTracking');
+  if (!trackingNumber) {
+    window.alert('Tracking number is required.');
+    return;
+  }
+  const result = await window.cpApp.addManualShipment({
+    trackingNumber,
+    referenceNumber: getFieldValue('manualReference'),
+    serviceCode: getFieldValue('manualService'),
+    destinationPostalCode: getFieldValue('manualPostal'),
+    expectedDate: getFieldValue('manualExpected'),
+    deliveryDate: getFieldValue('manualDelivery'),
+    note: getFieldValue('manualNote')
+  });
+  if (!result.ok) {
+    window.alert(result.error || 'Could not save shipment.');
+    return;
+  }
+  for (const id of ['manualTracking', 'manualReference', 'manualService', 'manualPostal', 'manualExpected', 'manualDelivery', 'manualNote']) {
+    if ($(id)) $(id).value = '';
+  }
+  await refreshHistory();
 }
 
 function isoDateFromOffset(daysOffset) {
@@ -1297,7 +1699,11 @@ function collectUserSettingsOptions() {
     claimBusinessName: getFieldValue('claimBusinessName'),
     claimContactName: getFieldValue('claimContactName'),
     claimContactPhone: getFieldValue('claimContactPhone'),
-    claimContactEmail: getFieldValue('claimContactEmail')
+    claimContactEmail: getFieldValue('claimContactEmail'),
+    evidenceRetentionDays: $('evidenceRetentionDays')
+      ? Math.max(7, Math.min(3650, Number(getFieldValue('evidenceRetentionDays') || state.evidenceRetentionDays || 90)))
+      : state.evidenceRetentionDays,
+    dryRunDefault: $('dryRunDefault') ? Boolean($('dryRunDefault').checked) : state.dryRunDefault
   };
 }
 
@@ -1369,6 +1775,7 @@ function buildRunOptions(importHistory = false) {
     browserMode: 'external',
     afterSubmitMs: 20000,
     maxClaims: null,
+    dryRun: Boolean($('dryRun')?.checked),
     importHistory,
     ...buildHistoryOptions()
   };
@@ -1387,6 +1794,7 @@ function buildSubmitOnlyOptions() {
     browserMode: useBuiltinBrowser() ? 'builtin' : 'external',
     afterSubmitMs: 20000,
     maxClaims: null,
+    dryRun: Boolean($('dryRun')?.checked),
     developerMode: false
   };
 }
@@ -1399,6 +1807,7 @@ async function startRun(importHistory = false) {
 
   const res = await window.cpApp.startRun(buildRunOptions(importHistory));
   if (!res.ok) {
+    finishBuiltinBrowserActivity('Could not start browser workflow', 'error');
     setStatus('Failed', 'bad');
     setAction(res.error || 'Could not start run.');
     updateCurrentItem({ step: 'Could not start run', result: res.error || 'Failed', kind: 'failed' });
@@ -1456,7 +1865,8 @@ async function startSubmitOnly() {
     return;
   }
   setStatus('Running', 'warn', 'step3');
-  setAction('Submitting claims from claims.csv.', 'step3');
+  setBuiltinBrowserActivity(true, 'Starting built-in browser workflow…');
+  setAction($('dryRun')?.checked ? 'Dry run: filling claim fields and stopping before final review/submission.' : 'Submitting claims from claims.csv.', 'step3');
   requestBuiltinBrowserLayout();
   if (useBuiltinBrowser() && window.cpApp?.showBuiltinBrowser) {
     const bounds = builtinBrowserBounds();
@@ -1481,7 +1891,7 @@ async function startSubmitOnly() {
     return;
   }
 
-  log(useBuiltinBrowser() ? 'Claim submission started in built-in browser mode.' : 'Claim submission started in external browser mode.');
+  log($('dryRun')?.checked ? 'Dry run started. The runner will stop on the sender/contact page before final review or submission.' : (useBuiltinBrowser() ? 'Claim submission started in built-in browser mode.' : 'Claim submission started in external browser mode.'));
   resizeBuiltinBrowserToSlot();
 }
 
@@ -1491,7 +1901,7 @@ async function refreshConfig() {
   if ($('webUsername')) $('webUsername').value = cfg.webUsername || '';
   if ($('webPassword')) {
     $('webPassword').value = '';
-    $('webPassword').placeholder = state.passwordStored ? 'Encrypted password stored — leave blank to reuse' : 'Web login password';
+    $('webPassword').placeholder = state.passwordStored ? 'Saved password available — leave blank to reuse' : 'Web login password';
   }
   if ($('rememberSettings')) $('rememberSettings').checked = Object.prototype.hasOwnProperty.call(cfg, 'rememberSettings') ? !!cfg.rememberSettings : true;
 
@@ -1516,6 +1926,13 @@ async function refreshConfig() {
   if ($('claimContactName')) $('claimContactName').value = cfg.claimContactName || '';
   if ($('claimContactPhone')) $('claimContactPhone').value = cfg.claimContactPhone || '';
   if ($('claimContactEmail')) $('claimContactEmail').value = cfg.claimContactEmail || '';
+  state.evidenceRetentionDays = Math.max(7, Math.min(3650, Number(cfg.evidenceRetentionDays || 90)));
+  state.dryRunDefault = Boolean(cfg.dryRunDefault);
+  if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
+  if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
+  if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.3.2';
+  updateReconciliationBadge(Number(cfg.reconciliationCount || 0));
 
   const configuredCustomer = cfg.estCustomerNumber || cfg.historyCustomerNumber || cfg.customerNumber || '';
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = configuredCustomer;
@@ -1526,10 +1943,14 @@ async function refreshConfig() {
 
   const status = $('settingsStatus');
   if (status) {
-    const webStatus = state.passwordStored ? 'web password encrypted' : 'web password not saved';
+    const webStatus = state.passwordStored
+      ? (cfg.secureCredentialStorage ? 'web password saved with OS encryption' : 'web password saved with device-local encryption')
+      : 'web password not saved';
     const apiStatus = (cfg.apiCredentialsStored || cfg.hasApiCredentials) ? 'API credentials ready' : 'API credentials missing';
     status.textContent = `Loaded / ${webStatus} / ${apiStatus}${cfg.credentialBackend ? ` (${cfg.credentialBackend})` : ''}`;
-    status.className = (cfg.apiCredentialsStored || cfg.hasApiCredentials) ? 'pill' : 'pill bad';
+    status.className = state.passwordStored
+      ? (cfg.secureCredentialStorage ? 'pill good' : 'pill warn')
+      : ((cfg.apiCredentialsStored || cfg.hasApiCredentials) ? 'pill' : 'pill bad');
   }
 }
 
@@ -1546,6 +1967,23 @@ $('selectCsv')?.addEventListener('click', async () => {
 
 $('openData')?.addEventListener('click', () => window.cpApp.openDataFolder());
 $('openLogs')?.addEventListener('click', () => window.cpApp.openLogsFolder());
+$('openStep3Diagnostics')?.addEventListener('click', async () => {
+  const result = await window.cpApp.openStep3Diagnostics();
+  if (!result?.ok) log(result?.error || 'No Step 3 diagnostics are available yet.', 'log-warning', 'step3');
+});
+$('refreshHistory')?.addEventListener('click', () => refreshHistory());
+$('historyStatusFilter')?.addEventListener('change', () => refreshHistory());
+let historySearchTimer = null;
+$('historySearch')?.addEventListener('input', () => {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(() => refreshHistory(), 250);
+});
+$('exportHistory')?.addEventListener('click', exportClaimHistory);
+$('createBackup')?.addEventListener('click', createAppBackup);
+$('restoreBackup')?.addEventListener('click', restoreAppBackup);
+$('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
+$('runSiteHealth')?.addEventListener('click', runSiteHealthCheck);
+$('addManualShipment')?.addEventListener('click', addManualShipment);
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
   const message = res?.message || res?.error || (res?.ok ? 'Opened update page.' : 'Could not open update page.');
@@ -1669,6 +2107,11 @@ document.querySelectorAll('[data-force-stop]').forEach((button) => {
   });
 });
 
+window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
+  if (active) setBuiltinBrowserActivity(true, text || 'Loading Canada Post…', kind || '');
+  else finishBuiltinBrowserActivity(text || 'Browser ready', kind || '');
+});
+
 window.cpApp.onEvent(({ stage, event }) => {
   const message = describeEvent(stage, event);
   if (message) logStage(stage, `[${stage}] ${message}`);
@@ -1693,6 +2136,7 @@ window.cpApp.onRun((payload) => {
     setStatus('Warnings', 'warn', step);
   }
   if (payload.status === 'failed') {
+    if (step === 'step3') finishBuiltinBrowserActivity('Browser workflow failed', 'error');
     operations.finishedAt ||= Date.now();
     stopOperationsTimer();
     setStatus('Failed', 'bad', step);
@@ -1708,6 +2152,7 @@ window.cpApp.onRun((payload) => {
     }
   }
   if (payload.status === 'stopped') {
+    if (step === 'step3') finishBuiltinBrowserActivity('Browser workflow stopped');
     operations.finishedAt ||= Date.now();
     stopOperationsTimer();
     setStatus('Stopped', 'warn', step);
@@ -1717,6 +2162,9 @@ window.cpApp.onRun((payload) => {
     log(payload.message, '', step);
   }
   updateCounters();
+  if (['complete', 'complete_with_warnings', 'failed', 'stopped'].includes(payload.status)) {
+    refreshHistory().catch(() => {});
+  }
 });
 
 window.cpApp.onStage(({ stage, status, code }) => {
@@ -1728,10 +2176,15 @@ window.cpApp.onStage(({ stage, status, code }) => {
     setStatus('Running', 'warn', step);
     log(`${stage} process started.`, '', step);
   }
-  if (status === 'finished') log(`${stage} process finished with code ${code}.`, '', step);
+  if (status === 'finished') {
+    if (stage === 'submit') finishBuiltinBrowserActivity(code === 0 ? 'Browser workflow complete' : 'Browser workflow finished with warnings', code === 0 ? '' : 'error');
+    if (stage === 'health') setSiteHealthRunning(false);
+    log(`${stage} process finished with code ${code}.`, '', step);
+  }
 });
 
 initThemePicker();
 initStepTabs();
+initBuiltinBrowserPositionTracking();
 refreshConfig();
 updateCounters();

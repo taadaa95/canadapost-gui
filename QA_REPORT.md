@@ -1,19 +1,31 @@
-# 0.2.0 hardening QA report
+# v0.3.6 QA report
 
-Validated in the review environment:
+## Diagnostic source reviewed
 
-- JavaScript syntax for main, preload, renderer, claim runner, storage module, and tests
-- PHP syntax for history import, EST import, tracking, and eligibility module
-- Eligibility regression suite
-- Encrypted credential-store regression suite using an isolated Electron API mock
-- Claim selection, idempotency, interrupted-run, domain allowlist, and retry-limit regression suite
-- Git whitespace validation
-- Release allowlist and secret/path scan
+The successful two-claim v0.3.5 dry run completed in 33.984 seconds with no failed claims and no dropped diagnostic events.
 
-Not executed in the review environment:
+Measured operations:
+- Authentication: 13.320 s
+- Ticket launcher navigation: 2.066 s
+- Claim 1: 8.921 s
+- Claim 2: 7.470 s
+- Launcher reset between claims: 1.050 s
 
-- A live Canada Post claim submission
-- A complete Electron GUI launch, because the uploaded ZIP's `node_modules` symlinks/binary payload were damaged and the Electron binary could not be downloaded in the isolated container
-- Live SOAP calls, because the review container lacks the PHP SOAP extension and no production account was used
+## Improvements
 
-Run `npm install`, `npm test`, and a small supervised end-to-end validation on the target machine before production use.
+- Removed the expected 500 ms reference-field miss before each first Continue.
+- Removed the expected 500 ms street-field miss before each second Continue.
+- Reuses the field locator found during stage readiness rather than finding the same control again.
+- Prefers stable Canada Post field IDs before accessibility-label fallback.
+- Captures page-state diagnostics after the next page marker is visible, preventing empty transient snapshots.
+- Separates known Canada Post and Electron page defects from actual automation errors.
+- Marks expected optional locator misses as debug events.
+
+## Validation
+
+- Full npm test suite passed.
+- Step 3 dry-run safety regression passed.
+- Step 3 navigation stability regression passed.
+- Step 3 diagnostics privacy and classification tests passed.
+- UI contract tests passed.
+- Live Canada Post submission was not performed in the isolated build environment.

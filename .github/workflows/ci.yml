@@ -1,0 +1,36 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install PHP
+        run: sudo apt-get update && sudo apt-get install -y php-cli
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Test
+        run: npm test
+      - name: Reject private runtime files
+        run: |
+          test ! -e config.local.json
+          test ! -e user.ini
+          test ! -e credentials.json
+          test ! -d data
+          test ! -d logs
+          test ! -d node_modules/.cache/browser-profile

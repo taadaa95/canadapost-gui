@@ -2,19 +2,24 @@ const { app, BrowserWindow, BrowserView, ipcMain, dialog, shell, Menu } = requir
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const storage = require('./lib/app-storage');
+const claimDb = require('./lib/claim-database');
+const archiveTools = require('./lib/archive-tools');
+const { pruneStep3DiagnosticRuns } = require('./lib/step3-diagnostics');
 
-const { ROOT, DATA_DIR, LOG_DIR } = storage;
+const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
+const DB_PATH = claimDb.databasePathFor(USER_DATA_ROOT);
 const STOP_FILE = path.join(DATA_DIR, 'stop-requested.txt');
 const DUPLICATE_CLAIM_FIX_VERSION = 'duplicate-claim-fix-v3';
 const HISTORY_IMPORT_VERSION = 'shipping-history-import-v6-auto-discover-mobo';
 const EST_HISTORY_EXPORT_VERSION = 'est-history-export-v8';
 const STEP_TABS_VERSION = 'user-settings-v17';
-const APP_VERSION = '0.2.0-hardening';
+const APP_VERSION = '0.3.6';
 const DEFAULT_TRACKING_REQUEST_INTERVAL_MS = 3100;
 const BUILTIN_BROWSER_CDP_PORT = String(process.env.CANADAPOST_ELECTRON_CDP_PORT || crypto.randomInt(20000, 48000));
 const BUILTIN_BROWSER_CDP_URL = `http://127.0.0.1:${BUILTIN_BROWSER_CDP_PORT}`;
+const BUILTIN_BROWSER_TARGET_TOKEN = crypto.randomUUID();
 const CANADAPOST_LOGIN_URL = 'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en';
 
 
@@ -50,11 +55,116 @@ let builtinBrowserView = null;
 let builtinBrowserAttached = false;
 let activeChild = null;
 let activeStage = 'idle';
+let builtinBrowserSessionHardened = false;
+let isShuttingDown = false;
+let activeStep3DiagnosticsDir = '';
+let latestStep3DiagnosticsDir = '';
+let lastBrowserBoundsDiagnosticAt = 0;
+
+
+function sanitizeDiagnosticUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+  } catch (_) {
+    return String(value || '').split(/[?#]/, 1)[0].slice(0, 500);
+  }
+}
+
+function appendStep3ElectronDiagnostic(type, details = {}) {
+  const directory = activeStep3DiagnosticsDir || latestStep3DiagnosticsDir;
+  if (!directory) return;
+  try {
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const cleanDetails = {};
+    for (const [key, value] of Object.entries(details || {})) {
+      if (/url|uri|href/i.test(key)) cleanDetails[key] = sanitizeDiagnosticUrl(value);
+      else if (/password|cookie|token|authorization|credential/i.test(key)) cleanDetails[key] = value ? '[REDACTED]' : '';
+      else cleanDetails[key] = typeof value === 'string' ? value.slice(0, 2000) : value;
+    }
+    const event = {
+      at: new Date().toISOString(),
+      source: 'electron-main',
+      type: String(type || 'event'),
+      stage: activeStage,
+      details: cleanDetails
+    };
+    const filePath = path.join(directory, 'electron-browser.jsonl');
+    fs.appendFileSync(filePath, `${JSON.stringify(event)}\n`, { mode: 0o600 });
+    try { fs.chmodSync(filePath, 0o600); } catch (_) {}
+  } catch (_) {}
+}
+
+function latestStep3RunDirectory() {
+  const root = path.join(LOG_DIR, 'step3-runs');
+  if (!fs.existsSync(root)) return '';
+  const entries = fs.readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => ({ path: path.join(root, entry.name), mtime: fs.statSync(path.join(root, entry.name)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  return entries[0]?.path || '';
+}
+
+function sendStopSignalToChild(child, { force = false } = {}) {
+  if (!child || child.exitCode !== null || child.signalCode) return false;
+  appendStep3ElectronDiagnostic('child-stop-signal', { pid: child.pid, force });
+  try {
+    if (process.platform === 'win32') {
+      const args = ['/pid', String(child.pid), '/T'];
+      if (force) args.push('/F');
+      spawn('taskkill', args, { windowsHide: true, stdio: 'ignore' }).unref();
+    } else {
+      // Child processes are launched in their own process group so Playwright
+      // descendants cannot survive a force stop or app shutdown.
+      process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM');
+    }
+    return true;
+  } catch (_) {
+    try {
+      child.kill(force ? 'SIGKILL' : 'SIGTERM');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+function stopActiveChildForShutdown() {
+  if (!activeChild) return;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(STOP_FILE, `${new Date().toISOString()}\n`, { mode: 0o600 });
+  } catch (_) {}
+  const child = activeChild;
+  sendStopSignalToChild(child, { force: false });
+  const timer = setTimeout(() => sendStopSignalToChild(child, { force: true }), 2500);
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
+function destroyBuiltinBrowserView() {
+  if (!builtinBrowserView) return;
+  try {
+    if (win && !win.isDestroyed() && builtinBrowserAttached) win.removeBrowserView(builtinBrowserView);
+  } catch (_) {}
+  try {
+    if (!builtinBrowserView.webContents.isDestroyed()) builtinBrowserView.webContents.close({ waitForBeforeUnload: false });
+  } catch (_) {
+    try { builtinBrowserView.webContents.destroy(); } catch (_) {}
+  }
+  builtinBrowserView = null;
+  builtinBrowserAttached = false;
+}
+
 
 function ensureDirs() {
   storage.ensureDirs();
+  const config = storage.readConfig();
+  const retentionDays = Math.max(7, Math.min(3650, Number(config.evidenceRetentionDays || 90)));
   pruneOldFiles(LOG_DIR, 30, name => name.endsWith('.log'));
-  pruneOldFiles(DATA_DIR, 90, name => /^claim-(?:error|already-submitted|submitted|captcha)-row-.*\.(?:png|txt)$/i.test(name));
+  pruneStep3DiagnosticRuns(path.join(LOG_DIR, 'step3-runs'), { maxAgeDays: 30, maxRuns: 20 });
+  pruneOldFiles(DATA_DIR, retentionDays, name => /^claim-(?:error|already-submitted|submitted|captcha|dry-run)-row-.*\.(?:png|txt)$/i.test(name));
+  const db = claimDb.openDatabase(DB_PATH);
+  db.close();
 }
 
 function createWindow() {
@@ -89,8 +199,8 @@ function createWindow() {
   });
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.on('closed', () => {
-    builtinBrowserView = null;
-    builtinBrowserAttached = false;
+    stopActiveChildForShutdown();
+    destroyBuiltinBrowserView();
     win = null;
   });
   win.loadFile('index.html');
@@ -102,9 +212,15 @@ function emit(channel, payload = {}) {
   }
 }
 
+function emitBuiltinBrowserActivity(active, text, kind = '') {
+  emit('browser:activity', { active: Boolean(active), text: String(text || ''), kind: String(kind || '') });
+}
+
 function normalizeBounds(bounds = {}) {
-  const x = Math.max(0, Math.round(Number(bounds.x) || 0));
-  const y = Math.max(0, Math.round(Number(bounds.y) || 0));
+  // Keep x/y signed so a BrowserView can move partially outside the window
+  // while its DOM slot is being scrolled. Electron clips the off-screen portion.
+  const x = Math.round(Number(bounds.x) || 0);
+  const y = Math.round(Number(bounds.y) || 0);
   const width = Math.max(0, Math.round(Number(bounds.width) || 0));
   const height = Math.max(0, Math.round(Number(bounds.height) || 0));
   return { x, y, width, height };
@@ -119,11 +235,44 @@ function ensureBuiltinBrowserView() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      navigateOnDragDrop: false,
+      spellcheck: false,
       partition: 'persist:canadapost-claims-builtin'
     }
   });
 
+  const browserSession = builtinBrowserView.webContents.session;
+  if (!builtinBrowserSessionHardened) {
+    builtinBrowserSessionHardened = true;
+    browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+    if (typeof browserSession.setPermissionCheckHandler === 'function') {
+      browserSession.setPermissionCheckHandler(() => false);
+    }
+    browserSession.on('will-download', (event, _item, webContents) => {
+      if (!builtinBrowserView || webContents?.id !== builtinBrowserView.webContents.id) return;
+      event.preventDefault();
+      appendStep3ElectronDiagnostic('download-blocked', { webContentsId: webContents?.id });
+      emit('event', { stage: 'submit', event: { type: 'log', message: 'Blocked an unexpected download from the built-in browser.' } });
+    });
+  }
+
+  builtinBrowserView.webContents.on('will-attach-webview', event => {
+    event.preventDefault();
+    appendStep3ElectronDiagnostic('webview-attachment-blocked');
+  });
+
+  const markBuiltinTarget = () => {
+    if (!builtinBrowserView || builtinBrowserView.webContents.isDestroyed()) return;
+    builtinBrowserView.webContents.executeJavaScript(
+      `window.name = ${JSON.stringify(BUILTIN_BROWSER_TARGET_TOKEN)}; true`,
+      true
+    ).catch(() => {});
+  };
+
   builtinBrowserView.webContents.setWindowOpenHandler(({ url }) => {
+    appendStep3ElectronDiagnostic('new-window-request', { url, allowed: isAllowedCanadaPostUrl(url) });
     if (isAllowedCanadaPostUrl(url)) builtinBrowserView.webContents.loadURL(url).catch(() => {});
     else emit('event', { stage: 'submit', event: { type: 'error', message: 'Blocked built-in browser navigation outside Canada Post.' } });
     return { action: 'deny' };
@@ -131,12 +280,59 @@ function ensureBuiltinBrowserView() {
   builtinBrowserView.webContents.on('will-navigate', (event, url) => {
     if (!isAllowedCanadaPostUrl(url)) {
       event.preventDefault();
+      appendStep3ElectronDiagnostic('navigation-blocked', { url });
       emit('event', { stage: 'submit', event: { type: 'error', message: 'Blocked built-in browser navigation outside Canada Post.' } });
     }
   });
 
-  builtinBrowserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+  builtinBrowserView.webContents.on('did-start-navigation', (_event, url, isInPlace, isMainFrame) => {
+    appendStep3ElectronDiagnostic('did-start-navigation', { url, isInPlace, isMainFrame });
+    if (isMainFrame) emitBuiltinBrowserActivity(true, 'Navigating Canada Post…');
+  });
+
+  builtinBrowserView.webContents.on('did-start-loading', () => {
+    appendStep3ElectronDiagnostic('did-start-loading', { url: builtinBrowserView?.webContents.getURL() });
+    emitBuiltinBrowserActivity(true, 'Loading Canada Post…');
+  });
+
+  builtinBrowserView.webContents.on('dom-ready', () => {
+    appendStep3ElectronDiagnostic('dom-ready', { url: builtinBrowserView?.webContents.getURL() });
+    markBuiltinTarget();
+    emitBuiltinBrowserActivity(true, 'Rendering Canada Post page…');
+  });
+
+  builtinBrowserView.webContents.on('did-stop-loading', () => {
+    appendStep3ElectronDiagnostic('did-stop-loading', { url: builtinBrowserView?.webContents.getURL() });
+    emitBuiltinBrowserActivity(false, 'Canada Post page ready');
+  });
+
+  builtinBrowserView.webContents.on('did-finish-load', () => {
+    appendStep3ElectronDiagnostic('did-finish-load', { url: builtinBrowserView?.webContents.getURL() });
+    emitBuiltinBrowserActivity(false, 'Canada Post page ready');
+  });
+
+  builtinBrowserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
+    if (!isMainFrame || Number(errorCode) === -3) return;
+    appendStep3ElectronDiagnostic('did-fail-load', { errorCode, errorDescription, validatedUrl: _validatedUrl, isMainFrame });
+    emitBuiltinBrowserActivity(false, `Browser load warning: ${errorDescription}`, 'error');
     emit('event', { stage: 'submit', event: { type: 'log', message: `Built-in browser load warning: ${errorCode} ${errorDescription}` } });
+  });
+
+  builtinBrowserView.webContents.on('unresponsive', () => {
+    appendStep3ElectronDiagnostic('unresponsive', { url: builtinBrowserView?.webContents.getURL() });
+    emitBuiltinBrowserActivity(false, 'Canada Post browser is not responding', 'error');
+    emit('event', { stage: 'submit', event: { type: 'error', message: 'The built-in Canada Post browser became unresponsive.' } });
+  });
+
+  builtinBrowserView.webContents.on('responsive', () => {
+    appendStep3ElectronDiagnostic('responsive', { url: builtinBrowserView?.webContents.getURL() });
+    emitBuiltinBrowserActivity(false, 'Canada Post browser recovered');
+  });
+
+  builtinBrowserView.webContents.on('render-process-gone', (_event, details = {}) => {
+    appendStep3ElectronDiagnostic('render-process-gone', details);
+    emitBuiltinBrowserActivity(false, 'Canada Post browser process stopped', 'error');
+    emit('event', { stage: 'submit', event: { type: 'error', message: `The built-in Canada Post browser process stopped (${details.reason || 'unknown reason'}). Any active claim will require reconciliation.` } });
   });
 
   return builtinBrowserView;
@@ -163,6 +359,10 @@ function setBuiltinBrowserBounds(bounds) {
   const view = attachBuiltinBrowserView();
   const normalized = normalizeBounds(bounds);
   view.setBounds(normalized);
+  if (Date.now() - lastBrowserBoundsDiagnosticAt >= 1000) {
+    lastBrowserBoundsDiagnosticAt = Date.now();
+    appendStep3ElectronDiagnostic('browser-view-bounds', normalized);
+  }
   view.setAutoResize({ width: false, height: false, horizontal: false, vertical: false });
 }
 
@@ -170,10 +370,12 @@ async function showBuiltinBrowser(bounds) {
   const view = attachBuiltinBrowserView();
   setBuiltinBrowserBounds(bounds);
   const currentUrl = view.webContents.getURL();
-  if (!currentUrl || currentUrl === 'about:blank') {
+  appendStep3ElectronDiagnostic('browser-view-show', { currentUrl, bounds });
+  if (!currentUrl || currentUrl === 'about:blank' || !isAllowedCanadaPostUrl(currentUrl)) {
+    emitBuiltinBrowserActivity(true, 'Opening Canada Post login…');
     await view.webContents.loadURL(CANADAPOST_LOGIN_URL);
   }
-  return { ok: true, cdpUrl: BUILTIN_BROWSER_CDP_URL, webContentsId: view.webContents.id };
+  return { ok: true, cdpUrl: BUILTIN_BROWSER_CDP_URL, webContentsId: view.webContents.id, targetToken: BUILTIN_BROWSER_TARGET_TOKEN };
 }
 
 function focusBuiltinBrowser() {
@@ -431,60 +633,146 @@ function parseJsonLines(bufferState, chunk, onEvent, onRaw) {
   }
 }
 
-function spawnJsonProcess(command, args, options, stage, logPath) {
+function spawnJsonProcess(command, args, options, stage, logPath, hooks = {}) {
   return new Promise((resolve) => {
     activeStage = stage;
     emit('stage', { stage, status: 'running' });
 
     const childEnv = { ...process.env, ...options.env };
+    const useStdinJson = options.stdinJson && typeof options.stdinJson === 'object';
     const child = spawn(command, args, {
       cwd: ROOT,
       env: childEnv,
-      stdio: ['ignore', 'pipe', 'pipe']
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+      stdio: [useStdinJson ? 'pipe' : 'ignore', 'pipe', 'pipe']
     });
 
     activeChild = child;
     const stdoutBuffer = { text: '' };
     const stderrBuffer = { text: '' };
     let lastEvent = null;
+    const lastEventsByType = {};
     const eventCounts = {};
+    let settled = false;
 
     const handleRawLine = (_source, raw) => {
-      // Always save the exact JSON-lines stream to disk. Developer mode receives
-      // formatted raw API events through `debug_raw` events from the child process.
       appendLog(logPath, raw);
     };
 
     const handleEvent = event => {
       lastEvent = event;
       const type = String(event?.type || 'unknown');
+      lastEventsByType[type] = event;
       eventCounts[type] = (eventCounts[type] || 0) + 1;
+      try { hooks.onEvent?.(event); } catch (error) {
+        appendLog(logPath, `[database-hook] ${error.message}
+`);
+      }
       emit('event', { stage, event });
+      try {
+        if (hooks.stopOnEvent?.(event)) {
+          const stopTimer = setTimeout(() => {
+            if (activeChild === child && child.exitCode === null) sendStopSignalToChild(child, { force: false });
+          }, 150);
+          if (typeof stopTimer.unref === 'function') stopTimer.unref();
+        }
+      } catch (error) {
+        appendLog(logPath, `[process-hook] ${error.message}
+`);
+      }
     };
 
-    child.stdout.on('data', (chunk) => {
-      parseJsonLines(stdoutBuffer, chunk, handleEvent, (raw) => handleRawLine('stdout', raw));
+    const flushBuffer = (bufferState, source) => {
+      const tail = bufferState.text;
+      bufferState.text = '';
+      if (!tail.trim()) return;
+      handleRawLine(source, `${tail}
+`);
+      try { handleEvent(JSON.parse(tail)); }
+      catch (_) { handleEvent({ type: 'log', message: tail }); }
+    };
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (activeChild === child) activeChild = null;
+      activeStage = 'idle';
+      resolve({ ...result, lastEvent, lastEventsByType, eventCounts });
+    };
+
+    child.stdout.on('data', chunk => {
+      parseJsonLines(stdoutBuffer, chunk, handleEvent, raw => handleRawLine('stdout', raw));
     });
 
-    child.stderr.on('data', (chunk) => {
-      parseJsonLines(stderrBuffer, chunk, handleEvent, (raw) => handleRawLine('stderr', raw));
+    child.stderr.on('data', chunk => {
+      parseJsonLines(stderrBuffer, chunk, handleEvent, raw => handleRawLine('stderr', raw));
     });
 
-    child.on('error', (error) => {
+    if (useStdinJson && child.stdin) {
+      const payload = JSON.stringify(options.stdinJson);
+      child.stdin.on('error', error => appendLog(logPath, `[${stage}] stdin warning: ${error.message}
+`));
+      child.stdin.end(payload);
+    }
+
+    child.once('error', error => {
       emit('event', { stage, event: { type: 'error', message: error.message } });
-      appendLog(logPath, `[${stage}] ERROR: ${error.message}\n`);
-      activeChild = null;
-      activeStage = 'idle';
-      resolve({ ok: false, code: -1, error, lastEvent, eventCounts });
+      appendLog(logPath, `[${stage}] ERROR: ${error.message}
+`);
+      finish({ ok: false, code: -1, error });
     });
 
-    child.on('close', (code, signal) => {
-      activeChild = null;
-      activeStage = 'idle';
+    child.once('close', (code, signal) => {
+      flushBuffer(stdoutBuffer, 'stdout');
+      flushBuffer(stderrBuffer, 'stderr');
+      try { hooks.onClose?.({ code, signal, lastEvent, lastEventsByType, eventCounts }); } catch (_) {}
       emit('stage', { stage, status: 'finished', code, signal });
-      resolve({ ok: code === 0, code, signal, lastEvent, eventCounts });
+      finish({ ok: code === 0, code, signal });
     });
   });
+}
+
+
+function dependencyStatus() {
+  const phpVersion = spawnSync('php', ['-v'], { encoding: 'utf8', timeout: 5000 });
+  const phpModules = spawnSync('php', ['-m'], { encoding: 'utf8', timeout: 5000 });
+  const moduleText = String(phpModules.stdout || '');
+  return {
+    phpAvailable: phpVersion.status === 0,
+    phpVersion: String(phpVersion.stdout || phpVersion.stderr || '').split(/\r?\n/)[0].slice(0, 200),
+    phpSoapAvailable: /(?:^|\n)soap(?:\r?$|\n)/im.test(moduleText),
+    cacertAvailable: fs.existsSync(path.join(ROOT, 'cacert.pem')),
+    wsdlAvailable: fs.existsSync(path.join(ROOT, 'wsdl', 'track.wsdl')),
+    playwrightAvailable: fs.existsSync(path.join(ROOT, 'node_modules', 'playwright')),
+    databaseIntegrity: (() => {
+      try { return claimDb.integrityCheck(DB_PATH); } catch (error) { return { ok: false, result: error.message }; }
+    })()
+  };
+}
+
+function diagnosticSensitiveValues(config = {}) {
+  return [
+    config.webUsername,
+    config.claimStreetNumber,
+    config.claimStreetName,
+    config.claimAddressLine2,
+    config.claimCity,
+    config.claimPostalCode,
+    config.claimBusinessName,
+    config.claimContactName,
+    config.claimContactPhone,
+    config.claimContactEmail,
+    storage.loadPassword(),
+    ...Object.values(storage.loadApiCredentials())
+  ].filter(Boolean);
+}
+
+function trackingRunCounts(summary = {}) {
+  const total = Number(summary.total || 0);
+  const failure = Number(summary.errorCount || 0);
+  const warning = Number(summary.reviewRequiredCount || 0) + Number(summary.overdueInTransitCount || 0) + Number(summary.noDataCount || 0);
+  return { total, success: Math.max(0, total - failure - warning), warning, failure };
 }
 
 ipcMain.handle('browser:showBuiltin', async (_event, options = {}) => {
@@ -523,6 +811,10 @@ ipcMain.handle('config:load', () => {
     root: ROOT,
     dataDir: DATA_DIR,
     logDir: LOG_DIR,
+    databasePath: DB_PATH,
+    databaseIntegrity: claimDb.integrityCheck(DB_PATH),
+    dashboard: claimDb.dashboard(DB_PATH),
+    reconciliationCount: claimDb.listReconciliation(DB_PATH, 10000).length,
     hasTrackingCsv: fs.existsSync(path.join(DATA_DIR, 'tracking.csv')),
     hasClaimsCsv: fs.existsSync(path.join(DATA_DIR, 'claims.csv')),
     hasUserIni: fs.existsSync(path.join(DATA_DIR, 'user.ini')) || fs.existsSync(path.join(ROOT, 'user.ini')),
@@ -568,6 +860,16 @@ ipcMain.handle('folder:openData', async () => {
 ipcMain.handle('folder:openLogs', async () => {
   await shell.openPath(LOG_DIR);
   return { ok: true };
+});
+
+ipcMain.handle('folder:openStep3Diagnostics', async () => {
+  const directory = latestStep3DiagnosticsDir || latestStep3RunDirectory();
+  if (!directory || !fs.existsSync(directory)) {
+    return { ok: false, error: 'No Step 3 diagnostic run exists yet.' };
+  }
+  latestStep3DiagnosticsDir = directory;
+  const error = await shell.openPath(directory);
+  return error ? { ok: false, error } : { ok: true, path: directory };
 });
 
 ipcMain.handle('updates:open', async () => {
@@ -652,6 +954,185 @@ ipcMain.handle('evidence:open', async (_event, filePath) => {
   return errorMessage ? { ok: false, error: errorMessage } : { ok: true };
 });
 
+
+
+ipcMain.handle('dashboard:get', () => {
+  ensureDirs();
+  return { ok: true, dashboard: claimDb.dashboard(DB_PATH), integrity: claimDb.integrityCheck(DB_PATH) };
+});
+
+ipcMain.handle('history:list', (_event, options = {}) => {
+  ensureDirs();
+  return { ok: true, items: claimDb.listClaimHistory(DB_PATH, options) };
+});
+
+ipcMain.handle('history:export', async (_event, options = {}) => {
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Export claim history',
+    defaultPath: path.join(app.getPath('documents'), `canadapost-claim-history-${new Date().toISOString().slice(0, 10)}.csv`),
+    filters: [{ name: 'CSV files', extensions: ['csv'] }]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  archiveTools.exportHistoryCsv(DB_PATH, result.filePath, options);
+  return { ok: true, path: result.filePath };
+});
+
+ipcMain.handle('reconciliation:list', () => {
+  ensureDirs();
+  return { ok: true, items: claimDb.listReconciliation(DB_PATH, 1000) };
+});
+
+ipcMain.handle('reconciliation:update', (_event, payload = {}) => {
+  try {
+    const item = claimDb.reconcileAttempt(DB_PATH, payload.attemptId, String(payload.action || ''), String(payload.note || ''), String(payload.confirmationNumber || ''));
+    return { ok: true, item, reconciliationCount: claimDb.listReconciliation(DB_PATH, 10000).length };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('shipment:listManual', (_event, options = {}) => {
+  ensureDirs();
+  return { ok: true, items: claimDb.listManualShipments(DB_PATH, options) };
+});
+
+ipcMain.handle('shipment:manualAdd', (_event, payload = {}) => {
+  try {
+    const shipment = claimDb.upsertShipment(DB_PATH, {
+      trackingNumber: payload.trackingNumber,
+      referenceNumber: payload.referenceNumber,
+      serviceCode: payload.serviceCode,
+      destinationPostalCode: payload.destinationPostalCode,
+      expectedDate: payload.expectedDate,
+      deliveryDate: payload.deliveryDate,
+      classification: payload.classification || 'MANUAL_ENTRY',
+      eligibilityReason: payload.note || 'Manually entered shipment.'
+    });
+    return { ok: true, shipment };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('backup:create', async () => {
+  ensureDirs();
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Create Canada Post Claim Runner backup',
+    defaultPath: path.join(app.getPath('documents'), `canadapost-claim-runner-backup-${new Date().toISOString().slice(0, 10)}.zip`),
+    filters: [{ name: 'ZIP archives', extensions: ['zip'] }]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  try {
+    await archiveTools.createBackup({
+      dbPath: DB_PATH,
+      dataDir: DATA_DIR,
+      config: readConfig(),
+      destination: result.filePath,
+      appVersion: APP_VERSION
+    });
+    return { ok: true, path: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('backup:restore', async () => {
+  ensureDirs();
+  if (activeChild) return { ok: false, error: 'Stop the active process before restoring a backup.' };
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Restore Canada Post Claim Runner backup',
+    properties: ['openFile'],
+    filters: [{ name: 'ZIP archives', extensions: ['zip'] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const restored = archiveTools.restoreBackup({
+      source: result.filePaths[0],
+      dbPath: DB_PATH,
+      dataDir: DATA_DIR,
+      configWriter: restoredSettings => writeConfig({ ...readConfig(), ...storage.sanitizeConfig(restoredSettings) })
+    });
+    claimDb.markInterruptedAttempts(DB_PATH);
+    claimDb.quarantineLegacyDryRunReadyAttempts(DB_PATH);
+    return { ...restored, dashboard: claimDb.dashboard(DB_PATH) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('diagnostics:create', async () => {
+  ensureDirs();
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Create sanitized diagnostic report',
+    defaultPath: path.join(app.getPath('documents'), `canadapost-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`),
+    filters: [{ name: 'ZIP archives', extensions: ['zip'] }]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  try {
+    const config = readConfig();
+    archiveTools.createDiagnosticPackage({
+      destination: result.filePath,
+      appVersion: APP_VERSION,
+      config,
+      credentialStatus: {
+        passwordStored: storage.passwordStored(),
+        apiCredentialsStored: storage.apiCredentialsStored(),
+        credentialBackend: storage.credentialBackend(),
+        secureCredentialStorage: storage.strongCredentialStorageAvailable()
+      },
+      logDir: LOG_DIR,
+      dbPath: DB_PATH,
+      dependencyStatus: dependencyStatus(),
+      sensitiveValues: diagnosticSensitiveValues(config)
+    });
+    return { ok: true, path: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('siteHealth:run', async (_event, options = {}) => {
+  ensureDirs();
+  if (activeChild) return { ok: false, error: 'A process is already active.' };
+  try {
+    await showBuiltinBrowser(options.bounds || {});
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+  const config = readConfig();
+  const credentials = resolveWebCredentials(options, config);
+  const logPath = path.join(LOG_DIR, `site-health-${timestamp()}.log`);
+  const runId = claimDb.startRun(DB_PATH, 'site_health', { appVersion: APP_VERSION });
+  emit('run', { status: 'started', logPath });
+  (async () => {
+    try {
+      const result = await spawnJsonProcess(process.execPath, [path.join(ROOT, 'scripts', 'site-health-check.js')], {
+        env: {
+          ELECTRON_RUN_AS_NODE: '1',
+          ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
+          ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
+          CANADAPOST_SECRETS_STDIN: '1'
+        },
+        stdinJson: { username: credentials.username, password: credentials.password }
+      }, 'health', logPath, {
+        stopOnEvent: event => event?.type === 'health_complete'
+      });
+      const health = result.lastEventsByType?.health_complete || result.lastEvent || {};
+      claimDb.finishRun(DB_PATH, runId, health.ok ? 'complete' : 'failed', {
+        total: 1, success: health.ok ? 1 : 0, warning: health.status === 'warning' ? 1 : 0, failure: health.ok ? 0 : 1
+      }, health);
+      emit('run', {
+        status: health.ok ? (health.status === 'warning' ? 'complete_with_warnings' : 'complete') : 'failed',
+        message: health.message || (health.ok ? 'Workflow health check passed.' : 'Workflow health check failed.'),
+        logPath
+      });
+    } catch (error) {
+      claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: error.message });
+      emit('run', { status: 'failed', message: error.message, logPath });
+    }
+  })();
+  return { ok: true, logPath };
+});
 
 ipcMain.handle('est:importHistory', async (_event, options = {}) => {
   ensureDirs();
@@ -854,6 +1335,7 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
     nextConfig.historyIncludeNoManifest = options.historyIncludeNoManifest ? true : false;
   }
   nextConfig.developerMode = boolFromOption(historyEnv.DEVELOPER_MODE);
+  nextConfig.dryRunDefault = Boolean(options.dryRun);
   writeConfig(nextConfig);
   persistPasswordFromOptions(options, nextConfig);
 
@@ -861,11 +1343,9 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
     for (const name of ['claims.csv', 'processed_pins.txt', 'claim-run-summary.json', 'tracking-run-summary.json', 'overdue-undelivered.csv', 'eligibility-review.csv', 'stop-requested.txt']) {
       fs.rmSync(path.join(DATA_DIR, name), { force: true });
     }
-    for (const file of fs.readdirSync(DATA_DIR)) {
-      if (/^claim-(?:error|already-submitted|submitted)-row-.*\.(?:png|txt)$/.test(file)) fs.rmSync(path.join(DATA_DIR, file), { force: true });
-    }
   }
 
+  const fullRunId = claimDb.startRun(DB_PATH, 'full', { importHistory: Boolean(options.importHistory), dryRun: Boolean(options.dryRun) });
   const envBase = {
     APP_ROOT: ROOT,
     DATA_DIR,
@@ -875,13 +1355,16 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
     TRACKING_REQUEST_INTERVAL_MS: String(DEFAULT_TRACKING_REQUEST_INTERVAL_MS),
     CANADAPOST_API_USERNAME: apiFiles.username,
     CANADAPOST_API_PASSWORD: apiFiles.password,
-    CANADAPOST_USERNAME: webUsername,
-    CANADAPOST_PASSWORD: webPassword,
+    CANADAPOST_SECRETS_STDIN: '1',
     AFTER_SUBMIT_MS: String(options.afterSubmitMs || 20000),
-    BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 2000),
+    BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 750),
     MAX_CLAIMS: options.maxClaims ? String(options.maxClaims) : '',
     BROWSER_MODE: options.browserMode === 'builtin' ? 'builtin' : 'external',
     ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
+    ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
+    DATABASE_PATH: DB_PATH,
+    RUN_ID: String(fullRunId),
+    DRY_RUN: options.dryRun ? 'true' : 'false',
     ...claimSettingsEnv,
     ...historyEnv
   };
@@ -895,23 +1378,34 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
           const message = importResult.code === 2
             ? 'Shipping history import found no shipments. Full run stopped so old tracking.csv is not reused.'
             : `Shipping history import failed with code ${importResult.code}.`;
+          claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'history', code: importResult.code });
           emit('run', { status: 'failed', message, logPath });
           return;
         }
       }
 
       if (!fs.existsSync(trackingCsv)) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'tracking', error: 'tracking.csv missing' });
         emit('run', { status: 'failed', message: `Missing ${trackingCsv} after history import.`, logPath });
         return;
       }
 
-      const trackingResult = await spawnJsonProcess('php', [path.join(ROOT, 'scripts', 'get-tracking-cli.php')], { env: envBase }, 'tracking', logPath);
+      const trackingResult = await spawnJsonProcess(
+        'php',
+        [path.join(ROOT, 'scripts', 'get-tracking-cli.php')],
+        { env: envBase },
+        'tracking',
+        logPath,
+        { onEvent: event => claimDb.ingestTrackingEvent(DB_PATH, fullRunId, event) }
+      );
       if (!trackingResult.ok) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'tracking', code: trackingResult.code });
         emit('run', { status: 'failed', message: `Tracking stage failed with code ${trackingResult.code}.`, logPath });
         return;
       }
-      const trackingSummary = trackingResult.lastEvent?.type === 'tracking_complete' ? trackingResult.lastEvent : null;
-      if (Number(trackingSummary?.errorCount || 0) > 0) {
+      const trackingSummary = trackingResult.lastEventsByType?.tracking_complete || {};
+      if (Number(trackingSummary.errorCount || 0) > 0) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'complete_with_warnings', trackingRunCounts(trackingSummary), trackingSummary);
         emit('run', {
           status: 'failed',
           message: `Tracking completed with ${trackingSummary.errorCount} lookup error(s). Claim submission was blocked until tracking is rerun successfully.`,
@@ -921,24 +1415,50 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
       }
 
       if (fs.existsSync(STOP_FILE)) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'stopped', trackingRunCounts(trackingSummary), trackingSummary);
         emit('run', { status: 'stopped', message: 'Stopped after tracking stage.', logPath });
         return;
       }
 
       const claimsPath = path.join(DATA_DIR, 'claims.csv');
       if (!fs.existsSync(claimsPath) || fs.readFileSync(claimsPath, 'utf8').trim().split(/\r?\n/).length < 2) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'complete', trackingRunCounts(trackingSummary), trackingSummary);
         emit('run', { status: 'complete', message: 'Tracking complete. No late claims found.', logPath });
         return;
       }
 
-      const submitResult = await spawnJsonProcess(process.execPath, [path.join(ROOT, 'scripts', 'submit-claims.js')], { env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' } }, 'submit', logPath);
+      const submitResult = await spawnJsonProcess(
+        process.execPath,
+        [path.join(ROOT, 'scripts', 'submit-claims.js')],
+        {
+          env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' },
+          stdinJson: { username: webUsername, password: webPassword }
+        },
+        'submit',
+        logPath,
+        { onClose: () => claimDb.markInterruptedAttempts(DB_PATH) }
+      );
+      const submitSummary = submitResult.lastEventsByType?.submit_complete || {};
       if (!submitResult.ok) {
+        claimDb.finishRun(DB_PATH, fullRunId, 'failed', {
+          total: Number(submitSummary.total || 0),
+          success: Number(submitSummary.succeeded || 0),
+          warning: Number(submitSummary.alreadySubmitted || 0),
+          failure: Number(submitSummary.failed || 1)
+        }, submitSummary);
         emit('run', { status: 'failed', message: `Submit stage failed with code ${submitResult.code}.`, logPath });
         return;
       }
 
-      emit('run', { status: 'complete', message: 'Full run complete.', logPath });
+      claimDb.finishRun(DB_PATH, fullRunId, 'complete', {
+        total: Number(submitSummary.total || trackingSummary.total || 0),
+        success: Number(submitSummary.succeeded || 0),
+        warning: Number(submitSummary.alreadySubmitted || 0),
+        failure: Number(submitSummary.failed || 0)
+      }, { tracking: trackingSummary, submission: submitSummary, dryRun: Boolean(options.dryRun) });
+      emit('run', { status: 'complete', message: options.dryRun ? 'Full dry run complete. No claims were submitted.' : 'Full run complete.', logPath });
     } catch (error) {
+      try { claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });
     }
   })();
@@ -990,43 +1510,58 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
     TRACKING_REQUEST_INTERVAL_MS: String(DEFAULT_TRACKING_REQUEST_INTERVAL_MS),
     CANADAPOST_API_USERNAME: apiFiles.username,
     CANADAPOST_API_PASSWORD: apiFiles.password,
+    DATABASE_PATH: DB_PATH,
     DEVELOPER_MODE: 'false'
   };
+  const trackingRunId = claimDb.startRun(DB_PATH, 'tracking', { fresh: Boolean(options.fresh) });
 
   (async () => {
     try {
       const trackingScript = path.join(ROOT, 'scripts', 'get-tracking-cli.php');
       if (!fs.existsSync(trackingScript)) {
+        claimDb.finishRun(DB_PATH, trackingRunId, 'failed', { failure: 1 }, { error: `Missing ${trackingScript}.` });
         emit('run', { status: 'failed', message: `Missing ${trackingScript}.`, logPath });
         return;
       }
 
-      const trackingResult = await spawnJsonProcess('php', [trackingScript], { env: envBase }, 'tracking', logPath);
+      const trackingResult = await spawnJsonProcess('php', [trackingScript], { env: envBase }, 'tracking', logPath, {
+        onEvent: event => claimDb.ingestTrackingEvent(DB_PATH, trackingRunId, event)
+      });
       if (!trackingResult.ok) {
+        claimDb.finishRun(DB_PATH, trackingRunId, 'failed', { failure: 1 }, { code: trackingResult.code });
         emit('run', { status: 'failed', message: `Tracking stage failed with code ${trackingResult.code}.`, logPath });
         return;
       }
 
       if (fs.existsSync(STOP_FILE)) {
+        claimDb.finishRun(DB_PATH, trackingRunId, 'stopped', {}, trackingResult.lastEvent || {});
         emit('run', { status: 'stopped', message: 'Stopped during tracking stage.', logPath });
         return;
       }
 
       const claimsPath = path.join(DATA_DIR, 'claims.csv');
       const hasClaims = fs.existsSync(claimsPath) && fs.readFileSync(claimsPath, 'utf8').trim().split(/\r?\n/).length >= 2;
-      const summary = trackingResult.lastEvent?.type === 'tracking_complete' ? trackingResult.lastEvent : {};
+      const summary = trackingResult.lastEventsByType?.tracking_complete || {};
       const counts = [
         `${Number(summary.eligibleLateCount || 0)} eligible late`,
         `${Number(summary.overdueInTransitCount || 0)} overdue/in transit`,
         `${Number(summary.reviewRequiredCount || 0)} review required`,
         `${Number(summary.errorCount || 0)} errors`
       ].join(', ');
+      claimDb.finishRun(
+        DB_PATH,
+        trackingRunId,
+        Number(summary.errorCount || 0) > 0 ? 'complete_with_warnings' : 'complete',
+        trackingRunCounts(summary),
+        summary
+      );
       emit('run', {
         status: Number(summary.errorCount || 0) > 0 ? 'complete_with_warnings' : 'complete',
         message: `Tracking check complete: ${counts}.${hasClaims ? ' claims.csv contains eligible delivered-late shipments.' : ' No claims are ready for submission.'}`,
         logPath
       });
     } catch (error) {
+      try { claimDb.finishRun(DB_PATH, trackingRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });
     }
   })();
@@ -1067,6 +1602,7 @@ ipcMain.handle('submit:run', async (_event, options = {}) => {
   }
 
   const nextConfig = saveRememberedUserSettings({ ...config, developerMode: false }, options, claimSettingsEnv);
+  nextConfig.dryRunDefault = Boolean(options.dryRun);
   writeConfig(nextConfig);
   persistPasswordFromOptions(options, nextConfig);
 
@@ -1074,37 +1610,81 @@ ipcMain.handle('submit:run', async (_event, options = {}) => {
   emit('run', { status: 'started', logPath });
   appendLog(logPath, `Canada Post claim submission started ${new Date().toISOString()}\nStep tabs version: ${STEP_TABS_VERSION}\n`);
 
+  const submitRunId = claimDb.startRun(DB_PATH, 'submission', { dryRun: Boolean(options.dryRun) });
+  const step3DiagnosticsRunDir = path.join(LOG_DIR, 'step3-runs', `step3-${timestamp()}-run-${submitRunId}`);
+  fs.mkdirSync(step3DiagnosticsRunDir, { recursive: true, mode: 0o700 });
+  activeStep3DiagnosticsDir = step3DiagnosticsRunDir;
+  latestStep3DiagnosticsDir = step3DiagnosticsRunDir;
+  appendStep3ElectronDiagnostic('submission-run-started', {
+    runId: submitRunId,
+    dryRun: Boolean(options.dryRun),
+    browserMode: options.browserMode === 'builtin' ? 'builtin' : 'external',
+    logPath
+  });
   const envBase = {
     APP_ROOT: ROOT,
     DATA_DIR,
     STOP_FILE,
     CLAIMS_CSV: claimsPath,
-    CANADAPOST_USERNAME: webUsername,
-    CANADAPOST_PASSWORD: webPassword,
+    CANADAPOST_SECRETS_STDIN: '1',
     AFTER_SUBMIT_MS: String(options.afterSubmitMs || 20000),
-    BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 2000),
+    BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 750),
     MAX_CLAIMS: options.maxClaims ? String(options.maxClaims) : '',
     BROWSER_MODE: options.browserMode === 'builtin' ? 'builtin' : 'external',
     ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
+    ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
+    DATABASE_PATH: DB_PATH,
+    RUN_ID: String(submitRunId),
+    DRY_RUN: options.dryRun ? 'true' : 'false',
+    APP_VERSION,
+    LOG_DIR,
+    STEP3_DIAGNOSTICS_ENABLED: 'true',
+    STEP3_DIAGNOSTICS_RUN_DIR: step3DiagnosticsRunDir,
     ...claimSettingsEnv,
     DEVELOPER_MODE: 'false'
   };
 
   (async () => {
     try {
-      const submitResult = await spawnJsonProcess(process.execPath, [submitScript], { env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' } }, 'submit', logPath);
+      const submitResult = await spawnJsonProcess(process.execPath, [submitScript], {
+        env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' },
+        stdinJson: { username: webUsername, password: webPassword }
+      }, 'submit', logPath, {
+        onEvent: event => {
+          if (event?.type === 'diagnostics_started') {
+            latestStep3DiagnosticsDir = String(event.directory || step3DiagnosticsRunDir);
+            emit('event', { stage: 'submit', event: { type: 'log', message: `Detailed Step 3 diagnostics: ${latestStep3DiagnosticsDir}` } });
+          }
+        },
+        onClose: ({ code, signal, eventCounts }) => {
+          claimDb.markInterruptedAttempts(DB_PATH);
+          appendStep3ElectronDiagnostic('submission-worker-closed', { code, signal, eventCounts });
+          activeStep3DiagnosticsDir = '';
+        }
+      });
+      const summary = submitResult.lastEventsByType?.submit_complete || {};
+      const counts = {
+        total: Number(summary.total || 0),
+        success: Number(summary.succeeded || summary.dryRunReady || 0),
+        warning: Number(summary.alreadySubmitted || 0),
+        failure: Number(summary.failed || (submitResult.ok ? 0 : 1))
+      };
+      claimDb.finishRun(DB_PATH, submitRunId, submitResult.ok ? 'complete' : 'failed', counts, summary);
       if (!submitResult.ok) {
         emit('run', { status: 'failed', message: `Submit stage failed with code ${submitResult.code}.`, logPath });
         return;
       }
 
-      emit('run', { status: 'complete', message: 'Claim submission complete.', logPath });
+      emit('run', { status: 'complete', message: options.dryRun ? 'Dry run complete. No claims were submitted.' : 'Claim submission complete.', logPath });
     } catch (error) {
+      appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
+      activeStep3DiagnosticsDir = '';
+      try { claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });
     }
   })();
 
-  return { ok: true, logPath };
+  return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir };
 });
 
 ipcMain.handle('run:requestStop', () => {
@@ -1116,10 +1696,13 @@ ipcMain.handle('run:requestStop', () => {
 
 ipcMain.handle('run:forceStop', () => {
   ensureDirs();
-  fs.writeFileSync(STOP_FILE, new Date().toISOString() + '\n');
+  fs.writeFileSync(STOP_FILE, new Date().toISOString() + '\n', { mode: 0o600 });
   if (activeChild) {
-    activeChild.kill('SIGTERM');
-    emit('event', { stage: activeStage, event: { type: 'force_stop', message: 'Force stop sent to current process.' } });
+    const child = activeChild;
+    sendStopSignalToChild(child, { force: false });
+    const timer = setTimeout(() => sendStopSignalToChild(child, { force: true }), 1500);
+    if (typeof timer.unref === 'function') timer.unref();
+    emit('event', { stage: activeStage, event: { type: 'force_stop', message: 'Force stop sent to the current process and its browser descendants.' } });
     return { ok: true };
   }
   return { ok: false, error: 'No active process.' };
@@ -1127,7 +1710,18 @@ ipcMain.handle('run:forceStop', () => {
 
 app.whenReady().then(() => {
   storage.migrateLegacyData();
+  ensureDirs();
+  claimDb.importLegacyData(DB_PATH, DATA_DIR);
+  claimDb.markInterruptedAttempts(DB_PATH);
+  claimDb.quarantineLegacyDryRunReadyAttempts(DB_PATH);
   createWindow();
+});
+
+app.on('before-quit', () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  stopActiveChildForShutdown();
+  destroyBuiltinBrowserView();
 });
 
 app.on('window-all-closed', () => {

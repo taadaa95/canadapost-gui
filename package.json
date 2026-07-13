@@ -1,19 +1,23 @@
 {
   "name": "canadapost-gui",
-  "version": "0.2.0",
-  "description": "Hardened local Canada Post tracking eligibility and late-delivery claim workflow.",
+  "version": "0.3.6",
+  "description": "Local Canada Post tracking, eligibility, claim submission, reconciliation, backup and audit workflow.",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check scripts/submit-claims.js && php -l scripts/get-tracking-cli.php && php -l scripts/import-est-history-cli.php && php -l scripts/import-shipping-history-cli.php",
-    "test": "npm run check && php tests/eligibility-test.php && node tests/storage-test.js && node tests/claim-selection-test.js",
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check lib/app-storage.js && node --check lib/claim-database.js && node --check lib/archive-tools.js && node --check lib/canadapost-navigation.js && node --check lib/canadapost-login.js && node --check lib/runtime-secrets.js && node --check lib/step3-diagnostics.js && node --check scripts/submit-claims.js && node --check scripts/site-health-check.js && php -l scripts/get-tracking-cli.php && php -l scripts/import-est-history-cli.php && php -l scripts/import-shipping-history-cli.php",
+    "test": "npm run check && php tests/eligibility-test.php && node tests/storage-test.js && node tests/database-test.js && node tests/archive-test.js && node tests/claim-selection-test.js && node tests/site-health-test.js && node tests/step3-hardening-test.js && node tests/step3-regression-test.js && node tests/step3-diagnostics-test.js && node tests/step3-navigation-test.js && node tests/ui-contract-test.js",
     "install-browsers": "playwright install chromium"
   },
   "dependencies": {
+    "fflate": "0.8.2",
     "playwright": "1.61.1"
   },
   "devDependencies": {
     "electron": "43.0.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   }
 }
