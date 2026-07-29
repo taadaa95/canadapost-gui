@@ -1,4 +1,16 @@
-# v0.4.0-dev.1 QA report
+# v0.4.0-dev.2 QA report
+
+## History refinement — 2026-07-29
+
+History claim-attempt, reconciliation and manual-review record boxes now use a 260 px CSS minimum and responsive `min(60vh, 640px)` maximum when populated, with independent vertical/horizontal scrolling, comfortable wrapping and opaque sticky table headers. Compact empty/loading/error states use a 180–220 px range. The page remains vertically scrollable and has no application-level horizontal overflow.
+
+The new non-destructive Clear filters action resets search, status, and transient page/offset to the default first-page state, refreshes immediately, and disables itself at defaults. UI tests prove that no mutation IPC path is called, 500 synthetic records remain present, and an evidence sentinel remains byte-identical. Database tests prove pagination reads do not mutate records. The purely visual History-tab reconciliation badge and both renderer update paths were removed; the reconciliation data, dashboard, in-page count, refresh behavior and separate Results notification badge remain intact.
+
+Zero, one, 19, 50 and 500-record fixtures, missing values, long identifiers/statuses/messages, sticky scroll behavior and tab alignment passed at 980×680, 1280×720, 1600×1000, 2560×1440 and maximized Electron viewports. The approved spacious Step 3 layout and native mock-browser bounds also passed unchanged. Complete `npm test`, formatting, typecheck, lint (zero errors; four pre-existing non-failing complexity warnings), 96.06% line/statement coverage, 73.05% branch coverage, 93.18% function coverage, accessibility, localization, mock portal, Electron E2E, 178-file release audit, secret scan, full/production npm audits (zero vulnerabilities), and the 509-entry SBOM passed.
+
+The final package audit passed 1,037 ASAR entries and six external workers. All packaged Step 1, Step 2, database and isolated-profile smokes passed. Unpacked and headlessly extracted AppImage Electron E2E passed using only the local mock portal. No live Tracking request, live claim portal, or claim submission was used.
+
+Final separately staged unsigned AppImage: `dist/history-refinement-packages/Canada Post Claim Runner-0.4.0-dev.2-linux-x86_64-beta.AppImage`, 387,197,413 bytes, built 2026-07-29 16:15:46 -0400, SHA-256 `cb29725725cbeb5342ad636398f124e796f17d489f60e0f71461c02475af097b`. Both prior verified `.1` AppImages remain byte-identical. The application remains pending supervised review.
 
 ## Step 2 operational pacing, live-log/counter reconciliation and spacious Step 3/History — 2026-07-29
 

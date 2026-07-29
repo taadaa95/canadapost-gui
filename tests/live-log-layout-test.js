@@ -168,33 +168,56 @@ const { chromium } = require('playwright');
     });
     assert.strictEqual(await page.evaluate(() => window.builtinBrowserBounds()), null, 'offscreen native browser slot was not hidden');
 
-    for (const count of [0, 1, 19, 50]) {
+    await page.evaluate(async () => {
+      window.activateTab('historyTab');
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    for (const count of [0, 1, 19, 50, 500]) {
       await page.evaluate(recordCount => {
-        window.activateTab('historyTab');
         window.renderHistory(Array.from({ length: recordCount }, (_, index) => ({
           trackingNumber: `HISTORY${String(index).padStart(12, '0')}`, attemptedAt: '2026-07-29T12:00:00.000Z',
           status: index % 2 ? 'rejected' : 'submitted', confirmationNumber: `CONF-${index}`,
           message: `Long business outcome ${'message/'.repeat(40)}`
         })));
       }, count);
+      await page.waitForTimeout(250);
       const history = await page.evaluate(() => {
         const list = document.getElementById('historyList');
-        const row = list.querySelector('.history-row');
+        const row = list.querySelector('.history-row:not(.head)');
+        const head = list.querySelector('.history-row.head');
+        const headStyle = head ? getComputedStyle(head) : null;
         return {
           documentHeight: document.documentElement.scrollHeight,
           viewportHeight: window.innerHeight,
           documentWidth: document.documentElement.scrollWidth,
           viewportWidth: document.documentElement.clientWidth,
           listOverflowX: getComputedStyle(list).overflowX,
-          listMinHeight: list.clientHeight,
-          rowHeight: row?.getBoundingClientRect().height || 0
+          listOverflowY: getComputedStyle(list).overflowY,
+          listHeight: list.clientHeight,
+          listMinHeight: getComputedStyle(list).minHeight,
+          listClassName: list.className,
+          listScrollable: list.scrollHeight > list.clientHeight,
+          rowHeight: row?.getBoundingClientRect().height || 0,
+          stickyPosition: headStyle?.position || '',
+          stickyTop: headStyle?.top || '',
+          stickyBackground: headStyle?.backgroundColor || '',
+          hasHistoryBadge: Boolean(document.getElementById('reconciliationBadge')),
+          clearReachable: document.getElementById('clearHistoryFilters').getBoundingClientRect().width > 0
         };
       });
       assert(history.documentHeight > history.viewportHeight, 'History should use normal page-level scrolling');
       assert(history.documentWidth <= history.viewportWidth + 1, 'History caused horizontal page overflow');
       assert.strictEqual(history.listOverflowX, 'auto');
-      assert(history.listMinHeight >= 190);
+      assert.strictEqual(history.listOverflowY, count ? 'auto' : 'hidden');
+      assert(history.listHeight >= (count ? 258 : 178), `History ${count}-record height was ${history.listHeight}px (${history.listMinHeight}; ${history.listClassName})`);
+      assert(history.listHeight <= Math.min(history.viewportHeight * 0.6, 640) + 2);
       if (count) assert(history.rowHeight >= 52);
+      if (count === 500) assert.strictEqual(history.listScrollable, true);
+      assert.strictEqual(history.stickyPosition, 'sticky');
+      assert.strictEqual(history.stickyTop, '0px');
+      assert(!['transparent', 'rgba(0, 0, 0, 0)'].includes(history.stickyBackground));
+      assert.strictEqual(history.hasHistoryBadge, false);
+      assert.strictEqual(history.clearReachable, true);
     }
 
     for (const viewport of viewports) {

@@ -1,6 +1,6 @@
 {
   "name": "canadapost-gui",
-  "version": "0.4.0-dev.1",
+  "version": "0.4.0-dev.2",
   "description": "Local Canada Post tracking, eligibility, claim submission, reconciliation, backup and audit workflow.",
   "author": "Canada Post Claim Runner contributors",
   "desktopName": "Canada Post Claim Runner",
@@ -13,7 +13,7 @@
     "test:user-data-bootstrap": "node --unhandled-rejections=strict tests/user-data-bootstrap-test.js",
     "test:phase0": "node tests/release-safety-test.js && node tests/tracking-normalizer-test.js && node tests/policy-engine-test.js",
     "test:tracking-api": "node tests/tracking-api-v2-test.js && node tests/tracking-live-normalization-test.js && node tests/tracking-parity-test.js && node tests/tracking-run-284-parity-test.js && node tests/tracking-timeout-test.js && node tests/tracking-rate-limiter-test.js && node tests/tracking-counter-reconciliation-test.js && node tests/tracking-run-integrity-test.js",
-    "test": "npm run check && npm run check:isolation && npm run test:user-data-bootstrap && npm run test:phase0 && npm run test:tracking-api && node tests/est-import-v4-test.js && node tests/runtime-workers-test.js && node tests/node-migration-test.js && node tests/integration-failure-handling-test.js && node tests/storage-test.js && node tests/input-validation-test.js && node tests/claim-queue-test.js && node tests/preflight-test.js && node tests/operator-control-test.js && node tests/database-test.js && node tests/database-migration-recovery-test.js && node tests/archive-test.js && node tests/encrypted-backup-test.js && node tests/financial-report-test.js && node tests/product-readiness-test.js && node tests/localization-test.js && node tests/origin-policy-test.js && node tests/claim-selection-test.js && node tests/site-health-test.js && node tests/step3-hardening-test.js && node tests/step3-regression-test.js && node tests/step3-diagnostics-test.js && node tests/step3-navigation-test.js && node tests/ui-contract-test.js && node tests/live-log-privacy-test.js && node tests/live-log-layout-test.js",
+    "test": "npm run check && npm run check:isolation && npm run test:user-data-bootstrap && npm run test:phase0 && npm run test:tracking-api && node tests/est-import-v4-test.js && node tests/runtime-workers-test.js && node tests/node-migration-test.js && node tests/integration-failure-handling-test.js && node tests/storage-test.js && node tests/input-validation-test.js && node tests/claim-queue-test.js && node tests/preflight-test.js && node tests/operator-control-test.js && node tests/database-test.js && node tests/database-migration-recovery-test.js && node tests/archive-test.js && node tests/encrypted-backup-test.js && node tests/financial-report-test.js && node tests/product-readiness-test.js && node tests/localization-test.js && node tests/origin-policy-test.js && node tests/claim-selection-test.js && node tests/site-health-test.js && node tests/step3-hardening-test.js && node tests/step3-regression-test.js && node tests/step3-diagnostics-test.js && node tests/step3-navigation-test.js && node tests/ui-contract-test.js && node tests/live-log-privacy-test.js && node tests/live-log-layout-test.js && node tests/history-refinement-test.js",
     "test:est-import": "node tests/est-import-v4-test.js",
     "test:database-migrations": "node --unhandled-rejections=strict tests/database-migration-recovery-test.js",
     "install-browsers": "playwright install chromium",
@@ -53,7 +53,7 @@
     "test:packaged-database-legacy": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked legacy",
     "test:packaged-database-advanced": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked advanced",
     "test:packaged-isolated-profile": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js dist/packages/linux-unpacked",
-    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_64-beta.AppImage\"",
+    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/history-refinement-packages/Canada Post Claim Runner-0.4.0-dev.2-linux-x86_64-beta.AppImage\"",
     "sbom": "node scripts/generate-sbom.js",
     "release:finalize": "node scripts/finalize-artifacts.js",
     "lint": "eslint main.js preload.js renderer.js lib scripts mock-portal tests",
@@ -62,7 +62,7 @@
     "test:mock-portal": "node tests/mock-portal-test.js",
     "test:electron": "node tests/electron-e2e-test.js",
     "test:accessibility": "node tests/accessibility-test.js",
-    "test:ui-layout": "node tests/live-log-layout-test.js",
+    "test:ui-layout": "node tests/live-log-layout-test.js && node tests/history-refinement-test.js",
     "coverage": "c8 --check-coverage --lines 70 --functions 65 --branches 60 --include='lib/policy-engine.js' --include='lib/tracking-normalizer.js' --include='lib/eligibility-revalidation.js' --include='lib/encrypted-backup.js' --include='lib/zip-safety.js' --include='lib/money.js' --include='lib/update-security.js' --include='lib/i18n.js' node tests/coverage-suite.js"
   },
   "dependencies": {

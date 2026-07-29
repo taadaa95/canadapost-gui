@@ -112,11 +112,45 @@ const { createMockPortal } = require('../mock-portal/server');
 
     await window.evaluate(() => {
       window.activateTab('historyTab');
-      window.renderHistory(Array.from({ length: 50 }, (_, index) => ({ trackingNumber: `H${index}`, attemptedAt: new Date().toISOString(), status: 'rejected', confirmationNumber: '', message: 'Long outcome '.repeat(40) })));
+      window.__e2eHistory = Array.from({ length: 500 }, (_, index) => ({ trackingNumber: `H${index}${'9'.repeat(index === 499 ? 160 : 0)}`, attemptedAt: new Date().toISOString(), status: 'rejected', confirmationNumber: '', message: 'Long outcome '.repeat(40) }));
+      window.renderHistory(window.__e2eHistory);
     });
-    const history = await window.evaluate(() => ({ documentHeight: document.documentElement.scrollHeight, viewportHeight: window.innerHeight, documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth }));
-    assert(history.documentHeight > history.viewportHeight);
-    assert(history.documentWidth <= history.viewportWidth + 1);
+    const assertHistoryLayout = async (width, height) => {
+      await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setBounds({ x: 0, y: 0, width: size.width, height: size.height }), { width, height });
+      await window.waitForTimeout(100);
+      const history = await window.evaluate(() => {
+        if (document.querySelectorAll('#historyList .history-row:not(.head)').length !== 500) window.renderHistory(window.__e2eHistory);
+        const list = document.getElementById('historyList');
+        const head = list.querySelector('.history-row.head');
+        list.scrollTop = 500;
+        return {
+          documentHeight: document.documentElement.scrollHeight, viewportHeight: window.innerHeight,
+          documentWidth: document.documentElement.scrollWidth, viewportWidth: document.documentElement.clientWidth,
+          height: list.clientHeight, maxHeight: Math.min(window.innerHeight * 0.6, 640),
+          scrollable: list.scrollHeight > list.clientHeight,
+          overflowX: getComputedStyle(list).overflowX, overflowY: getComputedStyle(list).overflowY,
+          sticky: getComputedStyle(head).position,
+          stickyOffset: Math.abs(head.getBoundingClientRect().top - list.getBoundingClientRect().top),
+          clearVisible: document.getElementById('clearHistoryFilters').getBoundingClientRect().height > 0,
+          hasBadge: Boolean(document.getElementById('reconciliationBadge'))
+        };
+      });
+      assert(history.documentHeight > history.viewportHeight);
+      assert(history.documentWidth <= history.viewportWidth + 1);
+      assert(history.height >= 258 && history.height <= history.maxHeight + 2);
+      assert.strictEqual(history.scrollable, true);
+      assert.strictEqual(history.overflowX, 'auto');
+      assert.strictEqual(history.overflowY, 'auto');
+      assert.strictEqual(history.sticky, 'sticky');
+      assert(history.stickyOffset <= 2);
+      assert.strictEqual(history.clearVisible, true);
+      assert.strictEqual(history.hasBadge, false);
+    };
+    for (const viewport of [{ width: 980, height: 680 }, { width: 1280, height: 720 }, { width: 1600, height: 1000 }, { width: 2560, height: 1440 }]) await assertHistoryLayout(viewport.width, viewport.height);
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize());
+    await window.waitForTimeout(100);
+    const maximizedHistory = await window.evaluate(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
+    await assertHistoryLayout(maximizedHistory.width, maximizedHistory.height);
 
     const status = await window.evaluate(() => window.cpApp.browserSessionStatus());
     assert.strictEqual(status.ok, true);
@@ -124,7 +158,7 @@ const { createMockPortal } = require('../mock-portal/server');
     assert.strictEqual(cleared.ok, true);
     assert.strictEqual(cleared.claimHistoryPreserved, true);
     assert.ok(fs.existsSync(path.join(userData, 'database', 'app.sqlite')));
-    process.stdout.write(`Electron spacious layout E2E passed; maximized ${maximized.width}x${maximized.height}.\n`);
+    process.stdout.write(`Electron spacious Step 3 and bounded History E2E passed; maximized ${maximized.width}x${maximized.height}.\n`);
   } finally {
     if (application) await application.close().catch(() => {});
     await portal.close();

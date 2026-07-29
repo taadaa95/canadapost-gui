@@ -11,7 +11,7 @@ const pkg = require('../package.json');
 
 const requiredIds = [
   'historyTab', 'historySearch', 'historyStatusFilter', 'historyList',
-  'reconciliationList', 'reconciliationBadge', 'reconciliationCountPill',
+  'reconciliationList', 'reconciliationCountPill', 'historyResultCount', 'clearHistoryFilters',
   'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
   'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
   'runSiteHealth', 'siteHealthResult', 'exportHistory', 'refreshHistory',
@@ -24,11 +24,18 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.1');
+assert.strictEqual(pkg.version, '0.4.0-dev.2');
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
 assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
 assert.ok(renderer.includes("$('historySearch')?.addEventListener"));
+assert.ok(renderer.includes("$('clearHistoryFilters')?.addEventListener"));
+assert.ok(renderer.includes('Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS)'));
+assert.ok(!html.includes('id="reconciliationBadge"'), 'History tab must not contain a notification badge');
+assert.ok(!renderer.includes("$('reconciliationBadge')"), 'Renderer must not update a removed History badge');
+const historyTabMarkup = html.match(/<button id="tabHistory"[^>]*>([\s\S]*?)<\/button>/)?.[1] || '';
+assert.strictEqual(historyTabMarkup, 'History<br><span>Claims, recovery, exports</span>', 'History tab must contain only its normal label');
+assert.ok(/id="tabResults"[^>]*>[\s\S]*?id="notificationsBadge"/.test(html), 'Results notification indicator must remain unchanged');
 assert.ok(/data-tab="historyTab"/.test(html));
 assert.ok(/Dry run.+stop before final review or submission/i.test(html));
 assert.ok(!html.includes('Reliability, Testing &amp; Retention'), 'Reliability settings section should be removed');

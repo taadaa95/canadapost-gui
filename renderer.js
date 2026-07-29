@@ -6,8 +6,10 @@ const LOG_BOTTOM_THRESHOLD_PX = 56;
 
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
 const DEFAULT_THEME = 'dark';
+const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page: 1, offset: 0 });
 let setupWizardShown = false;
 let activeMessages = {};
+const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
 
 function tr(key, fallback = '') { return activeMessages[key] || fallback || key; }
 
@@ -29,9 +31,11 @@ async function applyLocale(locale) {
   const textTargets = {
     appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title',
     setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
-    restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession', financialReportTitle: 'financial.title'
+    restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession', financialReportTitle: 'financial.title',
+    clearHistoryFilters: 'history.clearFilters'
   };
   for (const [id, key] of Object.entries(textTargets)) if ($(id)) $(id).textContent = tr(key, $(id).textContent);
+  if ($('clearHistoryFilters')) $('clearHistoryFilters').setAttribute('aria-label', tr('history.clearFiltersLabel', 'Clear History filters'));
 }
 
 function applyTheme(theme) {
@@ -1651,19 +1655,54 @@ function historyCell(text, className = '') {
   return cell;
 }
 
-function updateReconciliationBadge(count) {
-  const badge = $('reconciliationBadge');
+function updateReconciliationCount(count) {
   const pill = $('reconciliationCountPill');
-  if (badge) {
-    badge.textContent = String(count || 0);
-    badge.classList.toggle('hidden', !count);
-  }
   if (pill) pill.textContent = `${count || 0} unresolved`;
+}
+
+function setHistoryRecordState(root, state) {
+  if (!root) return;
+  root.classList.remove('is-empty', 'is-loading', 'is-error');
+  if (state) root.classList.add(`is-${state}`);
+  root.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
+}
+
+function renderHistoryRecordMessage(rootId, message, state = 'error') {
+  const root = $(rootId);
+  if (!root) return;
+  setHistoryRecordState(root, state);
+  root.replaceChildren();
+  const notice = document.createElement('div');
+  notice.className = 'history-empty';
+  notice.textContent = message;
+  root.appendChild(notice);
+}
+
+function updateClearHistoryFiltersButton() {
+  const button = $('clearHistoryFilters');
+  if (!button) return;
+  const active = getFieldValue('historySearch') !== HISTORY_DEFAULT_FILTERS.search
+    || ($('historyStatusFilter')?.value || 'all') !== HISTORY_DEFAULT_FILTERS.status
+    || historyViewState.page !== HISTORY_DEFAULT_FILTERS.page
+    || historyViewState.offset !== HISTORY_DEFAULT_FILTERS.offset;
+  button.disabled = !active;
+}
+
+function setHistoryPagination(page = 1, offset = 0) {
+  historyViewState.page = Math.max(1, Number(page) || 1);
+  historyViewState.offset = Math.max(0, Number(offset) || 0);
+  updateClearHistoryFiltersButton();
+}
+
+function getHistoryViewState() {
+  return { ...historyViewState };
 }
 
 function renderHistory(items = []) {
   const root = $('historyList');
   if (!root) return;
+  setHistoryRecordState(root, items.length ? '' : 'empty');
+  setText('historyResultCount', `${items.length} ${items.length === 1 ? 'record' : 'records'}`);
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'history-row head';
@@ -1769,6 +1808,7 @@ function renderManualShipments(items = []) {
 function renderReconciliation(items = []) {
   const root = $('reconciliationList');
   if (!root) return;
+  setHistoryRecordState(root, items.length ? '' : 'empty');
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'reconciliation-row head';
@@ -1813,6 +1853,7 @@ function renderReconciliation(items = []) {
 function renderManualReviews(items = []) {
   const root = $('manualReviewList');
   if (!root) return;
+  setHistoryRecordState(root, items.length ? '' : 'empty');
   root.textContent = '';
   setText('manualReviewCountPill', `${items.length} open`);
   if (!items.length) {
@@ -1850,24 +1891,39 @@ function renderManualReviews(items = []) {
   }
 }
 
-async function refreshHistory() {
+async function refreshHistory(options = {}) {
   if (!window.cpApp?.listHistory) return;
+  if (options.resetPage) {
+    historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
+    historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
+  }
   const search = getFieldValue('historySearch');
   const status = $('historyStatusFilter')?.value || 'all';
+  historyViewState.search = search;
+  historyViewState.status = status;
+  updateClearHistoryFiltersButton();
+  renderHistoryRecordMessage('historyList', 'Loading claim attempts…', 'loading');
+  renderHistoryRecordMessage('reconciliationList', 'Loading reconciliation records…', 'loading');
+  renderHistoryRecordMessage('manualReviewList', 'Loading manual reviews…', 'loading');
   const [history, reconciliation, dashboard, manualShipments, manualReviews] = await Promise.all([
-    window.cpApp.listHistory({ search, status, limit: 500 }),
+    window.cpApp.listHistory({ search, status, limit: 500, page: historyViewState.page, offset: historyViewState.offset }),
     window.cpApp.listReconciliation(),
     window.cpApp.getDashboard(),
     window.cpApp.listManualShipments({ search, limit: 250 }),
     window.cpApp.listManualReviews({ search, status: 'open', limit: 250 })
   ]);
   if (history.ok) renderHistory(history.items || []);
+  else {
+    setText('historyResultCount', 'Unavailable');
+    renderHistoryRecordMessage('historyList', history.error || 'Could not load claim attempts.');
+  }
   if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
   if (manualReviews.ok) renderManualReviews(manualReviews.items || []);
+  else renderHistoryRecordMessage('manualReviewList', manualReviews.error || 'Could not load manual reviews.');
   if (reconciliation.ok) {
     renderReconciliation(reconciliation.items || []);
-    updateReconciliationBadge((reconciliation.items || []).length);
-  }
+    updateReconciliationCount((reconciliation.items || []).length);
+  } else renderHistoryRecordMessage('reconciliationList', reconciliation.error || 'Could not load reconciliation records.');
   if (dashboard.ok) {
     const data = dashboard.dashboard || {};
     setText('historyShipments', data.shipments || 0);
@@ -1881,6 +1937,15 @@ async function refreshHistory() {
     }
   }
   await refreshFinancialReport();
+}
+
+async function clearHistoryFilters() {
+  clearTimeout(historySearchTimer);
+  if ($('historySearch')) $('historySearch').value = HISTORY_DEFAULT_FILTERS.search;
+  if ($('historyStatusFilter')) $('historyStatusFilter').value = HISTORY_DEFAULT_FILTERS.status;
+  Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS);
+  updateClearHistoryFiltersButton();
+  await refreshHistory({ resetPage: true });
 }
 
 function formatMoneyMinor(value, currency = 'CAD') {
@@ -2736,12 +2801,12 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.3.2';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.2';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
   }
-  updateReconciliationBadge(Number(cfg.reconciliationCount || 0));
+  updateReconciliationCount(Number(cfg.reconciliationCount || 0));
 
   const configuredCustomer = cfg.estCustomerNumber || cfg.historyCustomerNumber || cfg.customerNumber || '';
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = configuredCustomer;
@@ -2811,10 +2876,19 @@ $('openStep3Diagnostics')?.addEventListener('click', async () => {
   if (!result?.ok) log(result?.error || 'No Step 3 diagnostics are available yet.', 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
-$('historyStatusFilter')?.addEventListener('change', () => refreshHistory());
+$('clearHistoryFilters')?.addEventListener('click', clearHistoryFilters);
+$('historyStatusFilter')?.addEventListener('change', () => {
+  historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
+  historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
+  updateClearHistoryFiltersButton();
+  refreshHistory();
+});
 let historySearchTimer = null;
 $('historySearch')?.addEventListener('input', () => {
   clearTimeout(historySearchTimer);
+  historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
+  historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
+  updateClearHistoryFiltersButton();
   historySearchTimer = setTimeout(() => refreshHistory(), 250);
 });
 $('exportHistory')?.addEventListener('click', exportClaimHistory);

@@ -1,10 +1,10 @@
-# Apply Canada Post Claim Runner v0.4.0-dev.1
+# Apply Canada Post Claim Runner v0.4.0-dev.2
 
 This is a development/test build for the v0.4.0 productization branch.
 
 ```bash
 cd ~/Documents/canadapost-gui
-unzip -o ~/Downloads/canadapost-gui-v0.4.0-dev.1-operator-control.zip -d .
+unzip -o ~/Downloads/canadapost-gui-v0.4.0-dev.2-operator-control.zip -d .
 npm install
 npm test
 npm start

@@ -1,4 +1,15 @@
-# Canada Post Claim Runner 0.4.0-dev.1
+# Canada Post Claim Runner 0.4.0-dev.2
+
+## History scrolling, filter reset and navigation cleanup — 2026-07-29
+
+- Bounds each populated History record section between a useful 260 px minimum and a responsive `min(60vh, 640px)` maximum, with independent vertical and horizontal scrolling. Opaque theme-aware table headers remain sticky while records scroll; long values wrap without forcing application-level horizontal overflow.
+- Adds a non-destructive **Clear filters** secondary action. It resets search, status, and transient page/offset state, refreshes the unfiltered first page immediately, and is disabled at the default filter state. It does not call any record, evidence, settings, CSV, credential, or database mutation path.
+- Removes the purely visual reconciliation indicator from the History navigation tab. The reconciliation queue, dashboard count, in-page unresolved count, History refresh, and the separate Results notification indicator remain intact.
+- Bumps package, application, installer, localized release, and validation metadata to `0.4.0-dev.2`. Step 1, Step 2, Step 3, Tracking pacing, and claim-classification behavior are unchanged.
+
+This remains an unsigned build pending supervised review. No live Tracking request, claim portal, or claim submission is used for validation.
+
+Rebuilt unsigned Linux beta AppImage: `dist/history-refinement-packages/Canada Post Claim Runner-0.4.0-dev.2-linux-x86_64-beta.AppImage`, 387,197,413 bytes, built 2026-07-29 16:15:46 -0400, SHA-256 `cb29725725cbeb5342ad636398f124e796f17d489f60e0f71461c02475af097b`. The verified pacing/layout and Step 2 parity AppImages remain byte-identical and were not overwritten.
 
 ## Step 2 pacing, complete live results, reconciled counters and spacious workflow pages — 2026-07-29
 

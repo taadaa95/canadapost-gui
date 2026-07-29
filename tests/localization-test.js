@@ -9,5 +9,6 @@ assert.strictEqual(normalizeLocale('fr'), 'fr-CA');
 assert.strictEqual(normalizeLocale('en-US'), 'en-CA');
 const french = loadLocale('fr-CA');
 assert.strictEqual(translate(french, 'classification.REVIEW_REQUIRED'), 'Révision requise');
+assert.strictEqual(translate(french, 'history.clearFilters'), 'Effacer les filtres');
 assert.ok(!Object.values(french.messages).some(value => !String(value).trim()));
 process.stdout.write('Localization completeness tests passed.\n');

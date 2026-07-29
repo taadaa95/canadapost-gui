@@ -18,6 +18,8 @@
   "setup.title": "Bienvenue — configuration de l’état de préparation",
   "setup.intro": "Le Gestionnaire conserve les identifiants et les sessions du navigateur sur cet appareil. Il ne vérifie pas votre compte et ne soumet rien pendant la configuration.",
   "history.title": "Historique, récupération et entretien",
+  "history.clearFilters": "Effacer les filtres",
+  "history.clearFiltersLabel": "Effacer les filtres de l’historique",
   "financial.title": "Recouvrement financier",
   "financial.estimated": "Estimation",
   "financial.claimed": "Réclamé",

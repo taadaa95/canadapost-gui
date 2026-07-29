@@ -4630,6 +4630,36 @@
       overflow-y: visible !important;
     }
 
+    .history-panel .history-record-list {
+      width: 100% !important;
+      height: auto !important;
+      min-width: 0 !important;
+      min-height: 260px !important;
+      max-height: min(60vh, 640px) !important;
+      overflow-x: auto !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .history-panel .history-record-list.is-empty,
+    .history-panel .history-record-list.is-loading,
+    .history-panel .history-record-list.is-error {
+      min-height: 180px !important;
+      max-height: 220px !important;
+      overflow-y: hidden !important;
+    }
+
+    .history-panel .history-record-list > .history-row.head,
+    .history-panel .history-record-list > .reconciliation-row.head {
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 4 !important;
+      background: var(--panel-strong) !important;
+      color: var(--text) !important;
+      opacity: 1 !important;
+    }
+
     .history-panel .history-row,
     .history-panel .reconciliation-row {
       min-height: 52px !important;
@@ -4650,6 +4680,10 @@
       place-items: center !important;
       min-height: 180px !important;
       padding: 24px !important;
+    }
+
+    .history-panel .history-record-list.is-empty .history-empty {
+      min-height: 120px !important;
     }
 
     @media (max-width: 980px) {
@@ -4736,7 +4770,7 @@
         <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>Import EST history</span></button>
         <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Check delivery eligibility</span></button>
         <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit eligible claims</span></button>
-        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span><span id="reconciliationBadge" class="notification-badge hidden" aria-label="History notifications"></span></button>
+        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span></button>
         <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Results<br><span>Evidence, outcomes, screenshots</span><span id="notificationsBadge" class="notification-badge hidden" aria-label="Result notifications"></span></button>
       </div>
 
@@ -4879,7 +4913,7 @@
             <button id="saveUserSettings" class="success" type="button">Save Settings</button>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.3.6</strong></div>
+              <div class="app-version">Version <strong id="appVersion">0.4.0-dev.2</strong></div>
             </div>
           </div>
         </div>
@@ -5143,6 +5177,7 @@
                 <option value="dry_run_interrupted">Dry-run interrupted</option>
               </select>
             </div>
+            <button id="clearHistoryFilters" class="secondary" type="button" aria-label="Clear History filters" disabled>Clear filters</button>
             <button id="refreshHistory" class="secondary" type="button">Refresh</button>
             <button id="exportHistory" class="secondary" type="button">Export CSV</button>
             <button id="createBackup" class="secondary" type="button">Create Backup</button>
@@ -5177,15 +5212,15 @@
         <div class="history-content">
           <div class="history-section">
             <div class="history-section-head"><h3>Eligibility Manual Review</h3><span id="manualReviewCountPill" class="pill">0 open</span></div>
-            <div id="manualReviewList" class="history-list" aria-live="polite"></div>
+            <div id="manualReviewList" class="history-list history-record-list" aria-live="polite"></div>
           </div>
           <div class="history-section">
             <div class="history-section-head"><h3>Reconciliation Queue</h3><span id="reconciliationCountPill" class="pill">0 unresolved</span></div>
-            <div id="reconciliationList" class="history-list"></div>
+            <div id="reconciliationList" class="history-list history-record-list"></div>
           </div>
           <div class="history-section">
-            <div class="history-section-head"><h3>Claim Attempts</h3><span class="pill">SQLite audit history</span></div>
-            <div id="historyList" class="history-list"></div>
+            <div class="history-section-head"><h3>Claim Attempts</h3><span id="historyResultCount" class="pill" role="status" aria-live="polite">0 records</span></div>
+            <div id="historyList" class="history-list history-record-list"></div>
           </div>
         </div>
       </section>

@@ -81,6 +81,11 @@ try {
   claimDb.markInterruptedAttempts(dbPath);
   const dryHistory = claimDb.listClaimHistory(dbPath, { status: 'dry_run_interrupted' });
   assert.strictEqual(dryHistory.length, 1);
+  const firstHistoryPage = claimDb.listClaimHistory(dbPath, { limit: 1, offset: 0 });
+  const secondHistoryPage = claimDb.listClaimHistory(dbPath, { limit: 1, offset: 1 });
+  assert.strictEqual(firstHistoryPage.length, 1);
+  assert.strictEqual(secondHistoryPage.length, 1);
+  assert.notStrictEqual(firstHistoryPage[0].id, secondHistoryPage[0].id, 'History offset must advance without mutating records');
   assert.strictEqual(claimDb.listReconciliation(dbPath).some(item => item.trackingNumber === 'DRYRUN1'), false);
 
   const dashboard = claimDb.dashboard(dbPath);

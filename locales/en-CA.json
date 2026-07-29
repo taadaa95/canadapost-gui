@@ -18,6 +18,8 @@
   "setup.title": "Welcome — readiness setup",
   "setup.intro": "Canada Post Claim Runner keeps credentials and browser sessions on this device. It will not test your account or submit anything during setup.",
   "history.title": "History, Recovery & Maintenance",
+  "history.clearFilters": "Clear filters",
+  "history.clearFiltersLabel": "Clear History filters",
   "financial.title": "Financial recovery",
   "financial.estimated": "Estimated",
   "financial.claimed": "Claimed",
