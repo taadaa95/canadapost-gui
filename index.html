@@ -2338,6 +2338,10 @@
       pointer-events: none;
     }
 
+    #step3 .browser-slot-placeholder[hidden] {
+      display: none !important;
+    }
+
     #step3.step-panel.active {
       grid-template-rows: 134px minmax(0, 1fr);
     }
@@ -4913,7 +4917,7 @@
             <button id="saveUserSettings" class="success" type="button">Save Settings</button>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.4.0-dev.2</strong></div>
+              <div class="app-version">Version <strong id="appVersion">0.4.0-dev.4</strong></div>
             </div>
           </div>
         </div>
@@ -5104,7 +5108,7 @@
           <div class="card step-browser-card">
             <div class="row step-browser-header" style="justify-content: space-between;">
               <h2 style="margin:0;">Step 3 Built-in Browser</h2>
-              <span id="builtinBrowserStatus" class="pill">Ready</span>
+              <span id="builtinBrowserStatus" class="pill">Browser idle</span>
             </div>
             <div id="builtinBrowserActivity" class="browser-activity" aria-live="polite" aria-atomic="true">
               <div class="browser-activity-copy">

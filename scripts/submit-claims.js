@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const claimDb = require('../lib/claim-database');
 const claimQueue = require('../lib/claim-queue');
 const { verifyQueueSnapshot, revalidateQueueItem } = require('../lib/eligibility-revalidation');
@@ -10,6 +11,7 @@ const { readRuntimeSecrets } = require('../lib/runtime-secrets');
 const { Step3Diagnostics, sanitizeUrl } = require('../lib/step3-diagnostics');
 const { isAllowedCanadaPostUrl, portalUrl } = require('../lib/origin-policy');
 const { faultPoint } = require('../lib/fault-injection');
+const { waitForExactPageTarget } = require('../lib/cdp-page-target');
 
 const DUPLICATE_CLAIM_FIX_VERSION = 'hardening-v35-navigation-stability';
 let diagnostics = null;
@@ -122,11 +124,55 @@ const DRY_RUN_MODE = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
 const BACKGROUND_BROWSER_MODE = false;
 const IS_LINUX = process.platform === 'linux';
 const ELECTRON_CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
-const ELECTRON_TARGET_TOKEN = String(process.env.ELECTRON_TARGET_TOKEN || '');
+const ELECTRON_TARGET_ID = String(process.env.ELECTRON_TARGET_ID || '');
+const ELECTRON_TARGET_NONCE = String(process.env.ELECTRON_TARGET_NONCE || '');
+const ELECTRON_TARGET_WEB_CONTENTS_HASH = String(process.env.ELECTRON_TARGET_WEB_CONTENTS_HASH || '');
+const BROWSER_VISIBILITY_ACK_FILE = String(process.env.BROWSER_VISIBILITY_ACK_FILE || '');
 const CANADAPOST_LOGIN_URL = portalUrl(
   'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en',
   '/login'
 );
+
+async function requireBuiltinBrowserVisibility(kind, message) {
+  if (!BUILTIN_BROWSER_MODE) return { visible: true, requestId: '' };
+  if (!BROWSER_VISIBILITY_ACK_FILE) throw automationError('BROWSER_VISIBILITY_REQUIRED', 'The browser visibility acknowledgement path was not provided by Electron.');
+  const requestId = crypto.randomUUID();
+  emit('manual_verification_required', {
+    requestId,
+    kind: String(kind || 'verification'),
+    message: String(message || 'Manual verification is required in the visible built-in browser.')
+  });
+  diag('info', 'browser', 'manual-verification-display-requested', {
+    requestId,
+    kind: String(kind || 'verification'),
+    webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+  }, { critical: true });
+  const deadline = Date.now() + 12000;
+  while (Date.now() < deadline) {
+    if (stopRequested()) throw automationError('STOP_REQUESTED', 'Stop requested while preparing the browser for manual verification.');
+    try {
+      const acknowledgement = JSON.parse(fs.readFileSync(BROWSER_VISIBILITY_ACK_FILE, 'utf8'));
+      if (acknowledgement.requestId === requestId) {
+        if (acknowledgement.visible && acknowledgement.webContentsIdentityHash === ELECTRON_TARGET_WEB_CONTENTS_HASH) {
+          diag('info', 'browser', 'manual-verification-display-ready', {
+            requestId,
+            kind: String(kind || 'verification'),
+            webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+          }, { critical: true });
+          return acknowledgement;
+        }
+        throw automationError(
+          acknowledgement.errorCode || 'BROWSER_VISIBILITY_REQUIRED',
+          'Manual verification is required, but the built-in browser could not be displayed safely.'
+        );
+      }
+    } catch (error) {
+      if (error?.code && !['ENOENT', 'EACCES'].includes(error.code) && error.name !== 'SyntaxError') throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw automationError('BROWSER_VISIBILITY_REQUIRED', 'Manual verification is required, but browser display readiness was not confirmed.');
+}
 
 function backgroundBrowserArgs() {
   const args = [
@@ -246,36 +292,60 @@ async function installCanadaPostNavigationGuard(page) {
   });
 }
 
-async function findBuiltinBrowserPage(browser, timeoutMs = 15000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const pages = browser.contexts().flatMap(context => context.pages()).filter(page => !page.isClosed());
-
-    if (ELECTRON_TARGET_TOKEN) {
-      for (const page of pages) {
-        const token = await page.evaluate(() => window.name).catch(() => '');
-        if (token === ELECTRON_TARGET_TOKEN) return page;
-      }
-    }
-
-    const canadaPostPages = pages.filter(page => isCanadaPostUrl(page.url()));
-    if (canadaPostPages.length === 1) return canadaPostPages[0];
-
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  return null;
-}
-
 async function openClaimBrowser(dataDir) {
   if (BUILTIN_BROWSER_MODE) {
-    if (!ELECTRON_CDP_URL) throw new Error('Built-in browser connection endpoint was not provided by the Electron main process.');
+    if (!ELECTRON_CDP_URL) throw automationError('CDP_ENDPOINT_UNAVAILABLE', 'The current Electron debugging endpoint was not provided by the main process.');
+    if (!ELECTRON_TARGET_ID || !ELECTRON_TARGET_NONCE) throw automationError('TARGET_NOT_PUBLISHED', 'The main process did not publish the exact Step 3 browser target identity.');
     emit('log', { message: 'Built-in browser panel requested. Canada Post should appear inside the Step 3 browser pane.' });
-    emit('log', { message: 'Connecting the claim runner to the isolated built-in Canada Post browser target.' });
+    emit('log', { message: 'Connecting to the exact built-in Step 3 browser target published by Electron.' });
+    diag('info', 'browser', 'worker-handshake-started', {
+      endpointProvided: true,
+      targetIdentityProvided: true,
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true });
 
-    const browser = await chromium.connectOverCDP(ELECTRON_CDP_URL);
-    const page = await findBuiltinBrowserPage(browser);
-    if (!page) {
-      throw new Error('The isolated built-in browser target could not be identified. Open Step 3, keep “Use built-in browser inside the app” checked, then run Step 3 again.');
+    let browser;
+    try { browser = await chromium.connectOverCDP(ELECTRON_CDP_URL); }
+    catch (error) {
+      throw automationError('CDP_CONNECTION_FAILURE', `The worker could not connect to the current Electron debugging endpoint: ${error.message}`);
+    }
+    let lastInventoryFingerprint = '';
+    const selected = await waitForExactPageTarget(browser, {
+      targetId: ELECTRON_TARGET_ID,
+      targetNonce: ELECTRON_TARGET_NONCE,
+      timeoutMs: 15000,
+      onInventory: inventory => {
+        const safeInventory = {
+          attempt: inventory.attempt,
+          targetCount: inventory.targetCount,
+          pageTargetCount: inventory.pageTargetCount,
+          typeCounts: inventory.typeCounts,
+          publishedMatchCount: inventory.publishedMatchCount,
+          exactMatchCount: inventory.exactMatchCount,
+          candidates: inventory.candidates
+        };
+        const fingerprint = JSON.stringify({ ...safeInventory, attempt: 0 });
+        if (fingerprint !== lastInventoryFingerprint) {
+          lastInventoryFingerprint = fingerprint;
+          diag('debug', 'browser', 'cdp-target-inventory', safeInventory);
+        }
+      }
+    });
+    const page = selected.page;
+    if (page.isClosed()) throw automationError('TARGET_CLOSED_DURING_CONNECTION', 'The Step 3 browser target closed during connection.');
+    diag('info', 'browser', 'target-attached', {
+      attempts: selected.attempt,
+      targetCount: selected.inventory.targetCount,
+      pageTargetCount: selected.inventory.pageTargetCount,
+      exactMatchCount: selected.inventory.exactMatchCount,
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true });
+    page.once('close', () => diag('error', 'browser', 'target-closed', {
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true }));
+
+    if (page.url() === 'about:blank' || page.url().startsWith('about:blank#')) {
+      await page.goto(CANADAPOST_LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     }
 
     await installCanadaPostNavigationGuard(page);
@@ -1057,6 +1127,10 @@ async function isTextVerificationPresent(page) {
 
 async function waitForTextVerificationToClear(page) {
   await revealBrowserWindow(page);
+  await requireBuiltinBrowserVisibility(
+    'text-verification',
+    'Manual verification required. Complete the Canada Post verification in the visible built-in browser; Step 3 is paused.'
+  );
   emit('log', { message: 'TEXT VERIFICATION detected. Complete the Canada Post verification in the visible browser. The app is paused and will resume after verification clears.' });
 
   const startedAt = Date.now();
@@ -1166,6 +1240,11 @@ async function waitForCaptchaToClear(page, trackingNumber, rowNumber, dataDir) {
   }
 
   await revealBrowserWindow(page);
+
+  await requireBuiltinBrowserVisibility(
+    'captcha',
+    `Manual CAPTCHA verification required for ${trackingNumber}. Complete it in the visible built-in browser; Step 3 is paused.`
+  );
 
   emit('captcha_detected', {
     trackingNumber,
@@ -1426,7 +1505,7 @@ async function maybeSelectByLabel(page, labelPattern, value) {
 
 
 function isFinalSubmissionLabel(value) {
-  return /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i
+  return /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|confirm(?:\s+(?:claim|ticket|request|submission|inquiry))?|complete(?:\s+(?:claim|ticket|request|submission|inquiry))?|finish(?:\s+(?:claim|ticket|request|submission|inquiry))?|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i
     .test(String(value || '').replace(/\s+/g, ' ').trim());
 }
 
@@ -1438,7 +1517,7 @@ async function installDryRunFinalActionGuard(page) {
     window.__cpDryRunGuardInstalled = true;
     window.__cpDryRunBlockedActions = [];
 
-    const finalPattern = /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i;
+    const finalPattern = /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|confirm(?:\s+(?:claim|ticket|request|submission|inquiry))?|complete(?:\s+(?:claim|ticket|request|submission|inquiry))?|finish(?:\s+(?:claim|ticket|request|submission|inquiry))?|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i;
     const labelFor = element => {
       if (!element) return '';
       return [
@@ -1529,6 +1608,42 @@ async function readDryRunBlockedActions(page) {
     actions.push(...frameActions);
   }
   return actions;
+}
+
+async function assertDryRunSafetyBarrier(page, senderMarker) {
+  if (!DRY_RUN_MODE) return;
+  const senderVisible = await senderMarker?.isVisible?.().catch(() => false);
+  const visibleLabels = [];
+  for (const frame of page.frames()) {
+    const labels = await frame.locator('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"]').evaluateAll(elements => {
+      const visible = element => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 8 && rect.height > 8;
+      };
+      return elements.filter(visible).map(element => [
+        element.innerText,
+        element.textContent,
+        element.value,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title')
+      ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 50);
+    }).catch(() => []);
+    visibleLabels.push(...labels);
+  }
+  const finalActions = visibleLabels.filter(isFinalSubmissionLabel).slice(0, 10);
+  if (!senderVisible || finalActions.length) {
+    const error = new Error('Dry-run safety barrier could not prove that automation remained on the sender/contact page before final review.');
+    error.code = 'DRY_RUN_SAFETY_BARRIER_FAILED';
+    error.details = { senderVisible, finalActionCount: finalActions.length };
+    throw error;
+  }
+  diagnostics?.state('dry-run-safety-barrier-reached', { checkpoint: 'sender-contact-fields-filled' });
+  diag('info', 'dry-run', 'safety-barrier-reached', {
+    checkpoint: 'sender-contact-fields-filled',
+    senderMarkerVisible: true,
+    finalActionCount: 0
+  }, { critical: true });
 }
 
 async function visibleLocatorInFrames(page, factory, timeout = 8000, diagnosticName = 'unnamed-control', options = {}) {
@@ -1859,6 +1974,7 @@ async function fillClaim(claimPage, claim, options = {}) {
   // conservative: it fills every visible claim field but does not activate any
   // later Continue/review control whose semantics Canada Post could change.
   if (dryRun) {
+    await assertDryRunSafetyBarrier(claimPage, streetNumberInput);
     diag('info', 'dry-run', 'safe-checkpoint-reached', { checkpoint: 'sender-contact-fields-filled' }, { critical: true });
     return { stoppedBeforeFinalReviewTransition: true, safeCheckpoint: 'sender-contact-fields-filled' };
   }
@@ -2712,5 +2828,7 @@ module.exports = {
   extractConfirmationNumber,
   isFinalSubmissionLabel,
   waitForClaimNavigationProgress,
-  finishCli
+  finishCli,
+  openClaimBrowser,
+  requireBuiltinBrowserVisibility
 };

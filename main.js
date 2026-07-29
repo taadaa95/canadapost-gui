@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, clipboard, Menu, session } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, clipboard, Menu, session, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -26,6 +26,8 @@ const { TRACKING_PARSER_VERSION } = require('./lib/tracking-json');
 const { DEFAULT_DELAY_MS, normalizeDelayMs } = require('./lib/tracking-rate-limiter');
 const { restorePreviousTextFiles, validatePromotedTrackingSummary, validateTrackingRunForSubmission } = require('./lib/tracking-run-staging');
 const { rowsAsObjects } = require('./lib/csv');
+const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browser-handshake');
+const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
 const USER_DATA_PROFILE = userDataBootstrap.getState();
@@ -42,7 +44,7 @@ const APP_VERSION = require('./package.json').version;
 const DEFAULT_TRACKING_REQUEST_INTERVAL_MS = DEFAULT_DELAY_MS;
 const BUILTIN_BROWSER_CDP_PORT = String(process.env.CANADAPOST_ELECTRON_CDP_PORT || crypto.randomInt(20000, 48000));
 const BUILTIN_BROWSER_CDP_URL = `http://127.0.0.1:${BUILTIN_BROWSER_CDP_PORT}`;
-const BUILTIN_BROWSER_TARGET_TOKEN = crypto.randomUUID();
+const BUILTIN_BROWSER_MARKER_URL = 'about:blank#canadapost-claim-runner-step3-target';
 const CANADAPOST_LOGIN_URL = portalUrl('https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en', '/login');
 
 function bundledPlaywrightBrowserPath() {
@@ -105,6 +107,12 @@ let builtinBrowserAttached = false;
 let activeChild = null;
 let activeStage = 'idle';
 let builtinBrowserSessionHardened = false;
+let builtinBrowserGeneration = 0;
+let builtinBrowserTargetNonce = '';
+let builtinBrowserTargetPublication = null;
+let builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason: 'not-created', appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });
+const pendingBrowserVisibilityRequests = new Map();
+let activeBrowserVisibilityFile = '';
 let isShuttingDown = false;
 let databaseReady = false;
 let startupFailureHandled = false;
@@ -195,8 +203,11 @@ function stopActiveChildForShutdown() {
 
 function destroyBuiltinBrowserView() {
   if (!builtinBrowserView) return;
+  const identityHash = builtinBrowserTargetPublication?.webContentsIdentityHash
+    || targetIdentityHash(`${builtinBrowserView.webContents?.id || ''}:${builtinBrowserTargetNonce}`);
+  appendStep3ElectronDiagnostic('browser-target-destroyed', { webContentsIdentityHash: identityHash, generation: builtinBrowserGeneration });
   try {
-    if (win && !win.isDestroyed() && builtinBrowserAttached) win.contentView.removeChildView(builtinBrowserView);
+    if (win && !win.isDestroyed() && childViewIndex(builtinBrowserView) >= 0) win.contentView.removeChildView(builtinBrowserView);
   } catch (_) {}
   try {
     if (!builtinBrowserView.webContents.isDestroyed()) builtinBrowserView.webContents.close({ waitForBeforeUnload: false });
@@ -205,6 +216,10 @@ function destroyBuiltinBrowserView() {
   }
   builtinBrowserView = null;
   builtinBrowserAttached = false;
+  builtinBrowserTargetNonce = '';
+  builtinBrowserTargetPublication = null;
+  builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason: 'destroyed', appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });
+  emitBrowserDisplayState(browserDisplaySnapshot());
 }
 
 
@@ -251,6 +266,14 @@ function createWindow() {
   // main-process handlers own any external navigation and validate its target.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
+  const requestDisplayRefresh = reason => {
+    if (!builtinBrowserView) return;
+    requestBuiltinBrowserVisibility({ reason, requireVisible: false }).catch(() => {});
+  };
+  win.on('resize', () => requestDisplayRefresh('window-resize'));
+  win.on('maximize', () => requestDisplayRefresh('window-maximize'));
+  win.on('unmaximize', () => requestDisplayRefresh('window-unmaximize'));
+  win.on('move', () => requestDisplayRefresh('window-move'));
   win.on('closed', () => {
     stopActiveChildForShutdown();
     destroyBuiltinBrowserView();
@@ -279,10 +302,113 @@ function normalizeBounds(bounds = {}) {
   return { x, y, width, height };
 }
 
+function browserContentBounds() {
+  if (!win || win.isDestroyed()) return { x: 0, y: 0, width: 0, height: 0 };
+  const bounds = win.getContentBounds();
+  return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+}
+
+function childViewIndex(view = builtinBrowserView) {
+  const children = win?.contentView?.children;
+  return Array.isArray(children) && view ? children.indexOf(view) : -1;
+}
+
+function browserDisplaySnapshot(overrides = {}) {
+  const bounds = builtinBrowserView && !builtinBrowserView.webContents.isDestroyed()
+    ? normalizeBounds(builtinBrowserView.getBounds())
+    : { x: 0, y: 0, width: 0, height: 0 };
+  return {
+    ok: true,
+    created: Boolean(builtinBrowserView),
+    destroyed: Boolean(builtinBrowserView?.webContents?.isDestroyed()),
+    attached: builtinBrowserAttached,
+    visible: Boolean(builtinBrowserDisplayState.visible),
+    reason: builtinBrowserDisplayState.reason || 'unknown',
+    bounds,
+    childViewIndex: childViewIndex(),
+    targetAttached: Boolean(builtinBrowserTargetPublication),
+    webContentsIdentityHash: builtinBrowserTargetPublication?.webContentsIdentityHash || '',
+    targetIdHash: builtinBrowserTargetPublication?.targetIdHash || '',
+    currentUrl: builtinBrowserView?.webContents && !builtinBrowserView.webContents.isDestroyed()
+      ? builtinBrowserView.webContents.getURL()
+      : '',
+    ...overrides
+  };
+}
+
+function emitBrowserDisplayState(state = browserDisplaySnapshot()) {
+  emit('browser:display-state', state);
+  return state;
+}
+
+function browserVisibilityWatchdog() {
+  const contentBounds = browserContentBounds();
+  const snapshot = browserDisplaySnapshot();
+  const positiveBounds = snapshot.bounds.width > 0 && snapshot.bounds.height > 0;
+  const intersectsContent = positiveBounds && boundsIntersectContent(snapshot.bounds, contentBounds, 1);
+  const ready = Boolean(snapshot.created && !snapshot.destroyed && snapshot.attached && snapshot.visible && positiveBounds && intersectsContent);
+  const result = { ...snapshot, ready, positiveBounds, intersectsContent, contentBounds };
+  if (!ready) {
+    appendStep3ElectronDiagnostic('browser-visibility-watchdog-failed', {
+      reason: snapshot.reason,
+      attached: snapshot.attached,
+      visible: snapshot.visible,
+      positiveBounds,
+      intersectsContent,
+      appliedBounds: snapshot.bounds,
+      contentBounds,
+      targetAttached: snapshot.targetAttached,
+      currentUrl: snapshot.currentUrl
+    });
+  }
+  return result;
+}
+
+function writeBrowserVisibilityAcknowledgement(requestId, result) {
+  if (!activeBrowserVisibilityFile || !requestId) return;
+  const payload = {
+    version: 1,
+    requestId: String(requestId),
+    visible: Boolean(result?.ready),
+    errorCode: result?.ready ? '' : 'BROWSER_VISIBILITY_REQUIRED',
+    reason: String(result?.reason || ''),
+    webContentsIdentityHash: String(result?.webContentsIdentityHash || ''),
+    updatedAt: new Date().toISOString()
+  };
+  const temporary = `${activeBrowserVisibilityFile}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
+    fs.renameSync(temporary, activeBrowserVisibilityFile);
+    try { fs.chmodSync(activeBrowserVisibilityFile, 0o600); } catch (_) {}
+  } catch (_) {
+    try { fs.rmSync(temporary, { force: true }); } catch (_) {}
+  }
+}
+
+function isBuiltinMarkerUrl(value) {
+  return String(value || '').startsWith('about:blank');
+}
+
+function isAllowedBuiltinBrowserUrl(value) {
+  return isBuiltinMarkerUrl(value) || isAllowedCanadaPostUrl(value);
+}
+
+async function markBuiltinBrowserTarget(view = builtinBrowserView) {
+  if (!view) throw Object.assign(new Error('The Step 3 browser view was not created.'), { code: 'BROWSER_VIEW_NOT_CREATED' });
+  if (view.webContents.isDestroyed()) throw Object.assign(new Error('The Step 3 browser webContents was destroyed.'), { code: 'BROWSER_WEBCONTENTS_DESTROYED' });
+  await view.webContents.executeJavaScript(`window.name = ${JSON.stringify(builtinBrowserTargetNonce)}; window.name`, true);
+  const marker = await view.webContents.executeJavaScript('window.name', true);
+  if (marker !== builtinBrowserTargetNonce) throw Object.assign(new Error('The Step 3 target marker could not be published.'), { code: 'TARGET_NOT_PUBLISHED' });
+}
+
 function ensureBuiltinBrowserView() {
   if (!win || win.isDestroyed()) throw new Error('Main window is not available.');
   if (builtinBrowserView && !builtinBrowserView.webContents.isDestroyed()) return builtinBrowserView;
 
+  appendStep3ElectronDiagnostic('browser-view-creation-requested', { debuggingPort: Number(BUILTIN_BROWSER_CDP_PORT) });
+  builtinBrowserGeneration += 1;
+  builtinBrowserTargetNonce = crypto.randomUUID();
+  builtinBrowserTargetPublication = null;
   builtinBrowserView = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
@@ -294,6 +420,14 @@ function ensureBuiltinBrowserView() {
       spellcheck: false,
       partition: 'persist:canadapost-claims-builtin'
     }
+  });
+  const createdWebContentsId = builtinBrowserView.webContents.id;
+  const createdIdentityHash = targetIdentityHash(`${createdWebContentsId}:${builtinBrowserTargetNonce}`);
+  appendStep3ElectronDiagnostic('browser-view-created', {
+    generation: builtinBrowserGeneration,
+    webContentsId: createdWebContentsId,
+    webContentsIdentityHash: createdIdentityHash,
+    partition: 'persist:canadapost-claims-builtin'
   });
 
   const browserSession = builtinBrowserView.webContents.session;
@@ -316,14 +450,6 @@ function ensureBuiltinBrowserView() {
     appendStep3ElectronDiagnostic('webview-attachment-blocked');
   });
 
-  const markBuiltinTarget = () => {
-    if (!builtinBrowserView || builtinBrowserView.webContents.isDestroyed()) return;
-    builtinBrowserView.webContents.executeJavaScript(
-      `window.name = ${JSON.stringify(BUILTIN_BROWSER_TARGET_TOKEN)}; true`,
-      true
-    ).catch(() => {});
-  };
-
   builtinBrowserView.webContents.setWindowOpenHandler(({ url }) => {
     appendStep3ElectronDiagnostic('new-window-request', { url, allowed: isAllowedCanadaPostUrl(url) });
     if (isAllowedCanadaPostUrl(url)) builtinBrowserView.webContents.loadURL(url).catch(() => {});
@@ -331,7 +457,7 @@ function ensureBuiltinBrowserView() {
     return { action: 'deny' };
   });
   builtinBrowserView.webContents.on('will-navigate', (event, url) => {
-    if (!isAllowedCanadaPostUrl(url)) {
+    if (!isAllowedBuiltinBrowserUrl(url)) {
       event.preventDefault();
       appendStep3ElectronDiagnostic('navigation-blocked', { url });
       emit('event', { stage: 'submit', event: { type: 'error', message: 'Blocked built-in browser navigation outside Canada Post.' } });
@@ -340,7 +466,10 @@ function ensureBuiltinBrowserView() {
 
   builtinBrowserView.webContents.on('did-start-navigation', (_event, url, isInPlace, isMainFrame) => {
     appendStep3ElectronDiagnostic('did-start-navigation', { url, isInPlace, isMainFrame });
-    if (isMainFrame) emitBuiltinBrowserActivity(true, 'Navigating Canada Post…');
+    if (isMainFrame) {
+      emitBuiltinBrowserActivity(true, 'Loading Canada Post');
+      requestBuiltinBrowserVisibility({ reason: 'navigation-start', requireVisible: false }).catch(() => {});
+    }
   });
 
   builtinBrowserView.webContents.on('did-start-loading', () => {
@@ -350,8 +479,9 @@ function ensureBuiltinBrowserView() {
 
   builtinBrowserView.webContents.on('dom-ready', () => {
     appendStep3ElectronDiagnostic('dom-ready', { url: builtinBrowserView?.webContents.getURL() });
-    markBuiltinTarget();
+    markBuiltinBrowserTarget().catch(error => appendStep3ElectronDiagnostic('browser-target-marker-failed', { code: error.code || 'TARGET_NOT_PUBLISHED' }));
     emitBuiltinBrowserActivity(true, 'Rendering Canada Post page…');
+    requestBuiltinBrowserVisibility({ reason: 'navigation-dom-ready', requireVisible: false }).catch(() => {});
   });
 
   builtinBrowserView.webContents.on('did-stop-loading', () => {
@@ -362,6 +492,7 @@ function ensureBuiltinBrowserView() {
   builtinBrowserView.webContents.on('did-finish-load', () => {
     appendStep3ElectronDiagnostic('did-finish-load', { url: builtinBrowserView?.webContents.getURL() });
     emitBuiltinBrowserActivity(false, 'Canada Post page ready');
+    requestBuiltinBrowserVisibility({ reason: 'navigation-ready', requireVisible: false }).catch(() => {});
   });
 
   builtinBrowserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
@@ -388,53 +519,302 @@ function ensureBuiltinBrowserView() {
     emit('event', { stage: 'submit', event: { type: 'error', message: `The built-in Canada Post browser process stopped (${details.reason || 'unknown reason'}). Any active claim will require reconciliation.` } });
   });
 
+  builtinBrowserView.webContents.once('destroyed', () => {
+    appendStep3ElectronDiagnostic('browser-target-closed', {
+      generation: builtinBrowserGeneration,
+      webContentsIdentityHash: createdIdentityHash,
+      activeWorker: Boolean(activeChild)
+    });
+    builtinBrowserTargetPublication = null;
+    if (activeChild && activeStage === 'submit') sendStopSignalToChild(activeChild, { force: false });
+  });
+
   return builtinBrowserView;
 }
 
-function attachBuiltinBrowserView() {
+async function prepareBuiltinBrowserForWorker(options = {}) {
+  appendStep3ElectronDiagnostic('worker-browser-handshake-started', {
+    reason: String(options.reason || 'submission'),
+    debuggingPort: Number(BUILTIN_BROWSER_CDP_PORT)
+  });
   const view = ensureBuiltinBrowserView();
+  if (view.webContents.isDestroyed()) throw Object.assign(new Error('The Step 3 browser webContents was destroyed before readiness.'), { code: 'BROWSER_WEBCONTENTS_DESTROYED' });
+  const currentUrl = view.webContents.getURL();
+  if (!currentUrl || !isAllowedBuiltinBrowserUrl(currentUrl)) {
+    await view.webContents.loadURL(BUILTIN_BROWSER_MARKER_URL);
+  }
+  await markBuiltinBrowserTarget(view);
+  let publication = await publishBrowserTarget({
+    view,
+    endpoint: BUILTIN_BROWSER_CDP_URL,
+    nonce: builtinBrowserTargetNonce
+  });
+  if (builtinBrowserTargetPublication
+      && builtinBrowserTargetPublication.webContentsId === publication.webContentsId
+      && builtinBrowserTargetPublication.targetId !== publication.targetId) {
+    builtinBrowserTargetNonce = crypto.randomUUID();
+    await markBuiltinBrowserTarget(view);
+    publication = await publishBrowserTarget({ view, endpoint: BUILTIN_BROWSER_CDP_URL, nonce: builtinBrowserTargetNonce });
+  }
+  builtinBrowserTargetPublication = publication;
+  appendStep3ElectronDiagnostic('browser-target-identity-published', {
+    generation: builtinBrowserGeneration,
+    webContentsIdentityHash: publication.webContentsIdentityHash,
+    targetIdHash: publication.targetIdHash,
+    debuggingPort: Number(BUILTIN_BROWSER_CDP_PORT),
+    endpointAttempts: publication.endpointAttempts
+  });
+  appendStep3ElectronDiagnostic('worker-browser-handshake-completed', {
+    webContentsIdentityHash: publication.webContentsIdentityHash,
+    targetIdHash: publication.targetIdHash
+  });
+  return publication;
+}
+
+function attachBuiltinBrowserView(reason = 'show') {
+  const view = ensureBuiltinBrowserView();
+  const children = win.contentView.children;
+  const currentIndex = childViewIndex(view);
+  builtinBrowserAttached = currentIndex >= 0;
+  const needsRaise = builtinBrowserAttached && Array.isArray(children) && currentIndex !== children.length - 1;
+  if (needsRaise) {
+    // Remove/add raises the native child above the main renderer without
+    // touching its webContents or deterministic CDP identity.
+    try { win.contentView.removeChildView(view); } catch (_) {}
+    builtinBrowserAttached = false;
+  }
   if (!builtinBrowserAttached) {
     win.contentView.addChildView(view);
     builtinBrowserAttached = true;
+    appendStep3ElectronDiagnostic('browser-child-view-attached', {
+      reason,
+      childViewIndex: childViewIndex(view),
+      childViewCount: Array.isArray(win.contentView.children) ? win.contentView.children.length : null
+    });
   }
+  if (typeof view.setVisible === 'function') view.setVisible(true);
   return view;
 }
 
-function hideBuiltinBrowserView() {
+function hideBuiltinBrowserView(reason = 'hidden') {
   if (!win || win.isDestroyed() || !builtinBrowserView) return;
+  if (typeof builtinBrowserView.setVisible === 'function') builtinBrowserView.setVisible(false);
+  const previousIndex = childViewIndex();
   try {
-    if (builtinBrowserAttached) win.contentView.removeChildView(builtinBrowserView);
+    if (previousIndex >= 0) win.contentView.removeChildView(builtinBrowserView);
   } catch (_) {}
   builtinBrowserAttached = false;
+  builtinBrowserDisplayState = Object.freeze({
+    ...builtinBrowserDisplayState,
+    visible: false,
+    attached: false,
+    reason,
+    appliedBounds: { x: 0, y: 0, width: 0, height: 0 }
+  });
+  appendStep3ElectronDiagnostic('browser-child-view-detached', {
+    reason,
+    previousChildViewIndex: previousIndex,
+    targetAttached: Boolean(builtinBrowserTargetPublication)
+  });
+  emitBrowserDisplayState(browserDisplaySnapshot());
 }
 
-function setBuiltinBrowserBounds(bounds) {
-  const view = attachBuiltinBrowserView();
+function setBuiltinBrowserBounds(bounds, reason = 'bounds-sync') {
+  const view = attachBuiltinBrowserView(reason);
   const normalized = normalizeBounds(bounds);
+  if (normalized.width < 1 || normalized.height < 1) {
+    const error = new Error('The built-in browser cannot use empty native bounds.');
+    error.code = 'BROWSER_VISIBILITY_REQUIRED';
+    throw error;
+  }
   view.setBounds(normalized);
+  if (typeof view.setVisible === 'function') view.setVisible(true);
+  builtinBrowserDisplayState = Object.freeze({
+    ...builtinBrowserDisplayState,
+    visible: true,
+    attached: true,
+    reason,
+    appliedBounds: normalized
+  });
   if (Date.now() - lastBrowserBoundsDiagnosticAt >= 1000) {
     lastBrowserBoundsDiagnosticAt = Date.now();
-    appendStep3ElectronDiagnostic('browser-view-bounds', normalized);
+    appendStep3ElectronDiagnostic('browser-view-bounds', {
+      ...normalized,
+      reason,
+      childViewIndex: childViewIndex(view),
+      contentBounds: browserContentBounds(),
+      targetAttached: Boolean(builtinBrowserTargetPublication),
+      currentUrl: view.webContents.getURL()
+    });
+  }
+  return browserDisplaySnapshot();
+}
+
+function applyBuiltinBrowserVisibility(payload = {}) {
+  const contentBounds = browserContentBounds();
+  const calculated = calculateBrowserDisplay(payload, contentBounds);
+  appendStep3ElectronDiagnostic('browser-visibility-measurement', {
+    requestId: String(payload.requestId || ''),
+    reason: String(payload.reason || 'renderer-sync'),
+    step3Active: Boolean(payload.step3Active),
+    placeholderVisible: Boolean(payload.placeholderVisible),
+    rawDomRect: calculated.rawDomRect,
+    rendererViewport: calculated.rendererViewport,
+    contentBounds,
+    visibleIntersection: calculated.visibleIntersection,
+    displayable: calculated.displayable,
+    targetAttached: Boolean(builtinBrowserTargetPublication),
+    currentUrl: builtinBrowserView?.webContents?.getURL?.() || ''
+  });
+  if (!calculated.displayable) {
+    hideBuiltinBrowserView(calculated.reason);
+    const state = browserDisplaySnapshot({
+      displayable: false,
+      reason: calculated.reason,
+      rawDomRect: calculated.rawDomRect,
+      visibleIntersection: calculated.visibleIntersection
+    });
+    builtinBrowserDisplayState = Object.freeze({ ...builtinBrowserDisplayState, ...state });
+    return emitBrowserDisplayState(state);
+  }
+  if (!builtinBrowserView || builtinBrowserView.webContents.isDestroyed()) {
+    builtinBrowserDisplayState = Object.freeze({
+      visible: false,
+      attached: false,
+      reason: 'browser-preparing',
+      appliedBounds: calculated.appliedBounds
+    });
+    return emitBrowserDisplayState(browserDisplaySnapshot({
+      displayable: false,
+      reason: 'browser-preparing',
+      rawDomRect: calculated.rawDomRect,
+      visibleIntersection: calculated.visibleIntersection
+    }));
+  }
+  setBuiltinBrowserBounds(calculated.appliedBounds, String(payload.reason || 'renderer-sync'));
+  const state = browserDisplaySnapshot({
+    displayable: true,
+    reason: 'visible',
+    rawDomRect: calculated.rawDomRect,
+    visibleIntersection: calculated.visibleIntersection
+  });
+  builtinBrowserDisplayState = Object.freeze({ ...builtinBrowserDisplayState, ...state });
+  appendStep3ElectronDiagnostic('browser-view-visible', {
+    reason: String(payload.reason || 'renderer-sync'),
+    appliedBounds: state.bounds,
+    childViewIndex: state.childViewIndex,
+    targetAttached: state.targetAttached,
+    currentUrl: state.currentUrl
+  });
+  return emitBrowserDisplayState(state);
+}
+
+function requestBuiltinBrowserVisibility(options = {}) {
+  if (!win || win.isDestroyed()) return Promise.reject(Object.assign(new Error('The application window is unavailable for browser visibility synchronization.'), { code: 'BROWSER_DISPLAY_UNAVAILABLE' }));
+  const requestId = crypto.randomUUID();
+  const timeoutMs = Math.max(500, Number(options.timeoutMs || 5000));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingBrowserVisibilityRequests.delete(requestId);
+      const error = new Error('The Step 3 browser slot did not report display bounds in time.');
+      error.code = 'BROWSER_VISIBILITY_SYNC_TIMEOUT';
+      appendStep3ElectronDiagnostic('browser-visibility-watchdog-failed', { requestId, reason: error.code });
+      reject(error);
+    }, timeoutMs);
+    pendingBrowserVisibilityRequests.set(requestId, { resolve, reject, timer, requireVisible: Boolean(options.requireVisible) });
+    appendStep3ElectronDiagnostic('browser-visibility-sync-requested', {
+      requestId,
+      reason: String(options.reason || 'main-request'),
+      requireVisible: Boolean(options.requireVisible),
+      scrollIntoView: Boolean(options.scrollIntoView)
+    });
+    emit('browser:visibility-request', {
+      requestId,
+      reason: String(options.reason || 'main-request'),
+      requireVisible: Boolean(options.requireVisible),
+      scrollIntoView: Boolean(options.scrollIntoView)
+    });
+  });
+}
+
+async function handleManualBrowserVisibilityRequest(event = {}) {
+  const requestId = String(event.requestId || '');
+  appendStep3ElectronDiagnostic('manual-verification-detected', {
+    requestId,
+    kind: String(event.kind || 'verification'),
+    targetAttached: Boolean(builtinBrowserTargetPublication),
+    currentUrl: builtinBrowserView?.webContents?.getURL?.() || ''
+  });
+  try {
+    await requestBuiltinBrowserVisibility({
+      reason: 'manual-verification-required',
+      requireVisible: true,
+      scrollIntoView: true,
+      timeoutMs: 6000
+    });
+    const watchdog = browserVisibilityWatchdog();
+    if (!watchdog.ready) {
+      const error = new Error('Manual verification was detected, but the built-in browser could not be displayed safely.');
+      error.code = 'BROWSER_VISIBILITY_REQUIRED';
+      throw error;
+    }
+    writeBrowserVisibilityAcknowledgement(requestId, watchdog);
+    appendStep3ElectronDiagnostic('verification-browser-display-ready', {
+      requestId,
+      appliedBounds: watchdog.bounds,
+      childViewIndex: watchdog.childViewIndex,
+      placeholderVisible: false,
+      webContentsIdentityHash: watchdog.webContentsIdentityHash,
+      currentUrl: watchdog.currentUrl
+    });
+    emitBuiltinBrowserActivity(false, 'Manual verification required');
+  } catch (error) {
+    const failed = { ...browserVisibilityWatchdog(), ready: false, reason: error.code || 'BROWSER_VISIBILITY_REQUIRED' };
+    writeBrowserVisibilityAcknowledgement(requestId, failed);
+    appendStep3ElectronDiagnostic('verification-browser-display-failed', {
+      requestId,
+      code: error.code || 'BROWSER_VISIBILITY_REQUIRED',
+      message: error.message
+    });
+    emit('event', { stage: 'submit', event: {
+      type: 'manual_verification_display_failed',
+      code: error.code || 'BROWSER_VISIBILITY_REQUIRED',
+      message: 'Manual verification was detected, but the built-in browser could not be displayed. Step 3 stopped safely.'
+    } });
+    const child = activeChild;
+    if (child && activeStage === 'submit') {
+      const timer = setTimeout(() => {
+        if (activeChild === child && activeStage === 'submit') sendStopSignalToChild(child, { force: false });
+      }, 3000);
+      if (typeof timer.unref === 'function') timer.unref();
+    }
   }
 }
 
 async function showBuiltinBrowser(bounds) {
-  const view = attachBuiltinBrowserView();
-  setBuiltinBrowserBounds(bounds);
+  const view = ensureBuiltinBrowserView();
+  setBuiltinBrowserBounds(bounds, 'browser-show');
   const currentUrl = view.webContents.getURL();
   appendStep3ElectronDiagnostic('browser-view-show', { currentUrl, bounds });
   if (!currentUrl || currentUrl === 'about:blank' || !isAllowedCanadaPostUrl(currentUrl)) {
     emitBuiltinBrowserActivity(true, 'Opening Canada Post login…');
     await view.webContents.loadURL(CANADAPOST_LOGIN_URL);
   }
-  return { ok: true, cdpUrl: BUILTIN_BROWSER_CDP_URL, webContentsId: view.webContents.id, targetToken: BUILTIN_BROWSER_TARGET_TOKEN };
+  await markBuiltinBrowserTarget(view);
+  const publication = builtinBrowserTargetPublication || await prepareBuiltinBrowserForWorker({ reason: 'browser-show' });
+  return {
+    ok: true,
+    cdpUrl: publication.endpoint,
+    webContentsId: view.webContents.id,
+    webContentsIdentityHash: publication.webContentsIdentityHash,
+    targetIdHash: publication.targetIdHash
+  };
 }
 
 function focusBuiltinBrowser() {
   if (!win || win.isDestroyed() || !builtinBrowserView || builtinBrowserView.webContents.isDestroyed()) return false;
   try {
-    if (!builtinBrowserAttached) win.contentView.addChildView(builtinBrowserView);
-    builtinBrowserAttached = true;
+    attachBuiltinBrowserView('browser-focus');
     win.focus();
     builtinBrowserView.webContents.focus();
     return true;
@@ -1029,18 +1409,65 @@ ipcMain.handle('browser:showBuiltin', async (_event, options = {}) => {
   }
 });
 
+ipcMain.handle('browser:prepareBuiltin', async () => {
+  if (USER_DATA_PROFILE.active) return { ok: false, error: 'The live claim browser is disabled while isolated test data is active.', code: 'BROWSER_DISABLED' };
+  try {
+    const publication = await prepareBuiltinBrowserForWorker({ reason: 'renderer-preflight' });
+    return {
+      ok: true,
+      endpoint: publication.endpoint,
+      webContentsIdentityHash: publication.webContentsIdentityHash,
+      targetIdHash: publication.targetIdHash
+    };
+  } catch (error) {
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_HANDSHAKE_FAILED' };
+  }
+});
+
+ipcMain.handle('browser:targetState', () => ({
+  ...browserDisplaySnapshot(),
+  generation: builtinBrowserGeneration,
+  debuggingPort: Number(BUILTIN_BROWSER_CDP_PORT)
+}));
+
+ipcMain.handle('browser:syncVisibility', (event, payload = {}) => {
+  if (!win || event.sender !== win.webContents) return { ok: false, error: 'Browser visibility synchronization came from an unexpected renderer.', code: 'BROWSER_VISIBILITY_SOURCE_REJECTED' };
+  try {
+    const result = applyBuiltinBrowserVisibility(payload);
+    const pending = pendingBrowserVisibilityRequests.get(String(payload.requestId || ''));
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingBrowserVisibilityRequests.delete(String(payload.requestId || ''));
+      if (pending.requireVisible && !result.visible) {
+        const error = new Error('The Step 3 browser slot is not displayable inside the application viewport.');
+        error.code = 'BROWSER_VISIBILITY_REQUIRED';
+        pending.reject(error);
+      } else pending.resolve(result);
+    }
+    return result;
+  } catch (error) {
+    const pending = pendingBrowserVisibilityRequests.get(String(payload.requestId || ''));
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingBrowserVisibilityRequests.delete(String(payload.requestId || ''));
+      pending.reject(error);
+    }
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_DISPLAY_ERROR' };
+  }
+});
+
 ipcMain.handle('browser:setBuiltinBounds', (_event, bounds = {}) => {
   try {
-    if (!builtinBrowserView || !builtinBrowserAttached) return { ok: true, hidden: true };
-    setBuiltinBrowserBounds(bounds);
-    return { ok: true };
+    if (!builtinBrowserView) return { ok: true, hidden: true, reason: 'browser-preparing' };
+    const state = setBuiltinBrowserBounds(bounds, 'legacy-bounds-sync');
+    return { ...state, ok: true };
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_DISPLAY_ERROR' };
   }
 });
 
 ipcMain.handle('browser:hideBuiltin', () => {
-  hideBuiltinBrowserView();
+  hideBuiltinBrowserView('renderer-hide-request');
   return { ok: true };
 });
 
@@ -1542,10 +1969,23 @@ ipcMain.handle('siteHealth:run', async (_event, options = {}) => {
   if (activeChild) return { ok: false, error: 'A process is already active.' };
   const workerPreflight = preflightWorkerLaunch('siteHealth');
   if (!workerPreflight.ok) return workerPreflight;
+  let browserHandshake;
   try {
-    await showBuiltinBrowser(options.bounds || {});
+    browserHandshake = await prepareBuiltinBrowserForWorker({ reason: 'site-health' });
+    await requestBuiltinBrowserVisibility({
+      reason: 'site-health-handshake-complete',
+      requireVisible: true,
+      scrollIntoView: true,
+      timeoutMs: 6000
+    });
+    const display = browserVisibilityWatchdog();
+    if (!display.ready) {
+      const error = new Error('The built-in browser target is ready, but its native view cannot be displayed for the site-health check.');
+      error.code = 'BROWSER_VISIBILITY_REQUIRED';
+      throw error;
+    }
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_HANDSHAKE_FAILED' };
   }
   const config = readConfig();
   const credentials = resolveWebCredentials(options, config);
@@ -1555,8 +1995,9 @@ ipcMain.handle('siteHealth:run', async (_event, options = {}) => {
     resolution: workerPreflight.resolution,
     env: {
       ELECTRON_RUN_AS_NODE: '1',
-      ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
-      ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
+      ELECTRON_CDP_URL: browserHandshake.endpoint,
+      ELECTRON_TARGET_ID: browserHandshake.targetId,
+      ELECTRON_TARGET_NONCE: browserHandshake.targetNonce,
       CANADAPOST_SECRETS_STDIN: '1'
     },
     stdinJson: { username: credentials.username, password: credentials.password }
@@ -1853,8 +2294,6 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
     MAX_CLAIMS: options.canaryMode ? '1' : (options.maxClaims ? String(options.maxClaims) : ''),
     BROWSER_MODE: 'builtin',
     CANARY_MODE: options.canaryMode ? 'true' : 'false',
-    ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
-    ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
     DATABASE_PATH: DB_PATH,
     RUN_ID: String(fullRunId),
     DRY_RUN: options.dryRun ? 'true' : 'false',
@@ -2232,6 +2671,44 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   fs.mkdirSync(step3DiagnosticsRunDir, { recursive: true, mode: 0o700 });
   activeStep3DiagnosticsDir = step3DiagnosticsRunDir;
   latestStep3DiagnosticsDir = step3DiagnosticsRunDir;
+  activeBrowserVisibilityFile = path.join(step3DiagnosticsRunDir, 'browser-visibility.json');
+  let browserHandshake;
+  try {
+    browserHandshake = await prepareBuiltinBrowserForWorker({ reason: 'submission' });
+    await requestBuiltinBrowserVisibility({
+      reason: 'main-handshake-complete',
+      requireVisible: true,
+      scrollIntoView: true,
+      timeoutMs: 6000
+    });
+    const displayReady = browserVisibilityWatchdog();
+    if (!displayReady.ready) {
+      const error = new Error('The Step 3 browser target is ready, but its native view cannot be displayed inside the browser slot.');
+      error.code = 'BROWSER_VISIBILITY_REQUIRED';
+      throw error;
+    }
+    appendStep3ElectronDiagnostic('worker-browser-display-ready', {
+      webContentsIdentityHash: displayReady.webContentsIdentityHash,
+      appliedBounds: displayReady.bounds,
+      childViewIndex: displayReady.childViewIndex,
+      currentUrl: displayReady.currentUrl
+    });
+  } catch (error) {
+    appendStep3ElectronDiagnostic('worker-browser-handshake-failed', {
+      code: error.code || 'BROWSER_HANDSHAKE_FAILED',
+      message: error.message
+    });
+    activeStep3DiagnosticsDir = '';
+    activeBrowserVisibilityFile = '';
+    fs.rmSync(selectedClaimsPath, { force: true });
+    fs.rmSync(queueSnapshotPath, { force: true });
+    claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, {
+      stage: 'browser-handshake',
+      errorCode: error.code || 'BROWSER_HANDSHAKE_FAILED',
+      error: error.message
+    });
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_HANDSHAKE_FAILED' };
+  }
   const envBase = {
     DATA_DIR,
     STOP_FILE,
@@ -2244,8 +2721,10 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     MAX_CLAIMS: options.canaryMode ? '1' : (options.maxClaims ? String(options.maxClaims) : ''),
     BROWSER_MODE: 'builtin',
     CANARY_MODE: options.canaryMode ? 'true' : 'false',
-    ELECTRON_CDP_URL: BUILTIN_BROWSER_CDP_URL,
-    ELECTRON_TARGET_TOKEN: BUILTIN_BROWSER_TARGET_TOKEN,
+    ELECTRON_CDP_URL: browserHandshake.endpoint,
+    ELECTRON_TARGET_ID: browserHandshake.targetId,
+    ELECTRON_TARGET_NONCE: browserHandshake.targetNonce,
+    ELECTRON_TARGET_WEB_CONTENTS_HASH: browserHandshake.webContentsIdentityHash,
     DATABASE_PATH: DB_PATH,
     RUN_ID: String(submitRunId),
     DRY_RUN: options.dryRun ? 'true' : 'false',
@@ -2253,6 +2732,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     LOG_DIR,
     STEP3_DIAGNOSTICS_ENABLED: 'true',
     STEP3_DIAGNOSTICS_RUN_DIR: step3DiagnosticsRunDir,
+    BROWSER_VISIBILITY_ACK_FILE: activeBrowserVisibilityFile,
     ...claimSettingsEnv,
     DEVELOPER_MODE: 'false'
   };
@@ -2279,11 +2759,18 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
         latestStep3DiagnosticsDir = String(event.directory || step3DiagnosticsRunDir);
         emit('event', { stage: 'submit', event: { type: 'log', message: `Detailed Step 3 diagnostics: ${latestStep3DiagnosticsDir}` } });
       }
+      if (event?.type === 'manual_verification_required') {
+        handleManualBrowserVisibilityRequest(event).catch(error => {
+          appendStep3ElectronDiagnostic('verification-browser-display-failed', { code: error.code || 'BROWSER_VISIBILITY_REQUIRED', message: error.message });
+          if (activeChild && activeStage === 'submit') sendStopSignalToChild(activeChild, { force: false });
+        });
+      }
     },
     onClose: ({ code, signal, eventCounts }) => {
       claimDb.markInterruptedAttempts(DB_PATH);
       appendStep3ElectronDiagnostic('submission-worker-closed', { code, signal, eventCounts });
       activeStep3DiagnosticsDir = '';
+      activeBrowserVisibilityFile = '';
       fs.rmSync(selectedClaimsPath, { force: true });
       fs.rmSync(queueSnapshotPath, { force: true });
     }
@@ -2292,6 +2779,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   if (!started.ok) {
     const failed = await submitProcess;
     activeStep3DiagnosticsDir = '';
+    activeBrowserVisibilityFile = '';
     fs.rmSync(selectedClaimsPath, { force: true });
     fs.rmSync(queueSnapshotPath, { force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: failed.error?.message || 'Worker spawn failed.' });
@@ -2318,6 +2806,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     } catch (error) {
       appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
       activeStep3DiagnosticsDir = '';
+      activeBrowserVisibilityFile = '';
       fs.rmSync(selectedClaimsPath, { force: true });
       fs.rmSync(queueSnapshotPath, { force: true });
       try { claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
@@ -2360,6 +2849,10 @@ async function startApplication() {
   claimDb.markInterruptedAttempts(DB_PATH);
   claimDb.quarantineLegacyDryRunReadyAttempts(DB_PATH);
   createWindow();
+  screen.on('display-metrics-changed', () => {
+    if (!builtinBrowserView) return;
+    requestBuiltinBrowserVisibility({ reason: 'display-metrics-changed', requireVisible: false }).catch(() => {});
+  });
 }
 
 async function handleStartupFailure(error) {

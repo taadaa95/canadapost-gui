@@ -34,9 +34,25 @@ const { createMockPortal } = require('../mock-portal/server');
     await window.getByRole('button', { name: 'Finish Setup' }).click();
     await window.locator('#setupWizard').waitFor({ state: 'hidden' });
     assert.strictEqual(JSON.parse(fs.readFileSync(path.join(userData, 'config.json'), 'utf8')).setupCompleted, true);
+    const beforeStep3Target = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(beforeStep3Target.created, false, 'native browser must be created deliberately, not by unrelated startup');
 
     await window.evaluate(() => window.activateTab('step3'));
     await window.waitForTimeout(300);
+    const offscreenBeforePrepare = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(offscreenBeforePrepare.created, false, 'an offscreen browser slot should not be the only creation trigger');
+    const preparedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());
+    assert.strictEqual(preparedTarget.ok, true);
+    assert.ok(preparedTarget.targetIdHash);
+    assert.ok(preparedTarget.webContentsIdentityHash);
+    const preparedState = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(preparedState.created, true);
+    assert.strictEqual(preparedState.destroyed, false);
+    assert.strictEqual(preparedState.attached, false, 'offscreen preparation must not overlay unrelated UI');
+    assert.strictEqual(await window.locator('#builtinBrowserSlot .browser-slot-placeholder').isVisible(), true);
+    assert.strictEqual(preparedState.targetIdHash, preparedTarget.targetIdHash);
+    const rendererTargetCount = await application.evaluate(({ webContents }) => webContents.getAllWebContents().filter(contents => contents.getType() === 'window' || contents.getType() === 'webview').length);
+    assert(rendererTargetCount >= 2, 'test must include multiple Electron renderer targets');
     const renderCandidates = async count => {
       await window.evaluate(candidateCount => window.renderClaimQueue(Array.from({ length: candidateCount }, (_, index) => ({
         trackingNumber: `E2E${String(index).padStart(13, '0')}`, referenceNumber: `REFERENCE-${index}-${'x'.repeat(100)}`,
@@ -91,8 +107,14 @@ const { createMockPortal } = require('../mock-portal/server');
     const visibleBounds = await window.evaluate(() => window.builtinBrowserBounds());
     assert(visibleBounds && visibleBounds.height > 0 && visibleBounds.y >= 0);
     assert(visibleBounds.y + visibleBounds.height <= await window.evaluate(() => window.innerHeight));
-    const browserResult = await window.evaluate(() => window.cpApp.showBuiltinBrowser({ bounds: window.builtinBrowserBounds() }));
+    const browserResult = await window.evaluate(() => window.synchronizeBuiltinBrowserVisibility({ reason: 'e2e-visible-slot', force: true, requireVisible: true }));
     assert.strictEqual(browserResult.ok, true);
+    assert.strictEqual(browserResult.visible, true);
+    assert.strictEqual(browserResult.attached, true);
+    assert(browserResult.bounds.width > 0 && browserResult.bounds.height > 0);
+    assert(browserResult.childViewIndex >= 0, 'native view must be an attached child above the renderer');
+    assert.strictEqual(browserResult.targetIdHash, preparedTarget.targetIdHash, 'scrolling into view must preserve target identity');
+    assert.strictEqual(await window.locator('#builtinBrowserSlot .browser-slot-placeholder').isHidden(), true, 'positive visible bounds must hide the placeholder');
     const beforeTall = await window.evaluate(() => document.documentElement.scrollHeight);
     await application.evaluate(async ({ webContents }) => {
       const embedded = webContents.getAllWebContents().find(contents => contents.getType() !== 'window');
@@ -109,6 +131,19 @@ const { createMockPortal } = require('../mock-portal/server');
     });
     await window.waitForTimeout(200);
     assert.strictEqual(await window.evaluate(() => window.builtinBrowserBounds()), null);
+    const hiddenState = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(hiddenState.attached, false);
+    assert.strictEqual(hiddenState.visible, false);
+    assert.strictEqual(hiddenState.targetIdHash, preparedTarget.targetIdHash, 'offscreen hiding must not destroy target identity');
+    assert.strictEqual(await window.locator('#builtinBrowserSlot .browser-slot-placeholder').isVisible(), true, 'offscreen native view must restore the placeholder');
+
+    const restoredState = await window.evaluate(async () => {
+      document.getElementById('builtinBrowserSlot').scrollIntoView({ block: 'center' });
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return window.synchronizeBuiltinBrowserVisibility({ reason: 'e2e-restored-onscreen', force: true, requireVisible: true });
+    });
+    assert.strictEqual(restoredState.visible, true, 'scrolling the slot onscreen must reattach the detached view');
+    assert.strictEqual(restoredState.targetIdHash, preparedTarget.targetIdHash);
 
     await window.evaluate(() => {
       window.activateTab('historyTab');
@@ -151,12 +186,27 @@ const { createMockPortal } = require('../mock-portal/server');
     await window.waitForTimeout(100);
     const maximizedHistory = await window.evaluate(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
     await assertHistoryLayout(maximizedHistory.width, maximizedHistory.height);
+    const historyTargetState = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(historyTargetState.attached, false, 'switching tabs must detach the native view');
+    assert.strictEqual(historyTargetState.targetIdHash, preparedTarget.targetIdHash, 'switching tabs must preserve the live target');
+    await window.evaluate(() => window.activateTab('step3'));
+    await window.evaluate(() => document.getElementById('builtinBrowserSlot').scrollIntoView({ block: 'center' }));
+    await window.waitForTimeout(200);
+    const returnedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());
+    assert.strictEqual(returnedTarget.targetIdHash, preparedTarget.targetIdHash, 'returning to Step 3 must preserve the safe live target');
+    const returnedDisplay = await window.evaluate(() => window.synchronizeBuiltinBrowserVisibility({ reason: 'e2e-tab-return', force: true, requireVisible: true }));
+    assert.strictEqual(returnedDisplay.visible, true, 'returning to Step 3 must restore native visibility');
 
     const status = await window.evaluate(() => window.cpApp.browserSessionStatus());
     assert.strictEqual(status.ok, true);
     const cleared = await window.evaluate(() => window.cpApp.clearBrowserSession({ confirmed: true, resetProfile: true }));
     assert.strictEqual(cleared.ok, true);
     assert.strictEqual(cleared.claimHistoryPreserved, true);
+    const destroyedTarget = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
+    assert.strictEqual(destroyedTarget.created, false);
+    const republishedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());
+    assert.strictEqual(republishedTarget.ok, true);
+    assert.notStrictEqual(republishedTarget.targetIdHash, preparedTarget.targetIdHash, 'recreated webContents must publish a new target identity');
     assert.ok(fs.existsSync(path.join(userData, 'database', 'app.sqlite')));
     process.stdout.write(`Electron spacious Step 3 and bounded History E2E passed; maximized ${maximized.width}x${maximized.height}.\n`);
   } finally {

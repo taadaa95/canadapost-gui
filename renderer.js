@@ -99,7 +99,7 @@ function activateTab(tabId) {
     runStep3Preflight().catch((error) => console.error(error));
   }
   updateNotificationIndicator();
-  requestBuiltinBrowserLayout();
+  requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
 }
 
 function stepForStage(stage) {
@@ -194,6 +194,7 @@ function initStepTabs() {
 let builtinBrowserLayoutFrame = 0;
 let builtinBrowserRepositionFrame = 0;
 let builtinBrowserResizeObserver = null;
+let builtinBrowserDisplayState = { visible: false, reason: 'not-created' };
 
 function useBuiltinBrowser() {
   return $('builtinBrowser') ? $('builtinBrowser').checked : false;
@@ -239,10 +240,52 @@ function syncBuiltinBrowserClass() {
   step3.classList.toggle('builtin-browser-enabled', useBuiltinBrowser());
 }
 
-function builtinBrowserBounds() {
+function browserSlotPlaceholder() {
+  return $('builtinBrowserSlot')?.querySelector('.browser-slot-placeholder') || null;
+}
+
+function setBrowserSlotPlaceholder(visible, text = '') {
+  const placeholder = browserSlotPlaceholder();
+  if (!placeholder) return;
+  placeholder.hidden = !visible;
+  placeholder.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (text) placeholder.textContent = text;
+}
+
+function browserSlotMeasurement(reason = 'renderer-measurement') {
   const slot = $('builtinBrowserSlot');
-  if (!slot) return null;
+  if (!slot) return {
+    reason,
+    step3Active: activeTabId === 'step3',
+    browserEnabled: useBuiltinBrowser(),
+    placeholderVisible: true,
+    rawDomRect: { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 },
+    viewport: { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }
+  };
   const rect = slot.getBoundingClientRect();
+  return {
+    reason,
+    step3Active: activeTabId === 'step3',
+    browserEnabled: useBuiltinBrowser(),
+    placeholderVisible: !browserSlotPlaceholder()?.hidden,
+    rawDomRect: {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height
+    },
+    viewport: {
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight
+    }
+  };
+}
+
+function builtinBrowserBounds() {
+  const measurement = browserSlotMeasurement('bounds-read');
+  const rect = measurement.rawDomRect;
   const viewportWidth = document.documentElement.clientWidth;
   const viewportHeight = document.documentElement.clientHeight;
   const left = Math.max(0, rect.left);
@@ -264,39 +307,62 @@ function builtinBrowserBounds() {
   };
 }
 
-function requestBuiltinBrowserLayout() {
+function applyBuiltinBrowserDisplayState(result = {}) {
+  builtinBrowserDisplayState = { ...builtinBrowserDisplayState, ...result };
+  if (result.visible) {
+    setBrowserSlotPlaceholder(false);
+    if (!$('builtinBrowserActivity')?.classList.contains('active')) setBuiltinBrowserStatus('Browser ready', 'good');
+    return;
+  }
+  if (result.reason === 'browser-preparing' || result.reason === 'not-created') {
+    setBrowserSlotPlaceholder(true, 'Built-in browser area. The browser is preparing for Step 3.');
+    setBuiltinBrowserStatus('Browser preparing', 'warn');
+    return;
+  }
+  if (result.reason === 'slot-offscreen' || result.reason === 'step3-inactive') {
+    setBrowserSlotPlaceholder(true, 'Built-in browser area. Canada Post is hidden while this slot is offscreen.');
+    setBuiltinBrowserStatus('Browser hidden because slot is offscreen', 'warn');
+    return;
+  }
+  if (result.ok === false) {
+    setBrowserSlotPlaceholder(true, 'The built-in browser could not be displayed. Stop Step 3 and review diagnostics.');
+    setBuiltinBrowserStatus('Browser display error', 'bad');
+    return;
+  }
+  setBrowserSlotPlaceholder(true, 'Built-in browser area. Canada Post appears here when Step 3 starts.');
+}
+
+async function synchronizeBuiltinBrowserVisibility(options = {}) {
+  syncBuiltinBrowserClass();
+  const slot = $('builtinBrowserSlot');
+  if (options.scrollIntoView && activeTabId === 'step3' && slot) {
+    slot.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+  if (!window.cpApp?.syncBuiltinBrowserVisibility) return { ok: false, error: 'Browser visibility IPC is unavailable.' };
+  const measurement = browserSlotMeasurement(options.reason || 'renderer-sync');
+  const result = await window.cpApp.syncBuiltinBrowserVisibility({
+    ...measurement,
+    requestId: String(options.requestId || ''),
+    force: Boolean(options.force),
+    requireVisible: Boolean(options.requireVisible)
+  }).catch(error => ({ ok: false, error: error.message, code: 'BROWSER_DISPLAY_ERROR' }));
+  applyBuiltinBrowserDisplayState(result);
+  return result;
+}
+
+function requestBuiltinBrowserLayout(reason = 'layout-request') {
   syncBuiltinBrowserClass();
   if (builtinBrowserLayoutFrame) cancelAnimationFrame(builtinBrowserLayoutFrame);
   builtinBrowserLayoutFrame = requestAnimationFrame(async () => {
     builtinBrowserLayoutFrame = 0;
-    syncBuiltinBrowserClass();
-
-    if (!window.cpApp?.showBuiltinBrowser || !window.cpApp?.hideBuiltinBrowser) return;
-
-    if (activeTabId !== 'step3' || !useBuiltinBrowser()) {
-      await window.cpApp.hideBuiltinBrowser().catch(() => {});
-      return;
-    }
-
-    const bounds = builtinBrowserBounds();
-    if (!bounds) {
-      await window.cpApp.hideBuiltinBrowser().catch(() => {});
-      return;
-    }
-    const res = await window.cpApp.showBuiltinBrowser({ bounds }).catch((error) => ({ ok: false, error: error.message }));
-    if (res && res.ok === false) {
-      setBuiltinBrowserStatus('Browser error', 'bad');
-      log(res.error || 'Could not show built-in browser.', 'log-submit-error', 'step3');
-    } else {
-      setBuiltinBrowserStatus('Visible', 'good');
-    }
+    const result = await synchronizeBuiltinBrowserVisibility({ reason, force: true });
+    if (result?.ok === false && result.code !== 'BROWSER_DISABLED') log(result.error || 'Could not synchronize the built-in browser display.', 'log-submit-error', 'step3');
   });
 }
 
-function resizeBuiltinBrowserToSlot() {
-  if (activeTabId !== 'step3' || !useBuiltinBrowser() || !window.cpApp?.setBuiltinBrowserBounds) return;
-  const bounds = builtinBrowserBounds();
-  if (bounds) window.cpApp.setBuiltinBrowserBounds(bounds).catch(() => {});
+function resizeBuiltinBrowserToSlot(reason = 'resize-to-slot') {
+  return synchronizeBuiltinBrowserVisibility({ reason, force: true });
 }
 
 function scheduleBuiltinBrowserReposition() {
@@ -304,31 +370,20 @@ function scheduleBuiltinBrowserReposition() {
   builtinBrowserRepositionFrame = requestAnimationFrame(async () => {
     builtinBrowserRepositionFrame = 0;
 
-    if (activeTabId !== 'step3' || !useBuiltinBrowser()) {
-      await window.cpApp?.hideBuiltinBrowser?.().catch(() => {});
-      return;
-    }
-
-    const bounds = builtinBrowserBounds();
-    if (!bounds) {
-      await window.cpApp?.hideBuiltinBrowser?.().catch(() => {});
-      return;
-    }
-
-    await window.cpApp?.setBuiltinBrowserBounds?.(bounds).catch(() => {});
+    await synchronizeBuiltinBrowserVisibility({ reason: 'scroll-or-resize', force: true });
   });
 }
 
 function initBuiltinBrowserPositionTracking() {
   // Capture scroll events from the window and every nested scroll container.
   window.addEventListener('scroll', scheduleBuiltinBrowserReposition, { capture: true, passive: true });
-  window.addEventListener('resize', requestBuiltinBrowserLayout);
+  window.addEventListener('resize', () => requestBuiltinBrowserLayout('window-resize'));
   window.visualViewport?.addEventListener('scroll', scheduleBuiltinBrowserReposition, { passive: true });
   window.visualViewport?.addEventListener('resize', scheduleBuiltinBrowserReposition, { passive: true });
 
   const slot = $('builtinBrowserSlot');
   if (slot && typeof ResizeObserver === 'function') {
-    builtinBrowserResizeObserver = new ResizeObserver(scheduleBuiltinBrowserReposition);
+    builtinBrowserResizeObserver = new ResizeObserver(() => requestBuiltinBrowserLayout('browser-slot-resize'));
     builtinBrowserResizeObserver.observe(slot);
   }
 }
@@ -1488,6 +1543,22 @@ function describeEvent(stage, event) {
       updateCurrentItem({ step: 'Claim submission started', result: '—', kind: '' });
       return `Claim submission started. ${state.submitTotal} claims.`;
     }
+    if (type === 'manual_verification_required') {
+      setBuiltinBrowserStatus('Manual verification required', 'bad');
+      finishBuiltinBrowserActivity('Manual verification required');
+      updateCurrentItem({ step: 'Manual verification required', result: 'Paused for operator', kind: 'captcha' });
+      setStatus('Manual verification required', 'bad', 'step3');
+      setAction(event.message || 'Complete verification in the visible built-in browser. Step 3 is paused.', 'step3');
+      synchronizeBuiltinBrowserVisibility({ reason: 'manual-verification-required', scrollIntoView: true, force: true, requireVisible: true }).catch(() => {});
+      return event.message || 'Manual verification required. The built-in browser has been brought into view.';
+    }
+    if (type === 'manual_verification_display_failed') {
+      setBuiltinBrowserStatus('Browser display error', 'bad');
+      finishBuiltinBrowserActivity('Browser display error', 'error');
+      setStatus('Failed', 'bad', 'step3');
+      setAction(event.message || 'Manual verification could not be displayed safely.', 'step3');
+      return event.message || 'Manual verification could not be displayed safely; Step 3 stopped.';
+    }
     if (type === 'claim_start') {
       setBuiltinBrowserActivity(true, `Opening claim ${event.index || ''}${event.total ? ` of ${event.total}` : ''}…`);
       updateCurrentItem({
@@ -1515,10 +1586,7 @@ function describeEvent(stage, event) {
         source: 'Notifications / CAPTCHA'
       });
       addRecentResult('captcha', event.trackingNumber || operations.current.tracking, 'CAPTCHA detected', event.row || operations.current.row, detail);
-      if (useBuiltinBrowser() && window.cpApp?.focusBuiltinBrowser) {
-        setTimeout(() => window.cpApp.focusBuiltinBrowser().catch(() => {}), 50);
-        setTimeout(() => window.cpApp.focusBuiltinBrowser().catch(() => {}), 350);
-      }
+      if (useBuiltinBrowser()) synchronizeBuiltinBrowserVisibility({ reason: 'captcha-required', scrollIntoView: true, force: true, requireVisible: true }).catch(() => {});
       return `CAPTCHA detected for ${event.trackingNumber || 'current claim'} — solve it manually in the visible browser. The app is paused.${event.screenshotPath ? ` Screenshot saved: ${event.screenshotPath}` : ' Screenshot skipped in built-in browser mode to keep focus.'}`;
     }
     if (type === 'captcha_waiting') {
@@ -1989,10 +2057,14 @@ async function runSiteHealthCheck() {
   const resultEl = $('siteHealthResult');
   setSiteHealthRunning(true);
   if (resultEl) resultEl.textContent = 'Checking Canada Post workflow…';
-  requestBuiltinBrowserLayout();
-  const bounds = builtinBrowserBounds();
   try {
-    const result = await window.cpApp.runSiteHealth({ ...collectUserSettingsOptions(), bounds: bounds || {} });
+    setBuiltinBrowserStatus('Browser preparing', 'warn');
+    await synchronizeBuiltinBrowserVisibility({
+      reason: 'site-health-start',
+      scrollIntoView: true,
+      force: true
+    });
+    const result = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
     if (!result.ok) {
       setSiteHealthRunning(false);
       if (resultEl) resultEl.textContent = result.error || 'Could not start workflow health check.';
@@ -2702,14 +2774,47 @@ async function startSubmitOnly() {
 
   resetRunUi('step3');
   setStatus('Running', 'warn', 'step3');
+  setBuiltinBrowserStatus('Browser preparing', 'warn');
   setBuiltinBrowserActivity(true, 'Starting built-in browser workflow…');
   setAction(dryRun
     ? `Dry run: validating ${selected.length} selected claim(s) and stopping before final review/submission.`
     : (canaryMode ? 'Canary live run: processing the first selected claim only.' : `Submitting ${selected.length} selected claim(s).`), 'step3');
-  requestBuiltinBrowserLayout();
-  if (window.cpApp?.showBuiltinBrowser) {
-    const bounds = builtinBrowserBounds();
-    if (bounds) await window.cpApp.showBuiltinBrowser({ bounds }).catch(() => {});
+  const initialDisplay = await synchronizeBuiltinBrowserVisibility({
+    reason: 'step3-run-start',
+    scrollIntoView: true,
+    force: true
+  });
+  if (initialDisplay?.ok === false) {
+    setBuiltinBrowserStatus('Browser display error', 'bad');
+    finishBuiltinBrowserActivity('Browser display error', 'error');
+    setStatus('Failed', 'bad', 'step3');
+    setAction(initialDisplay.error || 'The built-in browser slot could not be measured.', 'step3');
+    return;
+  }
+  if (window.cpApp?.prepareBuiltinBrowser) {
+    const browserReady = await window.cpApp.prepareBuiltinBrowser().catch(error => ({ ok: false, error: error.message }));
+    if (!browserReady?.ok) {
+      setStatus('Failed', 'bad', 'step3');
+      setAction(browserReady?.error || 'The built-in browser target could not be prepared.');
+      log(browserReady?.error || 'The built-in browser target could not be prepared.', 'log-submit-error', 'step3');
+      finishBuiltinBrowserActivity('Browser startup failed', 'error');
+      return;
+    }
+    const displayReady = await synchronizeBuiltinBrowserVisibility({
+      reason: 'renderer-handshake-complete',
+      scrollIntoView: true,
+      force: true,
+      requireVisible: true
+    });
+    if (!displayReady?.visible) {
+      setStatus('Failed', 'bad', 'step3');
+      setAction(displayReady?.error || 'The built-in browser target is ready but its native view cannot be displayed.');
+      log(displayReady?.error || 'The built-in browser target is ready but its native view cannot be displayed.', 'log-submit-error', 'step3');
+      finishBuiltinBrowserActivity('Browser display error', 'error');
+      setBuiltinBrowserStatus('Browser display error', 'bad');
+      return;
+    }
+    setBuiltinBrowserStatus('Browser ready', 'good');
   }
 
   const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions(liveSubmissionConfirmed));
@@ -2733,7 +2838,7 @@ async function startSubmitOnly() {
   log(dryRun
     ? `Dry run started for ${res.selectedClaimCount || selected.length} selected claim(s). The runner will stop on the sender/contact page.`
     : (canaryMode ? 'Canary live run started. Only the first selected claim will be processed.' : `Live claim submission started for ${res.selectedClaimCount || selected.length} selected claim(s).`));
-  resizeBuiltinBrowserToSlot();
+  await resizeBuiltinBrowserToSlot('submission-worker-started');
 }
 
 async function refreshConfig() {
@@ -2801,7 +2906,7 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.2';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.4';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
@@ -3063,8 +3168,28 @@ document.querySelectorAll('[data-force-stop]').forEach((button) => {
 });
 
 window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
-  if (active) setBuiltinBrowserActivity(true, text || 'Loading Canada Post…', kind || '');
-  else finishBuiltinBrowserActivity(text || 'Browser ready', kind || '');
+  if (active) {
+    setBuiltinBrowserStatus('Loading Canada Post', 'warn');
+    setBuiltinBrowserActivity(true, text || 'Loading Canada Post…', kind || '');
+  } else {
+    finishBuiltinBrowserActivity(text || 'Browser ready', kind || '');
+    if (kind === 'error') setBuiltinBrowserStatus('Browser display error', 'bad');
+    else if (builtinBrowserDisplayState.visible) setBuiltinBrowserStatus('Browser ready', 'good');
+  }
+});
+
+window.cpApp.onBuiltinBrowserDisplayState?.((payload) => applyBuiltinBrowserDisplayState(payload));
+
+window.cpApp.onBuiltinBrowserVisibilityRequest?.((payload) => {
+  synchronizeBuiltinBrowserVisibility({
+    requestId: payload?.requestId,
+    reason: payload?.reason || 'main-process-request',
+    requireVisible: Boolean(payload?.requireVisible),
+    scrollIntoView: Boolean(payload?.scrollIntoView),
+    force: true
+  }).catch(error => {
+    applyBuiltinBrowserDisplayState({ ok: false, visible: false, reason: 'display-error', error: error.message });
+  });
 });
 
 window.cpApp.onEvent(({ stage, event }) => {

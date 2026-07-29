@@ -10,9 +10,11 @@ const {
 const { findLoginControls, describeEditableControls } = require('../lib/canadapost-login');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
 const { portalUrl } = require('../lib/origin-policy');
+const { waitForExactPageTarget } = require('../lib/cdp-page-target');
 
 const CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
-const TARGET_TOKEN = String(process.env.ELECTRON_TARGET_TOKEN || '');
+const TARGET_ID = String(process.env.ELECTRON_TARGET_ID || '');
+const TARGET_NONCE = String(process.env.ELECTRON_TARGET_NONCE || '');
 let USERNAME = String(process.env.CANADAPOST_USERNAME || '');
 let PASSWORD = String(process.env.CANADAPOST_PASSWORD || '');
 const LOGIN_URL = portalUrl(
@@ -215,22 +217,6 @@ async function diagnosticSnapshot(page) {
   };
 }
 
-async function findPage(browser) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const pages = browser.contexts().flatMap(context => context.pages()).filter(page => !page.isClosed());
-    if (TARGET_TOKEN) {
-      for (const candidate of pages) {
-        const token = await candidate.evaluate(() => window.name).catch(() => '');
-        if (token === TARGET_TOKEN) return candidate;
-      }
-    }
-    const canadaPostPages = pages.filter(candidate => isCanadaPostUrl(candidate.url()));
-    if (canadaPostPages.length === 1) return canadaPostPages[0];
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  return null;
-}
-
 async function findNavigationWithMenuFallback(page, timeout = 6000) {
   let navigation = await findClaimNavigationStage(page, timeout);
   if (navigation) return navigation;
@@ -267,14 +253,17 @@ async function main() {
   USERNAME = runtimeSecrets.username;
   PASSWORD = runtimeSecrets.password;
   if (!CDP_URL) throw Object.assign(new Error('Built-in browser endpoint is unavailable.'), { code: 'BROWSER_UNAVAILABLE' });
+  if (!TARGET_ID || !TARGET_NONCE) throw Object.assign(new Error('Built-in browser target identity was not published.'), { code: 'TARGET_NOT_PUBLISHED' });
   emit('health_start', { message: 'Checking Canada Post login and claim-navigation controls.' });
-  const browser = await chromium.connectOverCDP(CDP_URL);
-  const page = await findPage(browser);
-  if (!page) throw Object.assign(new Error('Canada Post browser page was not found.'), { code: 'BROWSER_UNAVAILABLE' });
+  let browser;
+  try { browser = await chromium.connectOverCDP(CDP_URL); }
+  catch (error) { throw Object.assign(new Error(`Built-in browser CDP connection failed: ${error.message}`), { code: 'CDP_CONNECTION_FAILURE' }); }
+  const selected = await waitForExactPageTarget(browser, { targetId: TARGET_ID, targetNonce: TARGET_NONCE });
+  const page = selected.page;
 
   page.setDefaultTimeout(10000);
   page.setDefaultNavigationTimeout(30000);
-  if (!isCanadaPostUrl(page.url()) || page.url() === 'about:blank') {
+  if (page.url() === 'about:blank' || page.url().startsWith('about:blank#')) {
     await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
   }
 

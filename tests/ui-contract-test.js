@@ -24,7 +24,7 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.2');
+assert.strictEqual(pkg.version, '0.4.0-dev.4');
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
 assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
@@ -63,7 +63,7 @@ assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Curr
 assert.ok(/scrollbar-gutter:\s*stable both-edges/.test(html));
 
 assert.ok(renderer.includes("window.addEventListener('scroll', scheduleBuiltinBrowserReposition"), 'Built-in browser must track nested scroll events');
-assert.ok(renderer.includes('new ResizeObserver(scheduleBuiltinBrowserReposition)'), 'Built-in browser must track slot size changes');
+assert.ok(renderer.includes("new ResizeObserver(() => requestBuiltinBrowserLayout('browser-slot-resize'))"), 'Built-in browser must force a fresh slot measurement after size changes');
 assert.ok(renderer.includes('window.visualViewport?.addEventListener'), 'Built-in browser must track visual viewport movement');
 
 assert.ok(html.includes('save password securely on this device'));

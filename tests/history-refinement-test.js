@@ -32,7 +32,7 @@ const { chromium } = require('playwright');
     window.cpApp = new Proxy({
       onEvent: () => {}, onRun: () => {}, onStage: () => {}, onBrowserActivity: () => {},
       loadLocale: async () => ({ ok: true, messages: {}, locale: 'en-CA' }),
-      loadConfig: async () => ({ ok: true, appVersion: '0.4.0-dev.2', setupCompleted: true, databaseIntegrity: { ok: true }, dashboard: {}, reconciliationCount: 0 }),
+      loadConfig: async () => ({ ok: true, appVersion: '0.4.0-dev.4', setupCompleted: true, databaseIntegrity: { ok: true }, dashboard: {}, reconciliationCount: 0 }),
       listHistory: async options => {
         window.__historyCalls.push({ ...options });
         const search = String(options.search || '').toLowerCase();

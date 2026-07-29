@@ -38,9 +38,9 @@ const updateSecurity = require('../lib/update-security');
       artifact: { url: 'https://updates.example.test/app.bin', sha256: checksum }
     };
     metadata.signature = crypto.sign(null, updateSecurity.signedPayload(metadata), keys.privateKey).toString('base64');
-    assert.strictEqual(updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0-dev.2' }).ok, true);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { channel: 'beta', currentVersion: '0.4.0-dev.2' }), /No trusted update public key/);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'stable', currentVersion: '0.4.0-dev.2' }), /cannot install beta/);
+    assert.strictEqual(updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0-dev.4' }).ok, true);
+    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { channel: 'beta', currentVersion: '0.4.0-dev.4' }), /No trusted update public key/);
+    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'stable', currentVersion: '0.4.0-dev.4' }), /cannot install beta/);
     assert.strictEqual(updateSecurity.verifyArtifactChecksum(artifact, checksum), true);
     const downgrade = { ...metadata, version: '0.3.0' };
     downgrade.signature = crypto.sign(null, updateSecurity.signedPayload(downgrade), keys.privateKey).toString('base64');

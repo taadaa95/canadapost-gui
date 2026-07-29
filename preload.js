@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('cpApp', {
   runTracking: (options) => ipcRenderer.invoke('tracking:run', options),
   discardIncompleteTracking: (options) => ipcRenderer.invoke('tracking:discardIncomplete', options),
   runSubmit: (options) => ipcRenderer.invoke('submit:run', options),
+  prepareBuiltinBrowser: () => ipcRenderer.invoke('browser:prepareBuiltin'),
+  builtinBrowserTargetState: () => ipcRenderer.invoke('browser:targetState'),
+  syncBuiltinBrowserVisibility: (payload) => ipcRenderer.invoke('browser:syncVisibility', payload),
   showBuiltinBrowser: (options) => ipcRenderer.invoke('browser:showBuiltin', options),
   setBuiltinBrowserBounds: (bounds) => ipcRenderer.invoke('browser:setBuiltinBounds', bounds),
   hideBuiltinBrowser: () => ipcRenderer.invoke('browser:hideBuiltin'),
@@ -46,6 +49,8 @@ contextBridge.exposeInMainWorld('cpApp', {
   forceStop: () => ipcRenderer.invoke('run:forceStop'),
   onEvent: (callback) => ipcRenderer.on('event', (_event, payload) => callback(payload)),
   onBrowserActivity: (callback) => ipcRenderer.on('browser:activity', (_event, payload) => callback(payload)),
+  onBuiltinBrowserDisplayState: (callback) => ipcRenderer.on('browser:display-state', (_event, payload) => callback(payload)),
+  onBuiltinBrowserVisibilityRequest: (callback) => ipcRenderer.on('browser:visibility-request', (_event, payload) => callback(payload)),
   onRun: (callback) => ipcRenderer.on('run', (_event, payload) => callback(payload)),
   onStage: (callback) => ipcRenderer.on('stage', (_event, payload) => callback(payload))
 });

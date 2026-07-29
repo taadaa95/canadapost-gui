@@ -17,6 +17,8 @@ function main() {
   assert.strictEqual(isFinalSubmissionLabel('Create Ticket'), true);
   assert.strictEqual(isFinalSubmissionLabel('Submit claim'), true);
   assert.strictEqual(isFinalSubmissionLabel('Send request'), true);
+  assert.strictEqual(isFinalSubmissionLabel('Confirm'), true);
+  assert.strictEqual(isFinalSubmissionLabel('Complete submission'), true);
   assert.strictEqual(isFinalSubmissionLabel('Continue'), false);
   assert.strictEqual(isFinalSubmissionLabel('Open a ticket'), false, 'launcher navigation must not be treated as final submission');
 

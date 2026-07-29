@@ -69,7 +69,8 @@ async function main() {
   assert.match(mainSource, /setPermissionRequestHandler/);
   assert.match(mainSource, /setPermissionCheckHandler/);
   assert.match(mainSource, /will-download/);
-  assert.match(mainSource, /BUILTIN_BROWSER_TARGET_TOKEN/);
+  assert.match(mainSource, /prepareBuiltinBrowserForWorker/);
+  assert.match(mainSource, /ELECTRON_TARGET_ID: browserHandshake\.targetId/);
   assert.match(mainSource, /stdinJson/);
   assert.match(mainSource, /process\.kill\(-child\.pid/);
   assert.match(mainSource, /render-process-gone/);
@@ -79,12 +80,14 @@ async function main() {
   assert.match(mainSource, /contextIsolation:\s*true[\s\S]*nodeIntegration:\s*false[\s\S]*sandbox:\s*true/);
   assert.match(mainSource, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/);
   assert.match(submitSource, /CANADAPOST_SECRETS_STDIN|readRuntimeSecrets/);
-  assert.match(submitSource, /ELECTRON_TARGET_TOKEN/);
+  assert.match(submitSource, /ELECTRON_TARGET_ID/);
+  assert.match(submitSource, /waitForExactPageTarget/);
   assert.match(submitSource, /Raw HTML can/);
   assert.doesNotMatch(submitSource.match(/async function collectVisibleText[\s\S]*?\n}/)?.[0] || '', /page\.content\(/);
   assert.match(submitSource, /Never retry the financially significant action/);
   assert.match(healthSource, /readRuntimeSecrets/);
-  assert.match(healthSource, /TARGET_TOKEN/);
+  assert.match(healthSource, /TARGET_ID/);
+  assert.match(healthSource, /waitForExactPageTarget/);
 
   console.log('Step 3 browser hardening tests passed.');
 }

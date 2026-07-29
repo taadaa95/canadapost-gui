@@ -5,6 +5,7 @@ const { URL } = require('url');
 
 const SCENARIOS = Object.freeze([
   'success', 'invalid-credentials', 'cookie-banner', 'verification-required',
+  'text-verification',
   'duplicate', 'validation-error', 'ineligible', 'session-expired', 'redirect',
   'disallowed-origin', 'unexpected-new-tab', 'slow-page', 'network-failure',
   'server-error', 'changed-selector', 'ambiguous-submit', 'delayed-submit',
@@ -23,8 +24,8 @@ function page(title, body, script = '') {
   <body><main><h1>${escapeHtml(title)}</h1>${body}</main>${script ? `<script>${script}</script>` : ''}</body></html>`;
 }
 
-function scenarioFrom(url) {
-  const scenario = String(url.searchParams.get('scenario') || 'success');
+function scenarioFrom(url, fallback = 'success') {
+  const scenario = String(url.searchParams.get('scenario') || fallback || 'success');
   return SCENARIOS.includes(scenario) ? scenario : 'success';
 }
 
@@ -34,6 +35,9 @@ function send(response, status, body, headers = {}) {
 }
 
 function loginHtml(scenario) {
+  if (scenario === 'text-verification') {
+    return page('Text verification', '<p role="status">Verification code required. Enter the code sent by text message.</p><button id="complete_verification" type="button" onclick="location.href=\'/cpc/en/support/kb/claims/late-packages.page?scenario=success\'">Complete verification</button>');
+  }
   if (scenario === 'verification-required') {
     return page('Manual verification required', '<p role="alert">Verify you are human. Complete the CAPTCHA manually.</p><div class="captcha" data-sitekey="local-qa-only">Local QA verification placeholder</div>');
   }
@@ -82,11 +86,20 @@ function claimHtml(url, scenario) {
   return page('Ticket outcome', `<p role="status">${escapeHtml(outcomes[scenario] || outcomes.success)}</p>`);
 }
 
-function createMockPortal({ host = '127.0.0.1', port = 0 } = {}) {
+function createMockPortal({ host = '127.0.0.1', port = 0, defaultScenario = 'success' } = {}) {
   let origin = '';
+  const metrics = { requests: 0, loginPosts: 0, claimStages: {}, finalReviewVisits: 0, submittedClaims: 0 };
   const server = http.createServer((request, response) => {
     const url = new URL(request.url || '/', origin || `http://${host}`);
-    const scenario = scenarioFrom(url);
+    const scenario = scenarioFrom(url, defaultScenario);
+    metrics.requests += 1;
+    if (request.method === 'POST' && url.pathname === '/login') metrics.loginPosts += 1;
+    if (url.pathname === '/claim') {
+      const stage = String(url.searchParams.get('stage') || 'receiver');
+      metrics.claimStages[stage] = (metrics.claimStages[stage] || 0) + 1;
+      if (stage === 'final') metrics.finalReviewVisits += 1;
+      if (stage === 'outcome') metrics.submittedClaims += 1;
+    }
 
     if (scenario === 'network-failure') return request.socket.destroy();
     if (scenario === 'server-error') return send(response, 503, page('Service unavailable', '<p role="alert">Synthetic server error.</p>'));
@@ -122,6 +135,9 @@ function createMockPortal({ host = '127.0.0.1', port = 0 } = {}) {
     async close() {
       if (!server.listening) return;
       await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
+    stats() {
+      return JSON.parse(JSON.stringify(metrics));
     }
   };
 }
