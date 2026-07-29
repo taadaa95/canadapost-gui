@@ -1,0 +1,20 @@
+[
+  {
+    "trackingPin": "SYNTHETIC000001",
+    "postalCode": "K1A0B1",
+    "reference": "ORDER-SYNTHETIC",
+    "serviceCode": "DOM.XP",
+    "eventDate": "2026-06-03",
+    "eventDescription": "Shipment created",
+    "shipmentDate": "2026-06-01"
+  },
+  {
+    "trackingPin": "SYNTHETIC000002",
+    "postalCode": "H0H0H0",
+    "reference": "ORDER, TWO",
+    "serviceCode": "DOM.EP",
+    "eventDate": "2026-06-04",
+    "eventDescription": "Quoted, description",
+    "shipmentDate": "2026-06-02"
+  }
+]

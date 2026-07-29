@@ -2,14 +2,21 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const claimDb = require('../lib/claim-database');
-const { findClaimNavigationStage, maybeOpenNavigationMenu, classifyAuthenticatedSnapshot, claimNavigationUrlContext, firstVisibleLocator } = require('../lib/canadapost-navigation');
+const claimQueue = require('../lib/claim-queue');
+const { verifyQueueSnapshot, revalidateQueueItem } = require('../lib/eligibility-revalidation');
+const { findClaimNavigationStage, maybeOpenNavigationMenu, classifyAuthenticatedSnapshot, claimNavigationUrlContext } = require('../lib/canadapost-navigation');
 const { findLoginControls } = require('../lib/canadapost-login');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
 const { Step3Diagnostics, sanitizeUrl } = require('../lib/step3-diagnostics');
+const { isAllowedCanadaPostUrl, portalUrl } = require('../lib/origin-policy');
+const { faultPoint } = require('../lib/fault-injection');
 
 const DUPLICATE_CLAIM_FIX_VERSION = 'hardening-v35-navigation-stability';
 let diagnostics = null;
-const LATE_PACKAGE_SUPPORT_URL = 'https://www.canadapost-postescanada.ca/cpc/en/support/kb/claims/late-packages.page';
+const LATE_PACKAGE_SUPPORT_URL = portalUrl(
+  'https://www.canadapost-postescanada.ca/cpc/en/support/kb/claims/late-packages.page',
+  '/cpc/en/support/kb/claims/late-packages.page'
+);
 
 function automationError(code, message) {
   const error = new Error(message);
@@ -102,15 +109,7 @@ function writeJsonAtomic(filePath, value) {
 }
 
 
-function isCanadaPostUrl(value) {
-  try {
-    const parsed = new URL(String(value));
-    const host = parsed.hostname.toLowerCase();
-    return parsed.protocol === 'https:' && (host === 'canadapost-postescanada.ca' || host.endsWith('.canadapost-postescanada.ca'));
-  } catch (_) {
-    return false;
-  }
-}
+const isCanadaPostUrl = isAllowedCanadaPostUrl;
 
 function assertCanadaPostPage(page, label = 'Canada Post page') {
   const url = page?.url?.() || '';
@@ -124,7 +123,10 @@ const BACKGROUND_BROWSER_MODE = false;
 const IS_LINUX = process.platform === 'linux';
 const ELECTRON_CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
 const ELECTRON_TARGET_TOKEN = String(process.env.ELECTRON_TARGET_TOKEN || '');
-const CANADAPOST_LOGIN_URL = 'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en';
+const CANADAPOST_LOGIN_URL = portalUrl(
+  'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en',
+  '/login'
+);
 
 function backgroundBrowserArgs() {
   const args = [
@@ -309,6 +311,21 @@ const CLAIM_USER_SETTINGS = {
   businessName: envValue('CLAIM_BUSINESS_NAME')
 };
 
+function policySettings() {
+  return {
+    claimStreetNumber: CLAIM_USER_SETTINGS.streetNumber,
+    claimStreetName: CLAIM_USER_SETTINGS.streetName,
+    claimAddressLine2: CLAIM_USER_SETTINGS.addressLine2,
+    claimCity: CLAIM_USER_SETTINGS.city,
+    claimProvince: CLAIM_USER_SETTINGS.province,
+    claimPostalCode: CLAIM_USER_SETTINGS.postalCode,
+    claimContactName: CLAIM_USER_SETTINGS.contactName,
+    claimContactPhone: CLAIM_USER_SETTINGS.contactPhone,
+    claimContactEmail: CLAIM_USER_SETTINGS.contactEmail,
+    claimBusinessName: CLAIM_USER_SETTINGS.businessName
+  };
+}
+
 function requiredSetting(value, label) {
   const clean = String(value || '').trim();
   if (!clean) throw new Error(`Missing user setting: ${label}. Open the User Settings tab and save the claim address/settings first.`);
@@ -330,14 +347,13 @@ function getClaimsToRun(allClaims, dataDir, dbPath = process.env.DATABASE_PATH) 
   for (const claim of allClaims) {
     const tracking = String(claim['Tracking PIN'] || '').trim();
     const status = String(claim.Status || '').trim().toUpperCase();
-    const deliveryDate = String(claim['Actual Delivery Date'] || '').trim();
     if (!tracking || seen.has(tracking)) {
       emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking || '—', reason: tracking ? 'Duplicate row in claims.csv.' : 'Missing tracking PIN.' });
       continue;
     }
     seen.add(tracking);
-    if (status !== 'ELIGIBLE - DELIVERED LATE' || !deliveryDate) {
-      emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking, reason: 'Row is not an eligible delivered-late claim.' });
+    if (!status.startsWith('LATE CANDIDATE')) {
+      emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking, reason: 'Row is not a LATE_CANDIDATE classification.' });
       continue;
     }
     if (!dryRun && dbPath) {
@@ -396,6 +412,14 @@ const FAILURE_PATTERNS = [
   /technical (?:error|problem|issue)/i
 ];
 
+const REJECTION_PATTERNS = [
+  /not eligible/i,
+  /does not qualify/i,
+  /ineligible/i,
+  /request (?:was|has been) (?:declined|rejected)/i,
+  /claim (?:was|has been) (?:declined|rejected)/i
+];
+
 function extractConfirmationNumber(text) {
   const source = String(text || '');
   const patterns = [
@@ -447,8 +471,11 @@ function classifyAutomationFailure(error, text = '', url = '') {
   if (/verification code|text verification|security code/i.test(combined)) {
     return { errorCode: 'AUTHENTICATION_VERIFICATION_REQUIRED', status: 'unknown' };
   }
-  if (/not eligible|validation|already exists|already received a refund request/i.test(combined)) {
-    return { errorCode: 'KNOWN_VALIDATION_REJECTION', status: 'failed' };
+  if (hasAnyPattern(combined, REJECTION_PATTERNS)) {
+    return { errorCode: 'CLAIM_REJECTED', status: 'rejected' };
+  }
+  if (/validation|already exists|already received a refund request/i.test(combined)) {
+    return { errorCode: 'KNOWN_VALIDATION_ERROR', status: 'failed' };
   }
   if (/locator|selector|strict mode|waiting for|getByRole|getByLabel|not found|could not click/i.test(combined)) {
     return { errorCode: 'SELECTOR_MISSING', status: 'failed' };
@@ -1275,41 +1302,6 @@ async function maybeFillByRoleTextbox(page, namePattern, value) {
 }
 
 
-function scoreStreetOrProvinceOption(optionText, wantedText) {
-  function normalizeText(input) {
-    return String(input || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/&amp;#39;|&#39;|’|`/g, "'")
-      .toLowerCase()
-      .replace(/\b(rue|street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|court|ct|crescent|cres|lane|ln|way|place|pl)\b/g, ' ')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-  }
-
-  function compact(input) {
-    return normalizeText(input).replace(/\s+/g, '');
-  }
-
-  const optionNorm = normalizeText(optionText);
-  const wantedNorm = normalizeText(wantedText);
-  const optionCompact = compact(optionText);
-  const wantedCompact = compact(wantedText);
-  const wantedTokens = wantedNorm.split(/\s+/).filter(token => token.length >= 2);
-
-  if (!wantedNorm || !optionNorm) return -1;
-  if (optionNorm === wantedNorm || optionCompact === wantedCompact) return 1000;
-  if (optionNorm.includes(wantedNorm) || optionCompact.includes(wantedCompact)) return 900;
-  if (wantedNorm.includes(optionNorm) || wantedCompact.includes(optionCompact)) return 800;
-
-  const hits = wantedTokens.filter(token => optionNorm.includes(token)).length;
-  if (wantedTokens.length && hits === wantedTokens.length) return 700 + hits;
-  if (wantedTokens.length >= 2 && hits >= Math.ceil(wantedTokens.length * 0.75)) return 500 + hits;
-  if (wantedTokens.length === 1 && hits === 1 && wantedTokens[0].length >= 4) return 400;
-
-  return -1;
-}
-
 async function maybeSelectByLabel(page, labelPattern, value) {
   const clean = String(value || '').trim();
   const diagnosticName = `select-${String(labelPattern)}`;
@@ -1813,6 +1805,7 @@ async function fillClaim(claimPage, claim, options = {}) {
     selectors: ['input[id="CreateTicket:ZZ_KEYDOC"]', 'input[name="CreateTicket:ZZ_KEYDOC"]'],
     diagnosticName: 'tracking-number'
   });
+  faultPoint('after_tracking_entry');
   diagnostics?.state('receiver-tracking-filled');
   await diagnostics?.capturePageState(claimPage, 'receiver-tracking-filled').catch(() => {});
 
@@ -1989,12 +1982,23 @@ function classifyClaimOutcome(text) {
     };
   }
 
+  if (hasAnyPattern(source, REJECTION_PATTERNS)) {
+    return {
+      status: 'rejected',
+      ok: false,
+      message: 'Canada Post rejected the claim as ineligible.',
+      reason: oneLine(source).slice(0, 2000),
+      errorCode: 'CLAIM_REJECTED',
+      businessOutcome: true
+    };
+  }
+
   if (hasAnyPattern(source, FAILURE_PATTERNS)) {
     return {
       status: 'failed',
       ok: false,
-      message: 'Canada Post displayed an error/rejection after Create Ticket.',
-      errorCode: 'KNOWN_VALIDATION_REJECTION'
+      message: 'Canada Post displayed a submission error after Create Ticket.',
+      errorCode: 'SUBMISSION_ERROR'
     };
   }
 
@@ -2018,6 +2022,16 @@ function classifyClaimOutcome(text) {
   }
 
   return null;
+}
+
+function summarizeClaimResults(results = []) {
+  const values = Array.isArray(results) ? results : [];
+  const succeeded = values.filter(result => result.status === 'submitted').length;
+  const dryRunReady = values.filter(result => result.status === 'dry_run_ready').length;
+  const alreadySubmitted = values.filter(result => result.status === 'already_submitted').length;
+  const rejected = values.filter(result => result.status === 'rejected').length;
+  const failed = values.filter(result => !['submitted', 'dry_run_ready', 'already_submitted', 'rejected'].includes(result.status)).length;
+  return { total: values.length, succeeded, dryRunReady, alreadySubmitted, rejected, failed };
 }
 
 async function waitForClaimOutcome(claimPage, timeoutMs, trackingNumber, rowNumber, dataDir) {
@@ -2090,6 +2104,7 @@ async function waitForClaimOutcome(claimPage, timeoutMs, trackingNumber, rowNumb
 }
 
 async function saveClaimArtifacts(claimPage, dataDir, prefix, rowNumber, pageText = '', screenshotDelayMs = 0) {
+  faultPoint('during_evidence_write');
   const startedAt = Date.now();
   const artifactId = `${rowNumber}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   const screenshotPath = path.resolve(dataDir, `${prefix}-row-${artifactId}.png`);
@@ -2169,6 +2184,7 @@ async function processClaim(page, claim, index, total, options = {}) {
     const fillResult = diagnostics
       ? await diagnostics.operation('claim-form.fill', { dryRun }, () => fillClaim(claimPage, claim, { dryRun }))
       : await fillClaim(claimPage, claim, { dryRun });
+    faultPoint('after_form_completion');
 
     if (dryRun) {
       const blockedActions = await readDryRunBlockedActions(claimPage);
@@ -2212,12 +2228,15 @@ async function processClaim(page, claim, index, total, options = {}) {
 
     emit('log', { message: `Clicking Create Ticket for ${trackingNumber}.` });
     diagnostics?.state('final-submission-action');
+    faultPoint('before_final_submission');
     await clickCreateTicket(claimPage);
+    faultPoint('immediately_after_submission');
     diagnostics?.state('waiting-for-outcome');
 
     const resultTimeoutMs = Math.max(afterSubmitMs, 45000);
     emit('claim_wait', { trackingNumber, ms: resultTimeoutMs, mode: 'wait_for_canada_post_confirmation_or_duplicate_error' });
 
+    faultPoint('before_confirmation_capture');
     const outcome = await waitForClaimOutcome(claimPage, resultTimeoutMs, trackingNumber, claim._csvRowNumber, dataDir);
 
     if (outcome.status === 'submitted') {
@@ -2266,12 +2285,15 @@ async function processClaim(page, claim, index, total, options = {}) {
       };
     }
 
-    const artifacts = await saveClaimArtifacts(claimPage, dataDir, 'claim-error', claim._csvRowNumber, outcome.pageText, 2600);
-    const errorMessage = outcome.pageText ? `${outcome.message} Page text saved to ${artifacts.textPath}` : outcome.message;
-    emit('claim_error', {
+    const rejected = outcome.status === 'rejected';
+    const artifacts = await saveClaimArtifacts(claimPage, dataDir, rejected ? 'claim-rejected' : 'claim-error', claim._csvRowNumber, outcome.pageText, 2600);
+    const returnedReason = outcome.reason || '';
+    const errorMessage = [outcome.message, returnedReason ? `Returned reason: ${returnedReason}` : '', outcome.pageText ? `Page text saved to ${artifacts.textPath}` : ''].filter(Boolean).join(' ');
+    emit(rejected ? 'claim_rejected' : 'claim_error', {
       row: claim._csvRowNumber,
       trackingNumber,
       message: errorMessage,
+      reason: returnedReason,
       screenshotPath: artifacts.screenshotPath,
       textPath: artifacts.textPath
     });
@@ -2281,6 +2303,7 @@ async function processClaim(page, claim, index, total, options = {}) {
       row: claim._csvRowNumber,
       trackingNumber,
       error: errorMessage,
+      reason: returnedReason,
       errorCode: outcome.errorCode || 'UNKNOWN_RESULT',
       screenshotPath: artifacts.screenshotPath,
       textPath: artifacts.textPath,
@@ -2393,6 +2416,13 @@ async function main() {
     : readClaims(csvPath));
   const selection = getClaimsToRun(allClaims, dataDir, dbPath);
   const claimsToRun = selection.claims;
+  const snapshotPath = process.env.QUEUE_SNAPSHOT_PATH || '';
+  if (!snapshotPath || !fs.existsSync(snapshotPath)) throw new Error('Reviewed queue snapshot is missing. Refresh and review the claim queue.');
+  let queueSnapshot;
+  try { queueSnapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')); } catch (_) { throw new Error('Reviewed queue snapshot is invalid.'); }
+  const policyClaims = allClaims.map(claim => claimQueue.claimInputFromRow(claim, policySettings()));
+  const snapshotIntegrity = verifyQueueSnapshot(queueSnapshot, policyClaims);
+  if (!snapshotIntegrity.ok) throw new Error(`Reviewed queue snapshot failed integrity validation (${snapshotIntegrity.reason}). Refresh the queue.`);
   diagnostics?.record('info', 'claims', 'selection-complete', {
     totalRows: allClaims.length,
     selectedClaims: claimsToRun.length,
@@ -2462,8 +2492,10 @@ async function main() {
     await diagnostics?.capturePageState(page, 'authenticated').catch(() => {});
     await hideBrowserWindow(page);
     diagnostics?.state('navigating-to-ticket-launcher');
+    faultPoint('before_navigation');
     if (diagnostics) await diagnostics.operation('navigation.ticket-launcher', {}, () => navigateToLatePackageTicketLauncher(page));
     else await navigateToLatePackageTicketLauncher(page);
+    faultPoint('after_navigation');
     let ticketLauncherUrl = page.url();
     diagnostics?.state('ticket-launcher-ready', { url: sanitizeUrl(ticketLauncherUrl) });
     await diagnostics?.capturePageState(page, 'ticket-launcher-ready').catch(() => {});
@@ -2477,6 +2509,29 @@ async function main() {
 
       const claim = claimsToRun[i];
       const trackingNumber = required(claim, 'Tracking PIN');
+      const policyClaim = claimQueue.claimInputFromRow(claim, policySettings());
+      const revalidation = revalidateQueueItem({
+        snapshot: queueSnapshot,
+        claims: policyClaims,
+        claim: policyClaim,
+        currentEvidence: policyClaim,
+        options: { asOf: new Date().toISOString(), classificationTimestamp: new Date().toISOString() }
+      });
+      const currentClassification = revalidation.current || null;
+      if (currentClassification) claimDb.recordClassification(dbPath, trackingNumber, currentClassification, policyClaim);
+      claimDb.recordWorkerRevalidation(dbPath, {
+        snapshotId: Number(process.env.QUEUE_SNAPSHOT_ID || 0) || null,
+        trackingNumber,
+        allowed: revalidation.allowed,
+        reason: revalidation.reason,
+        snapshotHash: queueSnapshot.snapshotHash,
+        result: revalidation
+      });
+      if (!revalidation.allowed) {
+        emit('claim_revalidation_blocked', { row: claim._csvRowNumber, trackingNumber, reason: revalidation.reason, classification: currentClassification?.classification || '' });
+        diagnostics?.record('warn', 'policy', 'claim-revalidation-blocked', { reason: revalidation.reason, classification: currentClassification?.classification || '' }, { critical: true });
+        break;
+      }
       diagnostics?.setClaim({
         index: i + 1,
         total: claimsToRun.length,
@@ -2495,9 +2550,10 @@ async function main() {
         serviceCode: claim['Service Code'],
         destinationPostalCode: claim['Destination Postal Code'],
         expectedDate: claim['Expected Delivery Date'],
+        firstAttemptDate: claim['First Attempt Date'],
         deliveryDate: claim['Actual Delivery Date'],
-        classification: 'DELIVERED_LATE_ELIGIBLE',
-        eligibilityReason: claim.Reason || 'Eligible delivered-late claim.',
+        classification: 'LATE_CANDIDATE',
+        eligibilityReason: claim['Eligibility Reason'] || claim.Reason || 'Tracking shows the first delivery attempt occurred after the expected-delivery date.',
         message: dryRun ? 'Dry-run attempt started.' : 'Claim attempt started.'
       });
 
@@ -2507,10 +2563,11 @@ async function main() {
         : await processClaim(page, claim, i, claimsToRun.length, { dryRun });
       results.push(result);
       diagnostics?.record(result.ok ? 'info' : 'warn', 'claim', 'result', result, { critical: !result.ok });
+      faultPoint('during_database_write');
       claimDb.completeClaimAttempt(dbPath, activeAttemptId, {
         status: result.status === 'dry_run_ready'
           ? 'dry_run_ready'
-          : (result.status === 'submitted' || result.status === 'already_submitted' || result.status === 'failed' || result.status === 'unknown'
+          : (result.status === 'submitted' || result.status === 'already_submitted' || result.status === 'rejected' || result.status === 'failed' || result.status === 'unknown'
               ? result.status
               : (result.ok ? 'submitted' : 'unknown')),
         confirmationNumber: result.confirmationNumber || '',
@@ -2588,6 +2645,7 @@ async function main() {
     diagnostics?.state('closing-browser');
     if (diagnostics) await diagnostics.operation('browser.close', {}, () => browserSession.close().catch(() => {}));
     else await browserSession.close().catch(() => {});
+    faultPoint('during_process_termination');
   }
 
   const summaryPath = path.resolve(dataDir, 'claim-run-summary.json');
@@ -2595,26 +2653,24 @@ async function main() {
   writeJsonAtomic(summaryPath, results);
   writeJsonAtomic(archivedSummaryPath, results);
 
-  const succeeded = results.filter(result => result.status === 'submitted').length;
-  const dryRunReady = results.filter(result => result.status === 'dry_run_ready').length;
-  const alreadySubmitted = results.filter(result => result.status === 'already_submitted').length;
-  const failed = results.filter(result => !['submitted', 'dry_run_ready', 'already_submitted'].includes(result.status)).length;
+  const { succeeded, dryRunReady, alreadySubmitted, rejected, failed } = summarizeClaimResults(results);
   diagnostics?.state(failed > 0 ? 'complete-with-errors' : 'complete', {
     total: results.length,
     succeeded,
     dryRunReady,
     alreadySubmitted,
+    rejected,
     failed
   });
-  emit('submit_complete', { total: results.length, succeeded, dryRunReady, alreadySubmitted, failed, summaryPath, dryRun });
+  emit('submit_complete', { total: results.length, succeeded, dryRunReady, alreadySubmitted, rejected, failed, summaryPath, dryRun });
   await finalizeDiagnostics({
     outcome: failed > 0 ? 'complete-with-errors' : 'complete',
-    counts: { total: results.length, succeeded, dryRunReady, alreadySubmitted, failed },
+    counts: { total: results.length, succeeded, dryRunReady, alreadySubmitted, rejected, failed },
     claimSummaryPath: summaryPath
   });
 
-  // Already-submitted and dry-run-ready are valid outcomes. Unknown/failed states
-  // remain non-zero so the main app can surface recovery work.
+  // Approved, duplicate, rejected and dry-run-ready are ordinary business
+  // outcomes. Only submission/automation errors make the worker fail.
   if (failed > 0) process.exitCode = 1;
 }
 
@@ -2651,6 +2707,7 @@ module.exports = {
   getClaimsToRun,
   isCanadaPostUrl,
   classifyClaimOutcome,
+  summarizeClaimResults,
   classifyAutomationFailure,
   extractConfirmationNumber,
   isFinalSubmissionLabel,

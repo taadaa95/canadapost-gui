@@ -5,6 +5,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const claimDb = require('../lib/claim-database');
+const { classifyEligibility } = require('../lib/policy-engine');
+const { parseTrackingJson } = require('../lib/tracking-json');
+const { buildCanonicalShipment } = require('../lib/normalized-shipment');
+const { createQueueSnapshot } = require('../lib/eligibility-revalidation');
+const { DatabaseSync } = require('node:sqlite');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canadapost-db-test-'));
 const dbPath = path.join(root, 'database', 'app.sqlite');
@@ -113,6 +118,89 @@ try {
   assert.strictEqual(claimDb.latestAttemptState(legacyDb, 'LEGACY1').status, 'failed');
   assert.strictEqual(claimDb.latestAttemptState(legacyDb, 'LEGACY2').status, 'unknown');
   assert.strictEqual(claimDb.listClaimHistory(legacyDb, { search: 'REF-1' }).length, 1);
+
+  const policyClaim = {
+    trackingNumber: 'POLICY1', serviceCode: 'DOM.XP', shipmentDate: '2026-06-01',
+    expectedDeliveryDate: '2026-06-03', firstAttemptDate: '2026-06-04', actualDeliveryDate: '2026-06-04',
+    destinationProvince: 'ON', sender: { name: 'Synthetic Sender', address: '1 Test St', city: 'Ottawa', province: 'ON', postalCode: 'K1A0B1' },
+    contact: { name: 'Synthetic Operator', email: 'operator@example.invalid' }, claimEvidence: ['fixture']
+  };
+  const classification = classifyEligibility(policyClaim, { asOf: '2026-06-10', classificationTimestamp: '2026-06-10T12:00:00Z' });
+  const recorded = claimDb.recordClassification(dbPath, policyClaim.trackingNumber, classification, policyClaim);
+  assert.ok(recorded.id > 0);
+  assert.strictEqual(claimDb.currentClassification(dbPath, policyClaim.trackingNumber).classification, 'LATE_CANDIDATE');
+  assert.strictEqual(claimDb.classificationHistory(dbPath, policyClaim.trackingNumber).length, 1);
+  assert.throws(() => claimDb.withDatabase(dbPath, db => db.prepare('UPDATE classification_records SET classification = ? WHERE id = ?').run('ON_TIME', recorded.id)), /immutable/);
+
+  const rejectedAttemptId = claimDb.beginClaimAttempt(dbPath, {
+    trackingNumber: 'REJECTED-BUSINESS-OUTCOME',
+    classification: 'LATE_CANDIDATE',
+    dryRun: false,
+    message: 'Claim attempt started.'
+  });
+  const rejectedAttempt = claimDb.completeClaimAttempt(dbPath, rejectedAttemptId, {
+    status: 'rejected',
+    message: 'Canada Post returned: shipment is not eligible.',
+    errorCode: 'CLAIM_REJECTED'
+  });
+  assert.strictEqual(rejectedAttempt.status, 'rejected');
+  assert.match(rejectedAttempt.message, /not eligible/i);
+  assert.strictEqual(claimDb.canAutomaticallyAttempt(dbPath, 'REJECTED-BUSINESS-OUTCOME').allowed, false, 'a rejection is a terminal business outcome, not a retryable crash');
+
+  const canonicalShipment = buildCanonicalShipment({
+    detail: parseTrackingJson({
+      pin: policyClaim.trackingNumber,
+      activeExists: true,
+      archiveExists: false,
+      signatureImageExists: false,
+      suppressSignature: false,
+      serviceName: 'Xpresspost',
+      expectedDeliveryDate: '2026-06-03',
+      significantEvents: [
+        { eventIdentifier: 'SYN-ATTEMPT', eventDescription: 'Delivery attempt made', eventDate: '2026-06-04', eventTime: '10:00:00' },
+        { eventIdentifier: '1496', eventDescription: 'Delivered', eventDate: '2026-06-05', eventTime: '10:00:00' }
+      ]
+    }, policyClaim.trackingNumber),
+    row: { 'Shipment Date': policyClaim.shipmentDate, 'Destination Province': 'ON' },
+    trackingNumber: policyClaim.trackingNumber
+  });
+  const savedEvents = claimDb.saveTrackingNormalization(dbPath, policyClaim.trackingNumber, canonicalShipment, []);
+  assert.strictEqual(savedEvents.eventIds.length, canonicalShipment.normalizedEvents.length);
+  assert.deepStrictEqual(claimDb.withDatabase(dbPath, db => db.prepare('SELECT DISTINCT raw_json FROM tracking_events WHERE shipment_id = ?').all(savedEvents.shipmentId)).map(item => item.raw_json), ['{}']);
+
+  const needsReview = classifyEligibility({ ...policyClaim, expectedDeliveryDate: '' }, { asOf: '2026-06-10', classificationTimestamp: '2026-06-10T13:00:00Z' });
+  assert.strictEqual(needsReview.classification, 'REVIEW_REQUIRED');
+  claimDb.recordClassification(dbPath, policyClaim.trackingNumber, needsReview, { ...policyClaim, contact: {} });
+  const review = claimDb.listManualReviews(dbPath, { search: 'POLICY1' })[0];
+  assert.ok(review);
+  claimDb.updateManualReview(dbPath, review.id, 'resolved_eligible', 'Synthetic evidence reviewed.');
+  assert.strictEqual(claimDb.listManualReviews(dbPath, { status: 'resolved', search: 'POLICY1' }).length, 1);
+  assert.strictEqual(claimDb.classificationHistory(dbPath, policyClaim.trackingNumber).length, 2);
+  assert.strictEqual(claimDb.currentClassification(dbPath, policyClaim.trackingNumber).classification, 'REVIEW_REQUIRED');
+
+  claimDb.recordClassification(dbPath, policyClaim.trackingNumber, classification, policyClaim);
+  const snapshot = createQueueSnapshot([policyClaim], { asOf: '2026-06-10', createdAt: '2026-06-10T12:00:00Z' });
+  const snapshotId = claimDb.saveQueueSnapshot(dbPath, snapshot);
+  assert.ok(snapshotId > 0);
+  assert.ok(claimDb.recordWorkerRevalidation(dbPath, { snapshotId, trackingNumber: 'POLICY1', allowed: true, reason: 'REVALIDATED', snapshotHash: snapshot.snapshotHash, result: classification }) > 0);
+
+  // Representative schema-v4 database migrates forward without losing shipment rows.
+  const v4Path = path.join(root, 'v4.sqlite');
+  const v4 = new DatabaseSync(v4Path);
+  v4.exec(`CREATE TABLE shipments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tracking_number TEXT NOT NULL UNIQUE, service_code TEXT NOT NULL DEFAULT '',
+    reference_number TEXT NOT NULL DEFAULT '', destination_postal_code TEXT NOT NULL DEFAULT '', ship_date TEXT NOT NULL DEFAULT '',
+    expected_date TEXT NOT NULL DEFAULT '', delivery_date TEXT NOT NULL DEFAULT '', current_status TEXT NOT NULL DEFAULT '',
+    classification TEXT NOT NULL DEFAULT '', eligibility_reason TEXT NOT NULL DEFAULT '', last_checked_at TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, raw_json TEXT NOT NULL DEFAULT '{}');
+    INSERT INTO shipments (tracking_number, created_at, updated_at) VALUES ('MIGRATE4', '2026-01-01', '2026-01-01');
+    PRAGMA user_version = 4;`);
+  v4.close();
+  const migratedV4 = claimDb.openDatabase(v4Path);
+  assert.strictEqual(migratedV4.prepare('PRAGMA user_version').get().user_version, claimDb.SCHEMA_VERSION);
+  assert.strictEqual(migratedV4.prepare("SELECT tracking_number FROM shipments WHERE tracking_number = 'MIGRATE4'").get().tracking_number, 'MIGRATE4');
+  assert.ok(migratedV4.prepare("SELECT name FROM pragma_table_info('shipments') WHERE name = 'first_attempt_date'").get());
+  migratedV4.close();
 
   console.log('Database tests passed.');
 } finally {

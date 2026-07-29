@@ -1,0 +1,65 @@
+{
+  "fixtureKind": "sanitized-contract-summary",
+  "derivedFrom": {
+    "publisher": "Canada Post Corporation",
+    "portalPage": "https://developer-developpeur.canadapost-postescanada.ca/devportal-portaildesdeveloppeurs/product/tracking/api/tracking-api-1.0.0",
+    "download": "https://developer-developpeur.canadapost-postescanada.ca/devportal-portaildesdeveloppeurs/download/4687/document",
+    "retrieved": "2026-07-28",
+    "sha256": "189b373a4df79f0f45e27280de72950bf3e18792c59775e674807e67318d2e29"
+  },
+  "openapi": "3.0.0",
+  "apiTitle": "Tracking",
+  "apiVersion": "1.0.0",
+  "portalCatalogApiVersion": "2.0.0",
+  "production": {
+    "gatewayOrigin": "https://api.canadapost-postescanada.ca",
+    "trackingBasePath": "/prod/devportal-portaildesdeveloppeurs/tracking/v1",
+    "tokenPath": "/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token"
+  },
+  "test": {
+    "gatewayOrigin": "https://api-stg.canadapost-postescanada.ca",
+    "trackingBasePath": "/prod/devportal-portaildesdeveloppeurs/tracking/v1",
+    "tokenPath": "/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token"
+  },
+  "tokenRequest": {
+    "method": "POST",
+    "headers": ["X-IBM-Client-Id", "X-IBM-Client-Secret", "Accept", "Content-Type"],
+    "accept": "application/json",
+    "contentType": "application/x-www-form-urlencoded",
+    "form": { "scope": "merchant", "grant_type": "client_credentials" },
+    "requiredResponse": ["access_token", "token_type", "expires_in", "scope"]
+  },
+  "trackingDetailsByPin": {
+    "method": "GET",
+    "path": "/pins/{pinNumber}/details",
+    "requiredPathParameters": ["pinNumber"],
+    "requiredQueryParameters": [],
+    "requiredHeaders": ["Authorization", "Accept"],
+    "optionalHeaders": ["Accept-Language", "platform-id"],
+    "accept": "application/json",
+    "scope": "merchant",
+    "requiredResponseFields": ["pin", "activeExists", "archiveExists", "signatureImageExists", "suppressSignature"],
+    "responseShape": "direct JSON object (no wrapper)",
+    "serviceFields": ["serviceName", "serviceName2"],
+    "expectedDeliveryFields": ["expectedDeliveryDate", "changedExpectedDate", "changedExpectedDeliveryReason"],
+    "eventCollectionPath": "$.significantEvents",
+    "eventRequiredFields": ["eventDate", "eventTime"],
+    "eventFields": ["eventIdentifier", "eventDate", "eventTime", "eventTimeZone", "eventDescription", "eventSite", "eventProvince", "eventRetailLocationId", "eventRetailName"],
+    "documentedStatuses": [200, 400, 401, 403, 404, 500, 503, 504]
+  },
+  "errorSchemas": {
+    "messagesRequired": ["title", "detail", "errors"],
+    "messageItemRequired": ["errorCode", "message"],
+    "unauthorizedFields": ["httpCode", "httpMessage", "moreInformation"]
+  },
+  "archiveBehavior": {
+    "activeExists": "tracking information exists in the active repository",
+    "archiveExists": "tracking information exists in the archive repository"
+  },
+  "rateLimitGuidance": {
+    "publishedTrackingQuota": null,
+    "rollingWindowSeconds": 60,
+    "minimumDelayGuidanceMilliseconds": 250,
+    "retryGuidanceSeconds": 60
+  }
+}

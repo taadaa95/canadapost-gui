@@ -1,0 +1,9 @@
+Manifest.csv
+2
+Order Id,WERKS - Induction Point,VBELN - SAP Order Id,KUNNR - Behalf of Customer Number,KUNNR - Payer Customer Number,Category Type Code,VBELN - SAP Contract Id,Creation Date,Mailing Date
+ORDER-SYNTHETIC,,,,,,,20260531,20260601
+
+ManifestItems.csv
+2
+Order Id,MATNR - Article Number,Bar Code Id,Postal Zip Code,Imported Order ID,Date Time Trace Inquiry Event,Description Significant Event
+ORDER-SYNTHETIC,908,SYNTHETIC900001,K1A 0B1,ORDER-SYNTHETIC,2026-06-03,Shipment created

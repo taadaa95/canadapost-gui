@@ -1,0 +1,151 @@
+{
+  "$schema": "./policy-rules.schema.json",
+  "dataVersion": "canada-post-policy-2026.07.26-v1",
+  "retrievedAt": "2026-07-26",
+  "timezone": "America/Toronto",
+  "sourceIds": [
+    "CP-GUIDE-2026-05-29",
+    "CP-LATE-PACKAGES-2026-07-26",
+    "CP-DELIVERY-STANDARDS-2026-07-26",
+    "CP-HOLIDAYS-2025-2026",
+    "CP-PEAK-2025",
+    "CP-GUARANTEE-RESUMED-2025-01-06"
+  ],
+  "policyVersions": [
+    {
+      "version": "CP-PARCEL-2025.01.06-v1",
+      "effectiveFrom": "2025-01-06",
+      "effectiveThrough": "2025-12-04",
+      "sourceIds": [
+        "CP-GUARANTEE-RESUMED-2025-01-06",
+        "CP-LATE-PACKAGES-2026-07-26",
+        "CP-PEAK-2025"
+      ]
+    },
+    {
+      "version": "CP-PARCEL-2025.12.05-v1",
+      "effectiveFrom": "2025-12-05",
+      "effectiveThrough": "2026-05-28",
+      "sourceIds": ["CP-GUIDE-2025-12-05", "CP-PEAK-2025"]
+    },
+    {
+      "version": "CP-PARCEL-2026.05.29-v1",
+      "effectiveFrom": "2026-05-29",
+      "effectiveThrough": "2026-07-26",
+      "sourceIds": [
+        "CP-GUIDE-2026-05-29",
+        "CP-LATE-PACKAGES-2026-07-26",
+        "CP-HOLIDAYS-2025-2026"
+      ]
+    }
+  ],
+  "services": {
+    "DOM.PC": { "name": "Priority", "scope": "DOMESTIC", "guaranteed": true },
+    "DOM.XP": { "name": "Xpresspost", "scope": "DOMESTIC", "guaranteed": true },
+    "DOM.XP.CERT": {
+      "name": "Xpresspost Certified",
+      "scope": "DOMESTIC",
+      "guaranteed": true
+    },
+    "DOM.EP": {
+      "name": "Expedited Parcel",
+      "scope": "DOMESTIC",
+      "guaranteed": true
+    },
+    "DOM.FLAT": {
+      "name": "Flat rate box",
+      "scope": "DOMESTIC",
+      "guaranteed": true,
+      "manualReview": true
+    },
+    "USA.XP": { "name": "Xpresspost USA", "scope": "USA", "guaranteed": true },
+    "INT.XP": {
+      "name": "Xpresspost International",
+      "scope": "INTERNATIONAL",
+      "guaranteed": true
+    },
+    "INT.PW": {
+      "name": "Priority Worldwide",
+      "scope": "INTERNATIONAL",
+      "guaranteed": true
+    },
+    "DOM.RP": {
+      "name": "Regular Parcel",
+      "scope": "DOMESTIC",
+      "guaranteed": false
+    },
+    "USA.EP": {
+      "name": "Expedited Parcel USA",
+      "scope": "USA",
+      "guaranteed": false
+    },
+    "USA.TP": {
+      "name": "Tracked Packet USA",
+      "scope": "USA",
+      "guaranteed": false
+    },
+    "USA.TP.LVM": {
+      "name": "Tracked Packet USA LVM",
+      "scope": "USA",
+      "guaranteed": false
+    },
+    "USA.SP.AIR": {
+      "name": "Small Packet USA Air",
+      "scope": "USA",
+      "guaranteed": false
+    },
+    "USA.SP.SURF": {
+      "name": "Small Packet USA Surface",
+      "scope": "USA",
+      "guaranteed": false
+    },
+    "INT.SP.AIR": {
+      "name": "Small Packet International Air",
+      "scope": "INTERNATIONAL",
+      "guaranteed": false
+    },
+    "INT.SP.SURF": {
+      "name": "Small Packet International Surface",
+      "scope": "INTERNATIONAL",
+      "guaranteed": false
+    },
+    "INT.IP.AIR": {
+      "name": "International Parcel Air",
+      "scope": "INTERNATIONAL",
+      "guaranteed": false
+    },
+    "INT.IP.SURF": {
+      "name": "International Parcel Surface",
+      "scope": "INTERNATIONAL",
+      "guaranteed": false
+    }
+  },
+  "peakPeriods": [
+    {
+      "id": "CP-PEAK-2025-DOMESTIC",
+      "shipDateFrom": "2025-11-03",
+      "shipDateThrough": "2026-01-11",
+      "minimumBusinessDaysLate": 2,
+      "serviceCodes": ["DOM.PC", "DOM.XP", "DOM.XP.CERT", "DOM.EP"],
+      "sourceIds": ["CP-PEAK-2025"]
+    }
+  ],
+  "claimWindowBusinessDays": 30,
+  "hardExclusions": [
+    "RETURN_TO_SENDER",
+    "SENDER_CAUSED_DELAY",
+    "ADDRESS_PROBLEM",
+    "CUSTOMS_DELAY_CONFIRMED"
+  ],
+  "reviewExclusions": [
+    "WEATHER_DISRUPTION",
+    "OPERATIONAL_DISRUPTION",
+    "LABOUR_DISRUPTION",
+    "GUARANTEE_SUSPENSION_POSSIBLE",
+    "CUSTOMS_DELAY_POSSIBLE",
+    "DELIVERY_STANDARD_ADJUSTMENT",
+    "SPECIAL_HANDLING_POSSIBLE",
+    "AIR_STAGE_POSSIBLE",
+    "LABEL_NONCOMPLIANCE_POSSIBLE"
+  ]
+}

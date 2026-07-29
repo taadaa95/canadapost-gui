@@ -9,12 +9,16 @@ const {
 } = require('../lib/canadapost-navigation');
 const { findLoginControls, describeEditableControls } = require('../lib/canadapost-login');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
+const { portalUrl } = require('../lib/origin-policy');
 
 const CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
 const TARGET_TOKEN = String(process.env.ELECTRON_TARGET_TOKEN || '');
 let USERNAME = String(process.env.CANADAPOST_USERNAME || '');
 let PASSWORD = String(process.env.CANADAPOST_PASSWORD || '');
-const LOGIN_URL = 'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en';
+const LOGIN_URL = portalUrl(
+  'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en',
+  '/login'
+);
 
 function emit(type, payload = {}) {
   process.stdout.write(JSON.stringify({ type, ...payload }) + '\n');

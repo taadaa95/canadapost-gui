@@ -21,12 +21,12 @@ try {
   }));
 
   const rows = [
-    { _csvRowNumber: 2, 'Tracking PIN': 'GOOD1', Status: 'ELIGIBLE - DELIVERED LATE', 'Actual Delivery Date': '2026-07-01' },
+    { _csvRowNumber: 2, 'Tracking PIN': 'GOOD1', Status: 'LATE CANDIDATE - DELIVERED', 'Actual Delivery Date': '2026-07-01' },
     { _csvRowNumber: 3, 'Tracking PIN': 'BAD1', Status: 'OVERDUE - IN TRANSIT', 'Actual Delivery Date': '' },
-    { _csvRowNumber: 4, 'Tracking PIN': 'TERMINAL1', Status: 'ELIGIBLE - DELIVERED LATE', 'Actual Delivery Date': '2026-07-01' },
-    { _csvRowNumber: 5, 'Tracking PIN': 'RETRY1', Status: 'ELIGIBLE - DELIVERED LATE', 'Actual Delivery Date': '2026-07-01' },
-    { _csvRowNumber: 6, 'Tracking PIN': 'EXHAUSTED1', Status: 'ELIGIBLE - DELIVERED LATE', 'Actual Delivery Date': '2026-07-01' },
-    { _csvRowNumber: 7, 'Tracking PIN': 'GOOD1', Status: 'ELIGIBLE - DELIVERED LATE', 'Actual Delivery Date': '2026-07-01' }
+    { _csvRowNumber: 4, 'Tracking PIN': 'TERMINAL1', Status: 'LATE CANDIDATE - DELIVERED', 'Actual Delivery Date': '2026-07-01' },
+    { _csvRowNumber: 5, 'Tracking PIN': 'RETRY1', Status: 'LATE CANDIDATE - DELIVERED', 'Actual Delivery Date': '2026-07-01' },
+    { _csvRowNumber: 6, 'Tracking PIN': 'EXHAUSTED1', Status: 'LATE CANDIDATE - DELIVERED', 'Actual Delivery Date': '2026-07-01' },
+    { _csvRowNumber: 7, 'Tracking PIN': 'GOOD1', Status: 'LATE CANDIDATE - DELIVERY ATTEMPTED', 'Actual Delivery Date': '' }
   ];
 
   const selected = getClaimsToRun(rows, tempRoot, dbPath).claims.map(row => row['Tracking PIN']);

@@ -1,8 +1,8 @@
-name: Test
+name: Validate and package
 
 on:
   push:
-    branches: [main]
+    branches: [main, v0.4.0-productization]
   pull_request:
   workflow_dispatch:
 
@@ -11,26 +11,105 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [24]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node }}
           cache: npm
-      - name: Install PHP
-        run: sudo apt-get update && sudo apt-get install -y php-cli
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-      - name: Test
-        run: npm test
-      - name: Reject private runtime files
-        run: |
-          test ! -e config.local.json
-          test ! -e user.ini
-          test ! -e credentials.json
-          test ! -d data
-          test ! -d logs
-          test ! -d node_modules/.cache/browser-profile
+      - run: npm ci
+      - run: npm test
+      - if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - if: runner.os == 'Windows'
+        run: npx playwright install chromium
+      - run: npm run test:mock-portal
+      - run: npm run test:accessibility
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:electron
+      - if: runner.os == 'Windows'
+        run: npm run test:electron
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run coverage
+      - run: npm run secret-scan
+      - run: npm run release:audit
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: release-metadata
+          path: dist/release-metadata
+          if-no-files-found: error
+
+  gitleaks:
+    name: External secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  package-linux:
+    name: Linux package and content audit
+    needs: [test, gitleaks]
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: "0"
+      RELEASE_CHANNEL: beta
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run package:linux
+      - run: npm run package:audit -- dist/packages/linux-unpacked
+      - run: npm run test:packaged-step1
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-beta-unsigned
+          path: dist/packages/*
+          if-no-files-found: error
+
+  package-windows:
+    name: Windows package
+    needs: [test, gitleaks]
+    runs-on: windows-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: "0"
+      RELEASE_CHANNEL: beta
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run package:windows
+      - run: npm run package:audit -- dist/packages/win-unpacked
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-beta-unsigned
+          path: dist/packages/*
+          if-no-files-found: error

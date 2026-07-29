@@ -1,0 +1,4 @@
+Bar Code Id,Postal Zip Code,Imported Order ID,Service Code,Shipment Date,Date Time Trace Inquiry Event,Description Significant Event
+SYNTHETIC000001,K1A 0B1,ORDER-SYNTHETIC,DOM.XP,2026-06-01,2026-06-03,Shipment created
+SYNTHETIC000001,K1A 0B1,DUPLICATE,DOM.XP,2026-06-01,2026-06-03,Duplicate row
+SYNTHETIC000002,H0H 0H0,"ORDER, TWO",DOM.EP,20260602,2026-06-04,"Quoted, description"

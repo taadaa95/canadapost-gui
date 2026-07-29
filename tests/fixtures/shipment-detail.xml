@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shipment-details xmlns="http://www.canadapost.ca/ws/shipment-v8">
+  <shipment-id>SHIP-SYNTHETIC-1</shipment-id><tracking-pin>SYNTHETIC000001</tracking-pin><mailing-date>2026-06-01</mailing-date>
+  <delivery-spec><service-code>DOM.XP</service-code><references><customer-ref-1>ORDER-SYNTHETIC</customer-ref-1></references>
+    <destination><address-details><city>Ottawa</city><prov-state>ON</prov-state><postal-zip-code>K1A 0B1</postal-zip-code></address-details></destination>
+  </delivery-spec>
+</shipment-details>

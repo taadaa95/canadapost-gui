@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "sourceRunId": 62,
+  "totalRecords": 284,
+  "currentCandidateCount": 5,
+  "deliveredOnOrBeforeOriginalStandard": 230,
+  "missingSuccessfulDeliveryEvidence": 35,
+  "laterRevisedDateRecordCount": 24,
+  "recognizableDeliveryMissCount": 0,
+  "originalRuleLateEvidence": [
+    { "id": "audit-01-0123", "standard": "2026-07-16", "revised": "", "firstAttempt": "2026-07-20", "delivered": "2026-07-20", "priorResult": "LATE_CANDIDATE", "suppression": "none" },
+    { "id": "audit-02-1115", "standard": "2026-07-13", "revised": "", "firstAttempt": "2026-07-13", "delivered": "2026-07-14", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-03-1116", "standard": "2026-07-03", "revised": "", "firstAttempt": "2026-07-03", "delivered": "2026-07-04", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-04-2113", "standard": "2026-07-10", "revised": "2026-07-09", "firstAttempt": "2026-07-09", "delivered": "2026-07-11", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-05-2115", "standard": "2026-07-14", "revised": "2026-07-15", "firstAttempt": "2026-07-17", "delivered": "2026-07-17", "priorResult": "LATE_CANDIDATE", "suppression": "none" },
+    { "id": "audit-06-2123", "standard": "2026-07-15", "revised": "", "firstAttempt": "2026-07-16", "delivered": "2026-07-16", "priorResult": "LATE_CANDIDATE", "suppression": "none" },
+    { "id": "audit-07-2128", "standard": "2026-07-17", "revised": "", "firstAttempt": "2026-07-17", "delivered": "2026-07-20", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-08-3119", "standard": "2026-07-08", "revised": "", "firstAttempt": "2026-07-08", "delivered": "2026-07-09", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-09-4115", "standard": "2026-07-13", "revised": "2026-07-14", "firstAttempt": "2026-07-14", "delivered": "2026-07-14", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-10-4122", "standard": "2026-07-17", "revised": "2026-07-22", "firstAttempt": "2026-07-22", "delivered": "2026-07-22", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-11-4125", "standard": "2026-07-20", "revised": "2026-07-21", "firstAttempt": "2026-07-21", "delivered": "2026-07-21", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-12-6110", "standard": "2026-07-15", "revised": "2026-07-13", "firstAttempt": "2026-07-13", "delivered": "2026-07-21", "priorResult": "ON_TIME", "suppression": "first_attempt" },
+    { "id": "audit-13-6118", "standard": "2026-07-06", "revised": "2026-07-07", "firstAttempt": "2026-07-07", "delivered": "2026-07-07", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-14-7122", "standard": "2026-07-17", "revised": "", "firstAttempt": "2026-07-20", "delivered": "2026-07-20", "priorResult": "LATE_CANDIDATE", "suppression": "none" },
+    { "id": "audit-15-8115", "standard": "2026-07-17", "revised": "2026-07-21", "firstAttempt": "2026-07-20", "delivered": "2026-07-20", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-16-8118", "standard": "2026-07-09", "revised": "2026-07-10", "firstAttempt": "2026-07-10", "delivered": "2026-07-10", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-17-9112", "standard": "2026-07-09", "revised": "2026-07-10", "firstAttempt": "2026-07-10", "delivered": "2026-07-10", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-18-9112", "standard": "2026-07-14", "revised": "2026-07-15", "firstAttempt": "2026-07-15", "delivered": "2026-07-15", "priorResult": "ON_TIME", "suppression": "revised_date" },
+    { "id": "audit-19-9128", "standard": "2026-07-17", "revised": "", "firstAttempt": "2026-07-20", "delivered": "2026-07-20", "priorResult": "LATE_CANDIDATE", "suppression": "none" }
+  ]
+}

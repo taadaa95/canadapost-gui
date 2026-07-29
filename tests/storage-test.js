@@ -61,14 +61,25 @@ function testOsCredentialStorage() {
     assert.strictEqual(storage.loadPassword(), 'web-secret');
     assert.strictEqual(storage.passwordStored(), true);
 
-    assert.strictEqual(storage.saveApiCredentials('api-user', 'api-secret').stored, true);
+    assert.strictEqual(storage.saveApiCredentials(' api-user ', ' api-secret ', { environment: 'development' }).stored, true);
     assert.deepStrictEqual(storage.loadApiCredentials(), { username: 'api-user', password: 'api-secret' });
     assert.strictEqual(storage.apiCredentialsStored(), true);
+    assert.strictEqual(storage.apiCredentialEnvironment(), 'development');
+    assert.notStrictEqual(storage.loadPassword(), storage.loadApiCredentials().password, 'website password was copied into API credentials');
+
+    assert.strictEqual(storage.saveTrackingApiCredentials(' current-client ', ' current-secret ', { environment: 'test' }).stored, true);
+    assert.deepStrictEqual(storage.loadTrackingApiCredentials(), { clientId: 'current-client', clientSecret: 'current-secret' });
+    assert.strictEqual(storage.trackingApiCredentialEnvironment(), 'test');
+    assert.strictEqual(storage.trackingApiCredentialsStored(), true);
+    assert.notStrictEqual(storage.loadTrackingApiCredentials().clientId, storage.loadApiCredentials().username, 'legacy API username was copied into the current client ID');
+    assert.notStrictEqual(storage.loadTrackingApiCredentials().clientSecret, storage.loadApiCredentials().password, 'legacy API password was copied into the current client secret');
 
     const rawCredentialText = fs.readFileSync(storage.CREDENTIALS_PATH, 'utf8');
     assert.ok(!rawCredentialText.includes('web-secret'));
     assert.ok(!rawCredentialText.includes('api-user'));
     assert.ok(!rawCredentialText.includes('api-secret'));
+    assert.ok(!rawCredentialText.includes('current-client'));
+    assert.ok(!rawCredentialText.includes('current-secret'));
     assert.ok(rawCredentialText.includes('electron-safe-storage-v1'));
 
     const publicConfig = storage.publicConfig();
@@ -78,6 +89,9 @@ function testOsCredentialStorage() {
     storage.savePassword('', false);
     assert.strictEqual(storage.passwordStored(), false);
     assert.strictEqual(storage.apiCredentialsStored(), true);
+    storage.clearTrackingApiCredentials();
+    assert.strictEqual(storage.trackingApiCredentialsStored(), false);
+    assert.strictEqual(storage.apiCredentialsStored(), true, 'clearing current credentials must preserve deprecated legacy credentials');
   } finally {
     delete require.cache[storageModulePath];
     fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -104,19 +118,28 @@ function testDeviceLocalCredentialFallback() {
     assert.strictEqual(storage.loadPassword(), 'persistent-web-secret');
     assert.strictEqual(storage.passwordStored(), true);
 
-    const apiResult = storage.saveApiCredentials('persistent-api-user', 'persistent-api-secret');
+    const apiResult = storage.saveApiCredentials('persistent-api-user', 'persistent-api-secret', { environment: 'production' });
     assert.strictEqual(apiResult.stored, true);
     assert.strictEqual(apiResult.backend, 'local-aes-gcm');
     assert.deepStrictEqual(storage.loadApiCredentials(), {
       username: 'persistent-api-user',
       password: 'persistent-api-secret'
     });
+    assert.strictEqual(storage.apiCredentialEnvironment(), 'production');
+
+    const trackingResult = storage.saveTrackingApiCredentials('persistent-current-client', 'persistent-current-secret', { environment: 'production' });
+    assert.strictEqual(trackingResult.stored, true);
+    assert.strictEqual(trackingResult.backend, 'local-aes-gcm');
+    assert.deepStrictEqual(storage.loadTrackingApiCredentials(), { clientId: 'persistent-current-client', clientSecret: 'persistent-current-secret' });
+    assert.strictEqual(storage.trackingApiCredentialEnvironment(), 'production');
 
     const rawCredentialText = fs.readFileSync(storage.CREDENTIALS_PATH, 'utf8');
     assert.ok(rawCredentialText.includes('local-aes-256-gcm-v1'));
     assert.ok(!rawCredentialText.includes('persistent-web-secret'));
     assert.ok(!rawCredentialText.includes('persistent-api-user'));
     assert.ok(!rawCredentialText.includes('persistent-api-secret'));
+    assert.ok(!rawCredentialText.includes('persistent-current-client'));
+    assert.ok(!rawCredentialText.includes('persistent-current-secret'));
 
     const key = fs.readFileSync(storage.CREDENTIAL_KEY_PATH);
     assert.strictEqual(key.length, 32);
@@ -131,6 +154,10 @@ function testDeviceLocalCredentialFallback() {
     assert.deepStrictEqual(storage.loadApiCredentials(), {
       username: 'persistent-api-user',
       password: 'persistent-api-secret'
+    });
+    assert.deepStrictEqual(storage.loadTrackingApiCredentials(), {
+      clientId: 'persistent-current-client',
+      clientSecret: 'persistent-current-secret'
     });
     const publicConfig = storage.publicConfig();
     assert.strictEqual(publicConfig.passwordStored, true);
