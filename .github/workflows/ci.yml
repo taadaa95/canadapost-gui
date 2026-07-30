@@ -31,7 +31,10 @@ jobs:
       - if: runner.os == 'Windows'
         run: npx playwright install chromium
       - run: npm test
-      - run: npm run test:mock-portal
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:mock-portal
+      - if: runner.os == 'Windows'
+        run: npm run test:mock-portal
       - run: npm run test:accessibility
       - if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:electron
