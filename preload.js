@@ -1,5 +1,44 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function checkForUpdates() {
+  return ipcRenderer.invoke('updates:open');
+}
+
+// The current renderer still contains the former "open update page" click
+// handler. Capture this one control until renderer.js is decomposed, preventing
+// that legacy handler from overwriting the result with obsolete status text.
+window.addEventListener('DOMContentLoaded', () => {
+  const button = document.getElementById('checkForUpdates');
+  if (!button) return;
+  button.addEventListener('click', async event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const status = document.getElementById('settingsStatus');
+    if (status) {
+      status.textContent = 'Checking for updates…';
+      status.className = 'pill';
+    }
+    const result = await checkForUpdates();
+    if (!status) return;
+    if (!result?.ok) {
+      status.textContent = result?.error || 'Update check failed';
+      status.className = 'pill bad';
+    } else if (result.installing) {
+      status.textContent = 'Installing update';
+      status.className = 'pill good';
+    } else if (result.downloaded) {
+      status.textContent = 'Update downloaded';
+      status.className = 'pill good';
+    } else if (result.available) {
+      status.textContent = 'Update available';
+      status.className = 'pill warn';
+    } else {
+      status.textContent = 'Application is up to date';
+      status.className = 'pill good';
+    }
+  }, { capture: true });
+}, { once: true });
+
 contextBridge.exposeInMainWorld('cpApp', {
   loadConfig: () => ipcRenderer.invoke('config:load'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
@@ -11,7 +50,7 @@ contextBridge.exposeInMainWorld('cpApp', {
   openDataFolder: () => ipcRenderer.invoke('folder:openData'),
   openLogsFolder: () => ipcRenderer.invoke('folder:openLogs'),
   openStep3Diagnostics: () => ipcRenderer.invoke('folder:openStep3Diagnostics'),
-  openUpdatePage: () => ipcRenderer.invoke('updates:open'),
+  openUpdatePage: checkForUpdates,
   loadEvidence: (payload) => ipcRenderer.invoke('evidence:load', payload),
   openEvidence: (filePath) => ipcRenderer.invoke('evidence:open', filePath),
   getDashboard: () => ipcRenderer.invoke('dashboard:get'),
