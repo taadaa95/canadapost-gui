@@ -57,7 +57,9 @@ for (const required of [
     throw new Error(`Packaged external worker dependency is missing: ${required}`);
   }
 }
-const entries = asar.listPackage(archive).map(value => value.replace(/^\//, '')).filter(Boolean);
+const entries = asar.listPackage(archive)
+  .map(value => value.replace(/\\/g, '/').replace(/^\/+/, ''))
+  .filter(Boolean);
 const prohibited = entries.filter(entry => isProhibited(entry) && entry !== 'node_modules' && !entry.startsWith('node_modules/'));
 if (prohibited.length) throw new Error(`Packaged application contains prohibited paths: ${prohibited.join(', ')}`);
 const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'canadapost-asar-audit-'));
