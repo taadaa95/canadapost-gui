@@ -34,13 +34,20 @@ const manifest = updater.validateManifest({
   applicationVersion: '0.4.1',
   channel: 'stable',
   artifacts: [
-    { file: 'Canada Post Claim Runner-0.4.1-linux-x86_64-stable.AppImage', bytes: 123, sha256: 'a'.repeat(64) },
-    { file: 'Canada Post Claim Runner-0.4.1-win-x64-stable.exe', bytes: 456, sha256: 'b'.repeat(64) }
+    { file: 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64-stable.AppImage', bytes: 123, sha256: 'a'.repeat(64) },
+    { file: 'Canada.Post.Claim.Runner-0.4.1-win-x64-stable.exe', bytes: 456, sha256: 'b'.repeat(64) }
   ]
 }, '0.4.1', 'stable');
 assert.strictEqual(updater.selectArtifact(manifest, 'linux', 'x64').file.endsWith('.AppImage'), true);
 assert.strictEqual(updater.selectArtifact(manifest, 'win32', 'x64').file.endsWith('.exe'), true);
 assert.throws(() => updater.selectArtifact(manifest, 'linux', 'arm64'), /not supported/i);
+
+const snapshot = updater.progressSnapshot(25, 100, 1000, 2000);
+assert.strictEqual(snapshot.received, 25);
+assert.strictEqual(snapshot.total, 100);
+assert.strictEqual(snapshot.ratio, 0.25);
+assert.strictEqual(snapshot.bytesPerSecond, 25);
+assert.strictEqual(snapshot.etaSeconds, 3);
 
 (async () => {
   const bytes = Buffer.from('synthetic updater artifact');
@@ -50,7 +57,7 @@ assert.throws(() => updater.selectArtifact(manifest, 'linux', 'arm64'), /not sup
     repository: 'canadapost-claim-runner-releases',
     manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
   };
-  const file = 'Canada Post Claim Runner-0.4.1-beta.1-linux-x86_64-beta.AppImage';
+  const file = 'Canada.Post.Claim.Runner-0.4.1-beta.1-linux-x86_64-beta.AppImage';
   const payload = {
     format: 'canadapost-claim-runner-artifact-manifest', version: 1,
     applicationVersion: '0.4.1-beta.1', channel: 'beta',
