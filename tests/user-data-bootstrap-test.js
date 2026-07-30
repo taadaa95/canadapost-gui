@@ -20,6 +20,7 @@ const { mutablePathManifest, validateMutablePathManifest } = require('../lib/mut
 const claimDb = require('../lib/claim-database');
 
 const repositoryRoot = path.resolve(__dirname, '..');
+const POSIX_SECURITY_TESTS = process.platform !== 'win32';
 
 function privateDirectory(parent, name) {
   const directory = path.join(parent, name);
@@ -113,17 +114,19 @@ function createLegacyDatabase(filePath) {
     rejectsCode(() => validate(normalChild, normal), 'ISOLATED_PATH_DEFAULT_PROFILE');
     rejectsCode(() => validate(repositoryRoot, normal), 'ISOLATED_PATH_REPOSITORY');
 
-    const symlinkProfile = path.join(temporary, 'symlink-profile');
-    fs.symlinkSync(isolated, symlinkProfile);
-    rejectsCode(() => validate(symlinkProfile, normal), 'ISOLATED_PATH_SYMLINK');
-    const escapeRoot = privateDirectory(temporary, 'escape-profile');
-    fs.symlinkSync(temporary, path.join(escapeRoot, 'escape'));
-    rejectsCode(() => validate(escapeRoot, normal), 'ISOLATED_PATH_SYMLINK_ESCAPE');
+    if (POSIX_SECURITY_TESTS) {
+      const symlinkProfile = path.join(temporary, 'symlink-profile');
+      fs.symlinkSync(isolated, symlinkProfile);
+      rejectsCode(() => validate(symlinkProfile, normal), 'ISOLATED_PATH_SYMLINK');
+      const escapeRoot = privateDirectory(temporary, 'escape-profile');
+      fs.symlinkSync(temporary, path.join(escapeRoot, 'escape'));
+      rejectsCode(() => validate(escapeRoot, normal), 'ISOLATED_PATH_SYMLINK_ESCAPE');
 
-    const unsafe = privateDirectory(temporary, 'unsafe-profile');
-    fs.chmodSync(unsafe, 0o777);
-    rejectsCode(() => validate(unsafe, normal), 'ISOLATED_PATH_WORLD_WRITABLE');
-    fs.chmodSync(unsafe, 0o700);
+      const unsafe = privateDirectory(temporary, 'unsafe-profile');
+      fs.chmodSync(unsafe, 0o777);
+      rejectsCode(() => validate(unsafe, normal), 'ISOLATED_PATH_WORLD_WRITABLE');
+      fs.chmodSync(unsafe, 0o700);
+    }
     const asarDirectory = privateDirectory(temporary, 'app.asar.unpacked');
     rejectsCode(() => validate(asarDirectory, normal), 'ISOLATED_PATH_APPLICATION_BUNDLE');
     const appImageMount = privateDirectory(temporary, 'appimage-mount');
@@ -156,11 +159,13 @@ function createLegacyDatabase(filePath) {
 
     const manifest = validateMutablePathManifest(bootstrap, initialized.userDataRoot);
     for (const candidate of Object.values(manifest)) assert.doesNotThrow(() => assertContainedPath(initialized.userDataRoot, candidate));
-    const outside = privateDirectory(temporary, 'outside');
-    const mutableLink = path.join(isolated, 'mutable-link');
-    fs.symlinkSync(outside, mutableLink);
-    rejectsCode(() => assertContainedPath(isolated, path.join(mutableLink, 'escape.sqlite')), 'ISOLATED_MUTABLE_PATH_SYMLINK_ESCAPE');
-    fs.unlinkSync(mutableLink);
+    if (POSIX_SECURITY_TESTS) {
+      const outside = privateDirectory(temporary, 'outside');
+      const mutableLink = path.join(isolated, 'mutable-link');
+      fs.symlinkSync(outside, mutableLink);
+      rejectsCode(() => assertContainedPath(isolated, path.join(mutableLink, 'escape.sqlite')), 'ISOLATED_MUTABLE_PATH_SYMLINK_ESCAPE');
+      fs.unlinkSync(mutableLink);
+    }
 
     fs.writeFileSync(path.join(normal, 'sentinel'), 'NORMAL PROFILE MUST REMAIN UNCHANGED\n', { mode: 0o600 });
     const defaultBefore = digestDirectory(normal);
