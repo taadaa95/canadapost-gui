@@ -164,9 +164,16 @@ const { createMockPortal } = require('../mock-portal/server');
     const electronDiagnostics = fs.readFileSync(path.join(runDirectory, 'electron-browser.jsonl'), 'utf8');
     const timeline = fs.readFileSync(path.join(runDirectory, 'timeline.jsonl'), 'utf8');
     for (const expected of [
-      'browser-visibility-measurement', 'browser-child-view-attached', 'worker-browser-display-ready',
+      'browser-visibility-measurement', 'worker-browser-display-ready',
       'manual-verification-detected', 'verification-browser-display-ready'
     ]) assert(electronDiagnostics.includes(expected), `missing visibility diagnostic ${expected}`);
+    // Windows may attach the native view before the active run diagnostic directory
+    // is selected. The live state assertions above prove attachment; require either
+    // the attachment transition or the subsequent visible-view diagnostic here.
+    assert(
+      electronDiagnostics.includes('browser-child-view-attached') || electronDiagnostics.includes('browser-view-visible'),
+      'missing native browser attachment/visibility diagnostic'
+    );
     assert(timeline.includes('manual-verification-display-ready'));
     assert(timeline.includes('safety-barrier-reached'));
     const diagnosticText = `${electronDiagnostics}\n${timeline}`;
