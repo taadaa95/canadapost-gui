@@ -24,7 +24,7 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.4');
+assert.strictEqual(pkg.version, '0.4.0-dev.5');
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
 assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
