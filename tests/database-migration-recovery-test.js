@@ -245,7 +245,7 @@ async function migrateAndRepeat(filePath, options = {}, expected = {}) {
     assert.doesNotMatch(diagnosticText, /SYNTHETIC-MIGRATION-PIN|authorization|cookie/i);
     const diagnosticPath = startupDatabase.writeDiagnostic(path.join(root, 'logs'), diagnostic);
     assert.ok(fs.existsSync(diagnosticPath));
-    assert.strictEqual(fs.statSync(diagnosticPath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(diagnosticPath).mode & 0o777, 0o600);
 
     const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
     assert.match(mainSource, /await claimDb\.initializeDatabase\(DB_PATH/);
