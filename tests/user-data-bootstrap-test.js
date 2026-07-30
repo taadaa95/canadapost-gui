@@ -22,6 +22,10 @@ const claimDb = require('../lib/claim-database');
 const repositoryRoot = path.resolve(__dirname, '..');
 const POSIX_SECURITY_TESTS = process.platform !== 'win32';
 
+function canonicalPath(value) {
+  try { return fs.realpathSync.native(value); } catch (_) { return fs.realpathSync(value); }
+}
+
 function privateDirectory(parent, name) {
   const directory = path.join(parent, name);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -91,7 +95,7 @@ function createLegacyDatabase(filePath) {
     const isolated = privateDirectory(temporary, 'isolated-profile');
     const valid = validate(isolated, normal);
     assert.strictEqual(valid.active, true);
-    assert.strictEqual(valid.userDataRoot, fs.realpathSync(isolated));
+    assert.strictEqual(valid.userDataRoot, canonicalPath(isolated));
 
     assert.deepStrictEqual(validateIsolatedOverride({ env: {}, defaultUserData: normal, repositoryRoot }), {
       active: false,
@@ -143,7 +147,7 @@ function createLegacyDatabase(filePath) {
     const initialized = bootstrap.initialize(fakeApp, { env: environment(isolated), repositoryRoot, forbiddenPaths: [] });
     assert.strictEqual(initialized.active, true);
     assert.strictEqual(events[0], 'get:userData');
-    assert.ok(events.some(value => value === `set:userData:${fs.realpathSync(isolated)}`));
+    assert.ok(events.some(value => value === `set:userData:${canonicalPath(isolated)}`));
 
     const normalEvents = [];
     const normalBootstrap = createUserDataBootstrap();
@@ -204,7 +208,7 @@ function createLegacyDatabase(filePath) {
       env: { ...process.env, ...environment(childProfile) }, encoding: 'utf8'
     });
     const childResult = JSON.parse(childOutput);
-    assert.strictEqual(childResult.root, fs.realpathSync(childProfile));
+    assert.strictEqual(childResult.root, canonicalPath(childProfile));
     assert.strictEqual(childResult.first, 'get:userData');
 
     const html = fs.readFileSync(path.join(repositoryRoot, 'index.html'), 'utf8');
