@@ -56,8 +56,9 @@ function testOsCredentialStorage() {
     assert.ok(!Object.prototype.hasOwnProperty.call(config, 'arbitrary'));
 
     const passwordResult = storage.savePassword('web-secret', true);
+    const expectedBackend = process.platform === 'linux' ? 'kwallet6' : 'os-crypt';
     assert.strictEqual(passwordResult.stored, true);
-    assert.strictEqual(passwordResult.backend, 'kwallet6');
+    assert.strictEqual(passwordResult.backend, expectedBackend);
     assert.strictEqual(storage.loadPassword(), 'web-secret');
     assert.strictEqual(storage.passwordStored(), true);
 
@@ -85,6 +86,7 @@ function testOsCredentialStorage() {
     const publicConfig = storage.publicConfig();
     assert.strictEqual(publicConfig.secureCredentialStorage, true);
     assert.strictEqual(publicConfig.credentialStorageMode, 'os-keyring');
+    assert.strictEqual(publicConfig.credentialBackend, expectedBackend);
 
     storage.savePassword('', false);
     assert.strictEqual(storage.passwordStored(), false);
