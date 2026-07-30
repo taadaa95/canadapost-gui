@@ -26,6 +26,7 @@ files:
   - lib/**/*.js
   - config/policy-rules.json
   - config/holiday-calendar.json
+  - config/update-source.json
   - locales/*.json
   - scripts/*.js
   - mock-portal/**

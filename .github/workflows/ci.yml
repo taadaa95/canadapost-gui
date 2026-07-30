@@ -2,7 +2,7 @@ name: Validate and package
 
 on:
   push:
-    branches: [main, v0.4.0-productization]
+    branches: [main, v0.4.0-productization, feature/github-release-updater]
   pull_request:
   workflow_dispatch:
 
@@ -69,6 +69,7 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
+      RELEASE_PLATFORM: linux
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,7 +86,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-beta-unsigned
-          path: dist/packages/*
+          path: |
+            dist/packages/*
+            dist/release-metadata/package-manifest-linux.json
+            dist/release-metadata/SHA256SUMS-linux.txt
           if-no-files-found: error
 
   package-windows:
@@ -95,6 +99,7 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
+      RELEASE_PLATFORM: windows
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
@@ -111,5 +116,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-beta-unsigned
-          path: dist/packages/*
+          path: |
+            dist/packages/*
+            dist/release-metadata/package-manifest-windows.json
+            dist/release-metadata/SHA256SUMS-windows.txt
           if-no-files-found: error

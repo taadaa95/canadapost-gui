@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, dialog } = require('electron');
+const { app, dialog, ipcMain, BrowserWindow, shell } = require('electron');
 const userDataBootstrap = require('./lib/user-data-bootstrap');
 
 let bootstrapState = null;
@@ -40,5 +40,13 @@ if (bootstrapState) {
     });
   } else {
     require('./main');
+    require('./lib/github-release-updater').registerGithubReleaseUpdater({
+      app,
+      ipcMain,
+      dialog,
+      BrowserWindow,
+      shell,
+      isolated: Boolean(bootstrapState.active)
+    });
   }
 }
