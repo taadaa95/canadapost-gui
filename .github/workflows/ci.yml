@@ -41,7 +41,8 @@ jobs:
       - if: runner.os == 'Windows'
         run: npm run test:electron
       - run: npm run lint
-      - run: npm run format:check
+      - if: runner.os == 'Linux'
+        run: npm run format:check
       - run: npm run typecheck
       - run: npm run coverage
       - run: npm run secret-scan
