@@ -195,6 +195,7 @@
   "step3.browser.preparingStatus": "Preparing browser",
   "step3.browser.opening": "Opening Canada Post",
   "step3.browser.loaded": "Canada Post loaded",
+  "step3.browser.waitingManualAction": "Waiting for manual action",
   "step3.browser.idleStatus": "Browser idle",
   "step3.browser.hidden": "Canada Post is hidden while the browser area is offscreen.",
   "step3.browser.hiddenStatus": "Browser hidden",

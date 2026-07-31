@@ -23,6 +23,23 @@ assert.doesNotMatch(startSubmit, /step3-run-start/, 'renderer must not expose th
 assert.match(startSubmit, /deactivateBuiltinBrowser\('validating-selection'/);
 assert.match(renderer, /if \(!builtinBrowserRunActive\)[\s\S]*?hideBuiltinBrowser/);
 assert.match(renderer, /onBuiltinBrowserVisibilityRequest[\s\S]*?activate: true/);
+assert.match(renderer, /let builtinBrowserManualActionPending = false/);
+assert.match(
+  renderer,
+  /if \(result\.visible && builtinBrowserRunActive\)[\s\S]*?builtinBrowserManualActionPending[\s\S]*?waitingForManualActionText/
+);
+assert.match(
+  renderer,
+  /type === 'manual_verification_required'[\s\S]*?builtinBrowserManualActionPending = true[\s\S]*?waitingForManualActionText/
+);
+assert.match(
+  renderer,
+  /type === 'claim_start'[\s\S]*?builtinBrowserManualActionPending = false/
+);
+assert.match(
+  renderer,
+  /onBrowserActivity[\s\S]*?builtinBrowserManualActionPending && builtinBrowserDisplayState\.visible[\s\S]*?waitingForManualActionText/
+);
 assert.match(main, /function isLoadedCanadaPostUrl[\s\S]*?!isBuiltinMarkerUrl/);
 assert.match(main, /function styleBuiltinBrowserMarker[\s\S]*?#07101f/);
 assert.doesNotMatch(main, /emitBuiltinBrowserActivity\(false, 'Canada Post page ready'\)/);

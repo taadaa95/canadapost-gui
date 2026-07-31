@@ -217,6 +217,7 @@ let builtinBrowserRepositionFrame = 0;
 let builtinBrowserResizeObserver = null;
 let builtinBrowserDisplayState = { visible: false, reason: 'not-created' };
 let builtinBrowserRunActive = false;
+let builtinBrowserManualActionPending = false;
 
 function useBuiltinBrowser() {
   return $('builtinBrowser') ? $('builtinBrowser').checked : false;
@@ -329,6 +330,10 @@ function builtinBrowserBounds() {
   };
 }
 
+function waitingForManualActionText() {
+  return tr('step3.browser.waitingManualAction', 'Waiting for manual action');
+}
+
 function idleBrowserPlaceholderText() {
   const summary = step3QueueController.snapshot();
   if (!summary.total) return tr('step3.browser.noCandidates', 'No late-delivery candidates are currently available.');
@@ -340,7 +345,11 @@ function applyBuiltinBrowserDisplayState(result = {}) {
   builtinBrowserDisplayState = { ...builtinBrowserDisplayState, ...result };
   if (result.visible && builtinBrowserRunActive) {
     setBrowserSlotPlaceholder(false);
-    if (!$('builtinBrowserActivity')?.classList.contains('active')) setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    if (builtinBrowserManualActionPending) {
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
+    } else if (!$('builtinBrowserActivity')?.classList.contains('active')) {
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    }
     return;
   }
   if (result.reason === 'browser-preparing' && builtinBrowserRunActive) {
@@ -364,6 +373,7 @@ function applyBuiltinBrowserDisplayState(result = {}) {
 
 async function deactivateBuiltinBrowser(reason = 'run-inactive', placeholderText = '') {
   builtinBrowserRunActive = false;
+  builtinBrowserManualActionPending = false;
   if (window.cpApp?.hideBuiltinBrowser) await window.cpApp.hideBuiltinBrowser().catch(() => {});
   applyBuiltinBrowserDisplayState({ ok: true, visible: false, reason });
   if (placeholderText) setBrowserSlotPlaceholder(true, placeholderText);
@@ -1579,6 +1589,7 @@ function describeEvent(stage, event) {
       return `Detailed diagnostics complete: ${event.summaryPath || event.directory || 'saved'}`;
     }
     if (type === 'submit_start') {
+      builtinBrowserManualActionPending = false;
       setBuiltinBrowserActivity(true, 'Preparing Canada Post claim workflow…');
       operations.submitStartedAt = Date.now();
       state.submitTotal = event.total || 0;
@@ -1587,8 +1598,9 @@ function describeEvent(stage, event) {
       return `Claim submission started. ${state.submitTotal} claims.`;
     }
     if (type === 'manual_verification_required') {
-      setBuiltinBrowserStatus('Manual verification required', 'bad');
-      finishBuiltinBrowserActivity('Manual verification required');
+      builtinBrowserManualActionPending = true;
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
+      finishBuiltinBrowserActivity(waitingForManualActionText());
       updateCurrentItem({ step: 'Manual verification required', result: 'Paused for operator', kind: 'captcha' });
       setStatus('Manual verification required', 'bad', 'step3');
       setAction(event.message || 'Complete verification in the visible built-in browser. Step 3 is paused.', 'step3');
@@ -1596,6 +1608,7 @@ function describeEvent(stage, event) {
       return event.message || 'Manual verification required. The built-in browser has been brought into view.';
     }
     if (type === 'manual_verification_display_failed') {
+      builtinBrowserManualActionPending = false;
       setBuiltinBrowserStatus('Browser display error', 'bad');
       finishBuiltinBrowserActivity('Browser display error', 'error');
       setStatus('Failed', 'bad', 'step3');
@@ -1603,6 +1616,7 @@ function describeEvent(stage, event) {
       return event.message || 'Manual verification could not be displayed safely; Step 3 stopped.';
     }
     if (type === 'claim_start') {
+      builtinBrowserManualActionPending = false;
       setBuiltinBrowserActivity(true, `Opening claim ${event.index || ''}${event.total ? ` of ${event.total}` : ''}…`);
       updateCurrentItem({
         tracking: event.trackingNumber || '—',
@@ -1618,6 +1632,8 @@ function describeEvent(stage, event) {
       return `Claim ${event.index}/${event.total}: ${event.trackingNumber}`;
     }
     if (type === 'captcha_detected') {
+      builtinBrowserManualActionPending = true;
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
       finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
       updateCurrentItem({ step: 'CAPTCHA detected', result: 'Paused for manual solve', kind: 'captcha' });
       setStatus('CAPTCHA', 'bad', 'step3');
@@ -1633,12 +1649,15 @@ function describeEvent(stage, event) {
       return `CAPTCHA detected for ${event.trackingNumber || 'current claim'} — solve it manually in the visible browser. The app is paused.${event.screenshotPath ? ` Screenshot saved: ${event.screenshotPath}` : ' Screenshot skipped in built-in browser mode to keep focus.'}`;
     }
     if (type === 'captcha_waiting') {
+      builtinBrowserManualActionPending = true;
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
       finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
       updateCurrentItem({ step: 'CAPTCHA still active', result: 'Waiting for manual solve', kind: 'already' });
       setAction(event.message || 'Still waiting for CAPTCHA solve.', 'step3');
       return event.message || `Still waiting for CAPTCHA solve for ${event.trackingNumber || 'current claim'}.`;
     }
     if (type === 'captcha_cleared') {
+      builtinBrowserManualActionPending = false;
       setBuiltinBrowserActivity(true, 'CAPTCHA cleared — resuming…');
       updateCurrentItem({ step: 'CAPTCHA cleared', result: 'Resuming', kind: '' });
       setStatus('Running', 'warn', 'step3');
@@ -1646,6 +1665,7 @@ function describeEvent(stage, event) {
       return event.message || `CAPTCHA cleared for ${event.trackingNumber || 'current claim'}. Resuming.`;
     }
     if (type === 'claim_wait') {
+      builtinBrowserManualActionPending = false;
       setBuiltinBrowserActivity(true, 'Waiting for Canada Post confirmation…');
       updateCurrentItem({ tracking: event.trackingNumber || operations.current.tracking, step: 'Waiting for Canada Post result', result: 'In progress', kind: '' });
       setAction(`Waiting for Canada Post result for ${event.trackingNumber}. Timeout: ${Math.round((event.ms || 0) / 1000)} seconds.`);
@@ -1714,6 +1734,7 @@ function describeEvent(stage, event) {
       return `ERROR row ${event.row}, ${event.trackingNumber}: ${event.message}`;
     }
     if (type === 'submit_complete') {
+      builtinBrowserManualActionPending = false;
       finishBuiltinBrowserActivity('Submission run complete');
       operations.finishedAt = Date.now();
       const dryReady = Number(event.dryRunReady || 0);
@@ -3341,14 +3362,25 @@ window.cpApp.onUpdateProgress?.(payload => {
 window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
   if (active) {
     builtinBrowserRunActive = true;
-    setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    if (builtinBrowserManualActionPending) {
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
+    } else {
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    }
     setBuiltinBrowserActivity(true, text || tr('step3.browser.opening', 'Opening Canada Post'), kind || '');
   } else {
     const loaded = /Canada Post page (?:ready|loaded)/i.test(String(text || ''));
     finishBuiltinBrowserActivity(text || (loaded ? tr('step3.browser.loaded', 'Canada Post loaded') : tr('step3.browser.idleStatus', 'Browser idle')), kind || '');
-    if (kind === 'error') setBuiltinBrowserStatus(tr('step3.browser.navigationFailed', 'Browser navigation failed'), 'bad');
-    else if (loaded && builtinBrowserDisplayState.visible) setBuiltinBrowserStatus(tr('step3.browser.loaded', 'Canada Post loaded'), 'good');
-    else if (builtinBrowserRunActive) setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    if (kind === 'error') {
+      builtinBrowserManualActionPending = false;
+      setBuiltinBrowserStatus(tr('step3.browser.navigationFailed', 'Browser navigation failed'), 'bad');
+    } else if (builtinBrowserManualActionPending && builtinBrowserDisplayState.visible) {
+      setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
+    } else if (loaded && builtinBrowserDisplayState.visible) {
+      setBuiltinBrowserStatus(tr('step3.browser.loaded', 'Canada Post loaded'), 'good');
+    } else if (builtinBrowserRunActive) {
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    }
   }
 });
 

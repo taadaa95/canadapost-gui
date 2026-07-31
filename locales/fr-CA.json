@@ -195,6 +195,7 @@
   "step3.browser.preparingStatus": "Préparation du navigateur",
   "step3.browser.opening": "Ouverture de Postes Canada",
   "step3.browser.loaded": "Postes Canada chargé",
+  "step3.browser.waitingManualAction": "En attente d’une intervention manuelle",
   "step3.browser.idleStatus": "Navigateur inactif",
   "step3.browser.hidden": "Postes Canada est masqué lorsque la zone du navigateur est hors écran.",
   "step3.browser.hiddenStatus": "Navigateur masqué",
