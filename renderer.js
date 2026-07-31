@@ -10,8 +10,14 @@ const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page:
 let setupWizardShown = false;
 let activeMessages = {};
 const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
+const step3QueueController = window.Step3Queue.createController();
 
 function tr(key, fallback = '') { return activeMessages[key] || fallback || key; }
+function trf(key, values = {}, fallback = '') {
+  return tr(key, fallback).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => (
+    Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match
+  ));
+}
 
 async function applyLocale(locale) {
   const result = await window.cpApp.loadLocale(locale);
@@ -32,10 +38,19 @@ async function applyLocale(locale) {
     appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title',
     setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
     restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession', financialReportTitle: 'financial.title',
-    clearHistoryFilters: 'history.clearFilters'
+    clearHistoryFilters: 'history.clearFilters', claimQueueTitle: 'step3.candidateQueue',
+    selectAllClaims: 'step3.selectAll', clearClaimSelection: 'step3.clearSelection',
+    runSubmitOnly: 'step3.submitSelected', privacyDataTitle: 'privacy.title',
+    privacyDataIntro: 'privacy.intro', previewPrivacyData: 'privacy.preview',
+    deletePrivacyData: 'privacy.delete', privacyTrackingLabel: 'privacy.trackingLabel',
+    privacyDateFromLabel: 'privacy.dateFrom', privacyDateToLabel: 'privacy.dateTo',
+    privacyAllRecordsLabel: 'privacy.allRecords', privacyDestructiveConfirmLabel: 'privacy.destructiveConfirm',
+    privacyTypedPhraseLabel: 'privacy.typedPhraseLabel', privacySecondConfirmLabel: 'privacy.secondConfirm',
+    privacyExternalCopiesNotice: 'privacy.externalCopies'
   };
   for (const [id, key] of Object.entries(textTargets)) if ($(id)) $(id).textContent = tr(key, $(id).textContent);
   if ($('clearHistoryFilters')) $('clearHistoryFilters').setAttribute('aria-label', tr('history.clearFiltersLabel', 'Clear History filters'));
+  window.Step2Copy.apply(document, key => tr(key));
 }
 
 function applyTheme(theme) {
@@ -425,7 +440,8 @@ const state = {
   dryRunDefault: false,
   claimQueueItems: [],
   claimQueueLoaded: false,
-  step3Preflight: null
+  step3Preflight: null,
+  privacyPreview: null
 };
 
 const operations = {
@@ -1422,8 +1438,8 @@ function describeEvent(stage, event) {
     }
     if (type === 'pin_late') {
       const pin = trackingDisplayPin(event);
-      setAction(`Late package found: ${pin}. Added to claims.csv.`);
-      updateCurrentItem({ tracking: pin, step: 'Late candidate found', result: 'Added to claims.csv', kind: 'submitted' });
+      setAction(`Late-delivery candidate found: ${pin}. Recorded in the database candidate queue.`);
+      updateCurrentItem({ tracking: pin, step: 'Late-delivery candidate found', result: 'Recorded in candidate queue', kind: 'submitted' });
       return `${pin} — LATE — successful delivery after delivery standard${trackingDateSuffix(event)}`;
     }
     if (type === 'pin_on_time') {
@@ -1521,7 +1537,7 @@ function describeEvent(stage, event) {
       state.onTime = Number(event.onTimeCount || 0);
       state.notDelivered = Number(event.notDeliveredCount || 0);
       state.trackingErrors = errors;
-      updateCurrentItem({ step: 'Tracking complete', result: `${eligible} eligible claims` });
+      updateCurrentItem({ step: 'Tracking complete', result: `${eligible} late-delivery candidates` });
       setStatus(errors > 0 ? 'Warnings' : 'Complete', errors > 0 ? 'warn' : 'good', 'step2');
       setAction(`Tracking complete: ${eligible} late, ${state.onTime} on time, ${state.notDelivered} not delivered, ${review} review required, ${errors} errors.`, 'step2');
       return `Tracking complete. Checked: ${state.checked}. Late candidates: ${eligible}. On time: ${state.onTime}. Not delivered: ${state.notDelivered}. Delivered but unclassifiable: ${Number(event.deliveredReviewCount || 0)}. Review required: ${review}. Overdue/in transit: ${overdue}. Errors: ${errors}. Counters reconciled: ${event.countersReconciled ? 'yes' : 'no'}.`;
@@ -1927,7 +1943,7 @@ function renderManualReviews(items = []) {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = 'No eligibility decisions require manual review.';
+    empty.textContent = 'No classification records require manual review.';
     root.appendChild(empty);
     return;
   }
@@ -1940,7 +1956,7 @@ function renderManualReviews(items = []) {
     row.appendChild(historyCell(item.reason_codes_json || item.automated_classification || 'Manual review'));
     const actions = document.createElement('div');
     actions.className = 'history-actions';
-    for (const [label, action, className] of [['Add note', 'note', 'secondary'], ['Resolve eligible', 'resolved_eligible', 'success'], ['Resolve not eligible', 'resolved_not_eligible', 'warning'], ['Defer', 'resolved_deferred', 'secondary']]) {
+    for (const [label, action, className] of [['Add note', 'note', 'secondary'], ['Resolve as candidate', 'resolved_eligible', 'success'], ['Resolve as not a late candidate', 'resolved_not_eligible', 'warning'], ['Defer', 'resolved_deferred', 'secondary']]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = className;
@@ -2143,6 +2159,74 @@ async function restoreAppBackup() {
   } else if (!result.canceled) {
     window.alert(result.error || 'Could not restore backup.');
   }
+}
+
+function privacyElements() {
+  return {
+    trackingNumbers: $('privacyTrackingNumbers'),
+    dateFrom: $('privacyDateFrom'),
+    dateTo: $('privacyDateTo'),
+    allRecords: $('privacyAllRecords')
+  };
+}
+
+function currentPrivacyScope() {
+  return window.PrivacyDataManagement.scopeFromElements(privacyElements());
+}
+
+function resetPrivacyPreview({ preserveStatus = false } = {}) {
+  state.privacyPreview = null;
+  $('privacyDeletionControls')?.classList.add('hidden');
+  if (!preserveStatus && $('privacyDataStatus')) {
+    $('privacyDataStatus').textContent = tr('privacy.status.previewRequired', 'Preview required');
+    $('privacyDataStatus').className = 'pill';
+  }
+}
+
+async function previewPrivacyData() {
+  const scope = currentPrivacyScope();
+  const result = await window.cpApp.previewPrivacyDeletion(scope);
+  if (!result?.ok) {
+    resetPrivacyPreview();
+    window.alert(result?.error || tr('privacy.previewFailed', 'The deletion preview could not be created.'));
+    return;
+  }
+  state.privacyPreview = { scope, result };
+  window.PrivacyDataManagement.renderCounts($('privacyPreviewCounts'), result.recordCounts, key => tr(key));
+  $('privacyDeletionControls')?.classList.remove('hidden');
+  $('privacySecondConfirmWrap')?.classList.toggle('hidden', !result.requiresSecondConfirmation);
+  if ($('privacySecondConfirm')) $('privacySecondConfirm').checked = false;
+  if ($('privacyDestructiveConfirm')) $('privacyDestructiveConfirm').checked = false;
+  if ($('privacyTypedPhrase')) $('privacyTypedPhrase').value = '';
+  const phrase = tr(result.confirmationPhraseKey === 'all' ? 'privacy.confirmation.all' : 'privacy.confirmation.selected');
+  if ($('privacyExpectedPhrase')) $('privacyExpectedPhrase').textContent = trf('privacy.expectedPhrase', { phrase }, 'Confirmation phrase: {phrase}');
+  if ($('privacyDataStatus')) {
+    $('privacyDataStatus').textContent = tr('privacy.status.previewReady', 'Deletion preview ready');
+    $('privacyDataStatus').className = 'pill warn';
+  }
+}
+
+async function deletePrivacyData() {
+  if (!state.privacyPreview || JSON.stringify(currentPrivacyScope()) !== JSON.stringify(state.privacyPreview.scope)) {
+    resetPrivacyPreview();
+    return window.alert(tr('privacy.status.previewRequired', 'Preview required'));
+  }
+  const result = await window.cpApp.deletePrivacyData({
+    ...state.privacyPreview.scope,
+    locale: document.documentElement.lang,
+    confirmed: $('privacyDestructiveConfirm')?.checked === true,
+    typedPhrase: $('privacyTypedPhrase')?.value || '',
+    secondConfirmed: $('privacySecondConfirm')?.checked === true
+  });
+  if (!result?.ok) return window.alert(result?.error || tr('privacy.deleteFailed', 'The selected data could not be deleted.'));
+  if ($('privacyDataStatus')) {
+    $('privacyDataStatus').textContent = tr('privacy.status.complete', 'Deletion complete');
+    $('privacyDataStatus').className = 'pill good';
+  }
+  window.alert(trf('privacy.deleteComplete', { operationId: result.receipt?.operationId || '' }, 'Deletion completed. Operation receipt: {operationId}'));
+  resetPrivacyPreview({ preserveStatus: true });
+  await refreshHistory();
+  await refreshClaimQueue();
 }
 
 async function refreshBrowserSessionStatus() {
@@ -2383,18 +2467,16 @@ function renderTrackingDiagnosticGate() {
   if ($('runTrackingOnly')) $('runTrackingOnly').disabled = !state.trackingDiagnosticGateSatisfied;
 }
 
-function selectedClaimTrackingNumbers() {
-  return Array.from(document.querySelectorAll('#claimQueueList input[data-tracking]:checked'))
-    .map(input => String(input.dataset.tracking || '').trim())
-    .filter(Boolean);
+function selectedClassificationRecords() {
+  return step3QueueController.selectedRecords();
 }
 
 function updateClaimQueueCount() {
-  const selected = selectedClaimTrackingNumbers().length;
-  const total = state.claimQueueItems.length;
+  const { selected, total } = step3QueueController.snapshot();
   const pill = $('claimQueueCount');
   if (pill) {
-    pill.textContent = `${selected} of ${total} selected`;
+    pill.textContent = tr('step3.selectedCount', '{selected} of {total} selected')
+      .replace('{selected}', String(selected)).replace('{total}', String(total));
     pill.className = `pill ${selected > 0 ? 'good' : 'bad'}`;
   }
 }
@@ -2406,22 +2488,23 @@ function queueCell(text, className = '') {
   return cell;
 }
 
+function deadlineLabel(item) {
+  if (item.deadlineState === 'policy_review_required') return tr('deadline.policyReviewRequired', 'Policy data requires review');
+  if (item.deadlineState === 'unavailable') return tr('deadline.unavailable', 'Deadline unavailable');
+  if (item.deadlineState === 'expired') return tr('deadline.expired', 'Expired');
+  if (Number(item.businessDaysRemaining) === 0) return tr('deadline.today', 'Deadline today');
+  const key = item.deadlineState === 'urgent' ? 'deadline.urgent' : 'deadline.knownActive';
+  return tr(key, '{days} business days remaining').replace('{days}', String(item.businessDaysRemaining));
+}
+
 function filteredClaimQueue(items = []) {
-  const search = String($('claimQueueSearch')?.value || '').trim().toLowerCase();
-  const service = $('claimQueueServiceFilter')?.value || 'all';
-  const urgency = $('claimQueueUrgencyFilter')?.value || 'all';
-  const dateFrom = $('claimQueueDateFrom')?.value || '';
-  const dateTo = $('claimQueueDateTo')?.value || '';
-  return items.filter(item => {
-    if (search && !`${item.trackingNumber || ''} ${item.referenceNumber || ''}`.toLowerCase().includes(search)) return false;
-    if (service !== 'all' && item.serviceCode !== service) return false;
-    const remaining = Number(item.businessDaysRemaining);
-    if (urgency === 'urgent' && (!Number.isFinite(remaining) || remaining < 0 || remaining > 7)) return false;
-    if (urgency === 'expired' && (!Number.isFinite(remaining) || remaining >= 0)) return false;
-    if (dateFrom && String(item.deadline || '') < dateFrom) return false;
-    if (dateTo && String(item.deadline || '') > dateTo) return false;
-    return true;
-  }).sort((a, b) => String(a.deadline || '9999').localeCompare(String(b.deadline || '9999')));
+  return step3QueueController.visible({
+    search: $('claimQueueSearch')?.value,
+    service: $('claimQueueServiceFilter')?.value,
+    urgency: $('claimQueueUrgencyFilter')?.value,
+    dateFrom: $('claimQueueDateFrom')?.value,
+    dateTo: $('claimQueueDateTo')?.value
+  });
 }
 
 function renderClassificationQueue(targetId, countId, items = []) {
@@ -2441,7 +2524,10 @@ function renderClaimQueue(items = [], preserveState = false) {
   const list = $('claimQueueList');
   if (!list) return;
   list.textContent = '';
-  if (!preserveState) state.claimQueueItems = Array.isArray(items) ? items : [];
+  if (!preserveState) {
+    state.claimQueueItems = Array.isArray(items) ? items : [];
+    step3QueueController.load(state.claimQueueItems);
+  }
   state.claimQueueLoaded = true;
   const services = [...new Set(state.claimQueueItems.map(item => item.serviceCode).filter(Boolean))].sort();
   const serviceFilter = $('claimQueueServiceFilter');
@@ -2459,7 +2545,9 @@ function renderClaimQueue(items = [], preserveState = false) {
   if (!visibleItems.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = state.claimQueueItems.length ? 'No automatic claims match the current filters.' : 'No eligible claims are currently available. Run Step 2, then refresh this queue.';
+    empty.textContent = state.claimQueueItems.length
+      ? tr('step3.noFilterMatches', 'No late-delivery candidates match the current filters.')
+      : tr('step3.noCandidates', 'No late-delivery candidates are available. Run Step 2, then refresh this queue.');
     list.appendChild(empty);
     updateClaimQueueCount();
     requestBuiltinBrowserLayout();
@@ -2468,7 +2556,7 @@ function renderClaimQueue(items = [], preserveState = false) {
 
   const header = document.createElement('div');
   header.className = 'claim-queue-row header';
-  header.append(queueCell('Use'), queueCell('Tracking'), queueCell('Reference'), queueCell('Service'), queueCell('First attempt / delivery'), queueCell('Deadline'), queueCell('Policy / reason'));
+  header.append(queueCell(tr('step3.queue.use', 'Use')), queueCell(tr('step3.queue.tracking', 'Tracking')), queueCell(tr('step3.queue.reference', 'Reference')), queueCell(tr('step3.queue.service', 'Service')), queueCell(tr('step3.queue.deliveryEvidence', 'First attempt / successful delivery')), queueCell(tr('step3.queue.deadline', 'Deadline')), queueCell(tr('step3.queue.policyReason', 'Policy / reason')));
   list.appendChild(header);
 
   for (const item of visibleItems) {
@@ -2476,16 +2564,16 @@ function renderClaimQueue(items = [], preserveState = false) {
     row.className = 'claim-queue-row';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.checked = true;
-    checkbox.dataset.tracking = item.trackingNumber || '';
-    checkbox.setAttribute('aria-label', `Include tracking ${item.trackingNumber || ''}`);
-    checkbox.addEventListener('change', updateClaimQueueCount);
+    checkbox.checked = step3QueueController.isSelected(item.recordId);
+    checkbox.dataset.recordId = String(item.recordId);
+    checkbox.setAttribute('aria-label', tr('step3.queue.includeAria', 'Include candidate {tracking}').replace('{tracking}', item.trackingNumber || ''));
+    checkbox.addEventListener('change', () => { step3QueueController.set(item.recordId, checkbox.checked); updateClaimQueueCount(); });
     row.appendChild(checkbox);
     row.appendChild(queueCell(item.trackingNumber));
     row.appendChild(queueCell(item.referenceNumber));
     row.appendChild(queueCell(item.serviceCode));
     row.appendChild(queueCell([item.firstAttemptDate, item.deliveryDate].filter(Boolean).join(' / ')));
-    row.appendChild(queueCell([item.deadline, item.businessDaysRemaining !== '' ? `${item.businessDaysRemaining} business days left` : ''].filter(Boolean).join(' · ')));
+    row.appendChild(queueCell([item.deadline, deadlineLabel(item)].filter(Boolean).join(' · ')));
     row.appendChild(queueCell([item.policyVersion, item.eligibilityReason].filter(Boolean).join(' · ')));
     list.appendChild(row);
   }
@@ -2495,7 +2583,7 @@ function renderClaimQueue(items = [], preserveState = false) {
 
 async function refreshClaimQueue() {
   const list = $('claimQueueList');
-  if (list) list.innerHTML = '<div class="history-empty">Loading eligible claims…</div>';
+  if (list) list.innerHTML = `<div class="history-empty">${tr('step3.loadingCandidates', 'Loading late-delivery candidates…')}</div>`;
   const result = await window.cpApp.previewClaims();
   if (!result?.ok) {
     state.claimQueueItems = [];
@@ -2504,7 +2592,7 @@ async function refreshClaimQueue() {
     if (list) {
       const empty = document.createElement('div');
       empty.className = 'history-empty';
-      empty.textContent = result?.error || 'Could not load claims.csv.';
+      empty.textContent = result?.error || tr('step3.loadFailed', 'Could not load the database candidate queue.');
       list.appendChild(empty);
     }
     updateClaimQueueCount();
@@ -2594,10 +2682,10 @@ function confirmLiveSubmission(selectedCount, canaryMode) {
   if (!modal || !summary) return Promise.resolve(false);
   summary.textContent = '';
   const lines = [
-    `Selected claims: ${selectedCount}`,
-    `Mode: ${canaryMode ? 'Canary — only the first selected claim will be processed' : 'Full selected queue'}`,
-    'Browser: Built-in Canada Post browser',
-    'Dry run: Off'
+    trf('step3.confirm.selectedCount', { count: selectedCount }, 'Selected candidates: {count}'),
+    tr(canaryMode ? 'step3.confirm.modeCanary' : 'step3.confirm.modeFull'),
+    tr('step3.confirm.browser'),
+    tr('step3.confirm.dryRunOff')
   ];
   for (const text of lines) {
     const line = document.createElement('div');
@@ -2618,8 +2706,8 @@ function buildSubmitOnlyOptions(liveSubmissionConfirmed = false) {
     afterSubmitMs: 20000,
     maxClaims: null,
     dryRun: Boolean($('dryRun')?.checked),
-    selectedTrackingNumbers: selectedClaimTrackingNumbers(),
-    expectedClaimCount: selectedClaimTrackingNumbers().length,
+    selectedClassificationRecords: selectedClassificationRecords(),
+    expectedClaimCount: selectedClassificationRecords().length,
     canaryMode: Boolean($('canaryMode')?.checked),
     liveSubmissionConfirmed: Boolean(liveSubmissionConfirmed),
     developerMode: false
@@ -2658,7 +2746,7 @@ async function startTrackingOnly() {
   currentProcessStep = 'step2';
   resetRunUi('step2');
   setStatus('Running', 'warn', 'step2');
-  setAction('Checking tracking.csv and creating claims.csv for late shipments.', 'step2');
+  setAction('Comparing successful-delivery dates with original Delivery Standards and recording late-delivery candidates.', 'step2');
 
   const res = await window.cpApp.runTracking(buildTrackingOnlyOptions());
   if (!res.ok) {
@@ -2743,11 +2831,11 @@ async function startSubmitOnly() {
   }
 
   if (!state.claimQueueLoaded) await refreshClaimQueue();
-  const selected = selectedClaimTrackingNumbers();
+  const selected = selectedClassificationRecords();
   if (!selected.length) {
     setStatus('Blocked', 'bad', 'step3');
-    setAction('No claims are selected in the Step 3 review queue.', 'step3');
-    log('No claims are selected. Refresh the queue and select at least one eligible claim.', 'log-submit-error', 'step3');
+    setAction(tr('step3.zeroSelection', 'No late-delivery candidates are selected in the Step 3 candidate queue.'), 'step3');
+    log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before starting a dry or live run.'), 'log-submit-error', 'step3');
     return;
   }
 
@@ -2777,8 +2865,8 @@ async function startSubmitOnly() {
   setBuiltinBrowserStatus('Browser preparing', 'warn');
   setBuiltinBrowserActivity(true, 'Starting built-in browser workflow…');
   setAction(dryRun
-    ? `Dry run: validating ${selected.length} selected claim(s) and stopping before final review/submission.`
-    : (canaryMode ? 'Canary live run: processing the first selected claim only.' : `Submitting ${selected.length} selected claim(s).`), 'step3');
+    ? trf('step3.dryRunStarting', { count: selected.length })
+    : (canaryMode ? tr('step3.confirm.modeCanary') : trf('step3.liveRunStarting', { count: selected.length })), 'step3');
   const initialDisplay = await synchronizeBuiltinBrowserVisibility({
     reason: 'step3-run-start',
     scrollIntoView: true,
@@ -2906,7 +2994,7 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.4';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.8';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
@@ -2930,6 +3018,10 @@ async function refreshConfig() {
     status.className = state.passwordStored
       ? (cfg.secureCredentialStorage ? 'pill good' : 'pill warn')
       : (state.trackingApiCredentialsStored ? 'pill warn' : 'pill bad');
+    if (cfg.updateRecovery?.pending) {
+      status.textContent = tr('update.recovery.message', 'A pending update was interrupted. The pre-update backup and previous executable or installer were preserved.');
+      status.className = 'pill warn';
+    }
   }
   if (!cfg.setupCompleted && !setupWizardShown) showSetupWizard(cfg);
 }
@@ -2999,6 +3091,12 @@ $('historySearch')?.addEventListener('input', () => {
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
 $('createBackup')?.addEventListener('click', createAppBackup);
 $('restoreBackup')?.addEventListener('click', restoreAppBackup);
+$('previewPrivacyData')?.addEventListener('click', previewPrivacyData);
+$('deletePrivacyData')?.addEventListener('click', deletePrivacyData);
+for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords']) {
+  $(id)?.addEventListener('change', resetPrivacyPreview);
+  if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
+}
 $('refreshBrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('clearBrowserSession')?.addEventListener('click', clearBrowserSession);
 $('refreshFinancialReport')?.addEventListener('click', refreshFinancialReport);
@@ -3141,8 +3239,17 @@ $('builtinBrowser')?.addEventListener('change', requestBuiltinBrowserLayout);
 $('runSubmitOnly')?.addEventListener('click', startSubmitOnly);
 $('refreshClaimQueue')?.addEventListener('click', async () => { await refreshClaimQueue(); await runStep3Preflight(); });
 $('refreshStep3Preflight')?.addEventListener('click', runStep3Preflight);
-$('selectAllClaims')?.addEventListener('click', () => { document.querySelectorAll('#claimQueueList input[data-tracking]').forEach(input => { input.checked = true; }); updateClaimQueueCount(); });
-$('clearClaimSelection')?.addEventListener('click', () => { document.querySelectorAll('#claimQueueList input[data-tracking]').forEach(input => { input.checked = false; }); updateClaimQueueCount(); });
+$('selectAllClaims')?.addEventListener('click', () => {
+  step3QueueController.selectVisible({
+    search: $('claimQueueSearch')?.value,
+    service: $('claimQueueServiceFilter')?.value,
+    urgency: $('claimQueueUrgencyFilter')?.value,
+    dateFrom: $('claimQueueDateFrom')?.value,
+    dateTo: $('claimQueueDateTo')?.value
+  });
+  renderClaimQueue(state.claimQueueItems, true);
+});
+$('clearClaimSelection')?.addEventListener('click', () => { step3QueueController.clear(); renderClaimQueue(state.claimQueueItems, true); });
 $('claimQueueSearch')?.addEventListener('input', () => renderClaimQueue(state.claimQueueItems, true));
 $('claimQueueServiceFilter')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
 $('claimQueueUrgencyFilter')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
@@ -3165,6 +3272,10 @@ document.querySelectorAll('[data-force-stop]').forEach((button) => {
     if (res.ok) log('Force stop sent.', '', step);
     else log(res.error || 'Nothing to force stop.', '', step);
   });
+});
+
+window.cpApp.onUpdateProgress?.(payload => {
+  window.UpdateProgress.render(document, payload || {}, key => tr(key), () => window.cpApp.cancelUpdateDownload());
 });
 
 window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {

@@ -4706,6 +4706,7 @@
     }
 
   </style>
+  <link rel="stylesheet" href="renderer/components.css" />
 </head>
 <body>
   <header>
@@ -4716,7 +4717,7 @@
     <div class="topbar">
       <div>
         <h1 id="appTitle">Canada Post Claim Runner</h1><span id="buildTrustStatus" class="pill warn">Unsigned development build</span>
-        <div id="appSubtitle" class="subtitle">Import history, check eligibility, and submit claims in one place.</div>
+        <div id="appSubtitle" class="subtitle">Import history, identify late-delivery candidates, and submit selected candidates in one place.</div>
       </div>
       <div class="theme-control">
         <label for="localeSelect">Language / Langue</label>
@@ -4772,8 +4773,8 @@
       <div class="step-tabs" role="tablist" aria-label="Claim runner sections">
         <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0">Settings<br><span>Account, sender info, defaults</span></button>
         <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>Import EST history</span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Check delivery eligibility</span></button>
-        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit eligible claims</span></button>
+        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Identify late-delivery candidates</span></button>
+        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit selected candidates</span></button>
         <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span></button>
         <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Results<br><span>Evidence, outcomes, screenshots</span><span id="notificationsBadge" class="notification-badge hidden" aria-label="Result notifications"></span></button>
       </div>
@@ -4989,9 +4990,7 @@
             <div class="check-row step-checks">
               <label><input id="freshTracking" type="checkbox" checked /> Fresh tracking run: clear old claims and processed tracking cache</label>
             </div>
-            <div class="step-copy-box">
-              This step classifies every shipment from authoritative tracking dates. A shipment is written to <strong>claims.csv</strong> when its earliest delivery attempt—or successful delivery when no earlier attempt exists—occurred after the applicable expected-delivery date. Canada Post makes the final eligibility decision; optional EST shipment date and service metadata do not block classification.
-            </div>
+            <div id="step2CandidateExplanation" class="step-copy-box">This step compares the successful-delivery date against the original Delivery Standard. A shipment becomes a late-delivery candidate when successful delivery occurred after that standard. First-attempt, service, policy, and claim-window information remains advisory. Canada Post makes the final eligibility decision.</div>
           </div>
           <div class="step-actions">
             <button id="runTrackingOnly" class="success">Run Step 2 — Check Tracking</button>
@@ -5041,9 +5040,10 @@
               <label class="checkbox-label"><input id="dryRun" type="checkbox" /> Dry run — fill fields only; stop before final review or submission</label>
             </div>
           </div>
+          <div id="step3CanadaPostSupport" role="note" aria-label="Canada Post claim support contact">Unsure about a claim? Contact Canada Post at 1-888-550-6333 to verify the shipment or claim details before submitting.</div>
           <input id="freshRun" type="checkbox" hidden />
           <div class="step-actions step-actions-3">
-            <button id="runSubmitOnly" class="success">Run Step 3 — Submit late candidates</button>
+            <button id="runSubmitOnly" class="success">Run Step 3 — Submit selected candidates</button>
             <button id="stop" class="warning">Stop After Current Item</button>
             <button id="forceStopStep3" class="danger" data-force-stop="step3">Force Stop</button>
           </div>
@@ -5069,28 +5069,28 @@
           <section class="step3-control-card" aria-labelledby="claimQueueTitle">
             <div class="step3-control-head">
               <div>
-                <h3 id="claimQueueTitle">Claim review queue</h3>
+                <h3 id="claimQueueTitle">Candidate queue</h3>
                 <span id="claimQueueCount" class="pill">0 selected</span>
               </div>
               <div class="step3-control-actions">
                 <button id="refreshClaimQueue" class="secondary" type="button">Refresh</button>
                 <button id="selectAllClaims" class="secondary" type="button">Select all</button>
-                <button id="clearClaimSelection" class="secondary" type="button">Clear</button>
+                <button id="clearClaimSelection" class="secondary" type="button">Clear selection</button>
               </div>
             </div>
             <div class="history-toolbar queue-toolbar" aria-label="Claim queue filters">
               <div class="field"><label for="claimQueueSearch">Tracking search</label><input id="claimQueueSearch" type="search" placeholder="Tracking or reference" /></div>
               <div class="field"><label for="claimQueueServiceFilter">Service</label><select id="claimQueueServiceFilter"><option value="all">All services</option></select></div>
-              <div class="field"><label for="claimQueueUrgencyFilter">Urgency</label><select id="claimQueueUrgencyFilter"><option value="all">All deadlines</option><option value="urgent">7 business days or fewer</option><option value="expired">Expired</option></select></div>
+              <div class="field"><label for="claimQueueUrgencyFilter">Urgency</label><select id="claimQueueUrgencyFilter"><option value="all">All deadlines</option><option value="urgent">7 business days or fewer</option><option value="expired">Expired</option><option value="unavailable">Unavailable / policy review</option></select></div>
               <div class="field"><label for="claimQueueDateFrom">Deadline from</label><input id="claimQueueDateFrom" type="date" /></div>
               <div class="field"><label for="claimQueueDateTo">Deadline to</label><input id="claimQueueDateTo" type="date" /></div>
             </div>
             <div id="claimQueueList" class="claim-queue-list" aria-live="polite">
-              <div class="history-empty">Refresh to load eligible claims from claims.csv.</div>
+              <div class="history-empty">Refresh to load late-delivery candidates from the database.</div>
             </div>
-            <div class="history-content" aria-label="Separated eligibility queues">
+            <div class="history-content" aria-label="Separated classification queues">
               <div class="history-section"><div class="history-section-head"><h3>Manual-review queue</h3><span id="step3ManualCount" class="pill">0</span></div><div id="step3ManualQueue" class="history-list compact"></div></div>
-              <div class="history-section"><div class="history-section-head"><h3>Not-eligible queue</h3><span id="step3IneligibleCount" class="pill">0</span></div><div id="step3IneligibleQueue" class="history-list compact"></div></div>
+              <div class="history-section"><div class="history-section-head"><h3>On-time classification queue</h3><span id="step3IneligibleCount" class="pill">0</span></div><div id="step3IneligibleQueue" class="history-list compact"></div></div>
             </div>
             <div class="canary-option">
               <label><input id="canaryMode" type="checkbox" /> <span><strong>Canary mode</strong> — process only the first selected claim, then stop. Verify the Canada Post result before running the remaining queue.</span></label>
@@ -5158,6 +5158,26 @@
             <div class="field wide"><label for="financialNote">Note</label><input id="financialNote" type="text" maxlength="4096" /></div>
             <button id="recordFinancialEntry" class="secondary" type="button">Record Amount</button>
           </div></details>
+        </section>
+
+        <section class="step3-control-card" aria-labelledby="privacyDataTitle">
+          <div class="step3-control-head"><div><h3 id="privacyDataTitle">Data Management / Privacy</h3><span id="privacyDataStatus" class="pill">Preview required</span></div><button id="previewPrivacyData" class="secondary" type="button">Preview selected data</button></div>
+          <p id="privacyDataIntro">Preview and remove application data by tracking number, date range, or all records. Duplicate-submission protection is retained only as non-identifying hashes and terminal outcomes.</p>
+          <div class="privacy-management-grid">
+            <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers">Tracking numbers (separated by spaces, commas, or new lines)</label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
+            <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom">From date (optional)</label><input id="privacyDateFrom" type="date" /></div>
+            <div class="field"><label id="privacyDateToLabel" for="privacyDateTo">To date (optional)</label><input id="privacyDateTo" type="date" /></div>
+            <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel">Include all application records</span></label>
+          </div>
+          <div id="privacyPreviewCounts" class="privacy-preview-counts" aria-live="polite"></div>
+          <div id="privacyDeletionControls" class="privacy-management-grid hidden">
+            <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel">I understand this removes the selected personal and shipment data from this application.</span></label>
+            <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase">Type the displayed confirmation phrase exactly</label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
+            <div id="privacyExpectedPhrase" class="live-submit-warning wide"></div>
+            <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel">Confirm again that all application data should be deleted.</span></label>
+            <button id="deletePrivacyData" class="danger wide" type="button">Delete previewed data</button>
+          </div>
+          <p id="privacyExternalCopiesNotice">External exports and backups are separate copies. The operator is responsible for deleting external copies. Encrypted backups may still contain previously exported data. Deletion from this application does not delete Canada Post’s records.</p>
         </section>
 
         <div>
@@ -5331,6 +5351,10 @@
     </div>
   </div>
 
+  <script src="renderer/step2-copy.js"></script>
+  <script src="renderer/step3-queue.js"></script>
+  <script src="renderer/privacy-data-management.js"></script>
+  <script src="renderer/update-progress.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

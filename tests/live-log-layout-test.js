@@ -97,10 +97,12 @@ const { chromium } = require('playwright');
 
     for (const count of [0, 1, 19, 50]) {
       await page.evaluate(candidateCount => window.renderClaimQueue(Array.from({ length: candidateCount }, (_, index) => ({
+        recordId: index + 1,
+        evidenceHash: String(index + 1).padStart(64, '0'),
         trackingNumber: `SYNTHETIC${String(index).padStart(10, '0')}`,
         referenceNumber: `REFERENCE-${index}-${'x'.repeat(100)}`,
         serviceCode: 'DOM.EP', firstAttemptDate: '2026-07-20', deliveryDate: '2026-07-21', deadline: '2026-09-01',
-        businessDaysRemaining: 24, eligibilityReason: `Synthetic ${'long-rejection/'.repeat(30)}`
+        businessDaysRemaining: 24, deadlineState: 'known_active', eligibilityReason: `Synthetic ${'long-rejection/'.repeat(30)}`
       }))), count);
       const layout = await page.evaluate(() => {
         const queue = document.getElementById('claimQueueList');

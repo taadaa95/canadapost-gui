@@ -24,11 +24,12 @@ assert.strictEqual(report.ready, true, 'reconciliation warnings should not block
 assert.strictEqual(report.warningCount, 1);
 
 assert.match(main, /Live submission was not explicitly confirmed/);
-assert.match(main, /claims-selected-run-/);
-assert.match(main, /writeSelectedClaimsCsv/);
+assert.match(main, /step3QueueService\.createRunSnapshot/);
+assert.doesNotMatch(main, /claims-selected-run-/);
+assert.doesNotMatch(main, /writeSelectedClaimsCsv/);
 assert.match(main, /ipcMain\.handle\('preflight:run'/);
 assert.match(main, /ipcMain\.handle\('claims:preview'/);
-assert.match(renderer, /selectedTrackingNumbers: selectedClaimTrackingNumbers\(\)/);
+assert.match(renderer, /selectedClassificationRecords: selectedClassificationRecords\(\)/);
 assert.match(renderer, /confirmLiveSubmission/);
 assert.match(preload, /runPreflight/);
 assert.match(preload, /previewClaims/);

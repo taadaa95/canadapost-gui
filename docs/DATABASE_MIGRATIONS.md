@@ -1,6 +1,6 @@
 # Database migrations and recovery
 
-The SQLite schema is forward-only and currently uses schema version 7. `lib/database-migrations.js` owns the ordered migration manifest; `lib/claim-database.js` owns runtime initialization and verified backups. `PRAGMA user_version` is a progress marker, not proof that schema objects exist.
+The SQLite schema is forward-only and currently uses schema version 8. `lib/database-migrations.js` owns the ordered migration manifest; `lib/claim-database.js` owns runtime initialization and verified backups. `PRAGMA user_version` is a progress marker, not proof that schema objects exist.
 
 ## Ordered reconciliation
 
@@ -13,12 +13,14 @@ Every startup migration inspects `sqlite_master`, `PRAGMA table_info`, and index
 5. dependent manual-review, audit, queue, worker-revalidation, and claim-detail tables;
 6. `financial_entries`;
 7. the classification `run_id` column;
-8. dependent indexes; and
-9. immutable-history triggers.
+8. promoted-run, database queue-snapshot identity/classification links, duplicate tombstones and generated-export ownership;
+9. a one-time promoted-run backfill for complete historical Step 2 runs with run-scoped classifications;
+10. dependent indexes; and
+11. immutable-history triggers.
 
 This order guarantees that `classification_records` exists before any `ALTER`, index, trigger, or foreign-key-dependent table operation that uses it. A named object with an incompatible type, column set, index definition, or trigger definition is rejected; `IF NOT EXISTS` is not used to conceal an incompatible schema.
 
-All required changes and the final `PRAGMA user_version = 7` execute in one `BEGIN IMMEDIATE` transaction. The version is written only after every ordered step succeeds. Any failure rolls back the complete transaction and retains the incoming version and rows. `PRAGMA integrity_check` and `PRAGMA foreign_key_check` must pass before commit. A repeat startup on a valid version-7 schema is a read-only no-op apart from normal SQLite connection configuration.
+All required changes and the final `PRAGMA user_version = 8` execute in one `BEGIN IMMEDIATE` transaction. The version is written only after every ordered step succeeds. Any failure rolls back the complete transaction and retains the incoming version and rows. `PRAGMA integrity_check` and `PRAGMA foreign_key_check` must pass before commit. A repeat startup on a valid version-8 schema is a read-only no-op apart from normal SQLite connection configuration.
 
 ## Supported historical and interrupted states
 
@@ -65,6 +67,6 @@ The chosen directory must be an existing owner-controlled absolute directory. It
 
 When accepted, bootstrap calls `app.setPath` for `userData`, Chromium `sessionData`, cache, crash dumps, and application logs before normal startup. `lib/mutable-paths.js` then fail-closed validates the database and sidecars, database/migration backups, configuration, encrypted credentials/key, CSV state, logs, diagnostics, evidence, Chromium partitions/profiles, worker runtime, run staging, queue snapshot/selected-claim prefixes, cache/crash data, and backup/restore temporary space. An existing symlink resolving outside the isolated root aborts startup.
 
-An isolated copied profile follows the normal schema-7 startup path. A profile requiring reconciliation receives one verified timestamped pre-migration backup in its own `database-backups` directory. A successful second startup sees the complete schema, creates no additional migration backup, and retains all rows. Isolated startup never performs the normal repository-to-profile legacy copy and never copies anything to the original Electron profile. The window is visibly marked, live claim/browser/update/export/restore actions are disabled, and the selected canonical path appears in the persistent support banner.
+An isolated copied profile follows the normal schema-8 startup path. A profile requiring reconciliation receives one verified timestamped pre-migration backup in its own `database-backups` directory. A successful second startup sees the complete schema, creates no additional migration backup, and retains all rows. Isolated startup never performs the normal repository-to-profile legacy copy and never copies anything to the original Electron profile. The window is visibly marked, live claim/browser/update/export/restore actions are disabled, and the selected canonical path appears in the persistent support banner.
 
 Automated validation uses only temporary synthetic profiles. `tests/user-data-bootstrap-test.js` covers bootstrap ordering, rejection and containment rules plus the first/second schema migration. `scripts/smoke-packaged-isolated-profile.js` invokes the packaged Electron entry point in a headless probe branch, verifies production startup and schema/row preservation twice, checks an independent synthetic default-profile sentinel byte-for-byte, and exercises packaged rejection paths without opening a window.

@@ -27,6 +27,7 @@ function main() {
   const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
   const rendererSource = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
   const htmlSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const englishLocale = fs.readFileSync(path.join(root, 'locales', 'en-CA.json'), 'utf8');
 
   const fillClaim = functionSource(submitSource, 'fillClaim', 'findCreateTicketControl');
   const dryReturnIndex = fillClaim.indexOf("if (dryRun) {");
@@ -55,7 +56,8 @@ function main() {
   assert.doesNotMatch(submitSource, /getByLabel\(\/Receiver'\?s country\/i\)\.first\(\)\.selectOption/);
   assert.match(submitSource, /BUILTIN_BROWSER_MODE \? 350 : 45000/);
   assert.match(mainSource, /BETWEEN_CLAIMS_MS: String\(options\.betweenClaimsMs \|\| 750\)/);
-  assert.match(rendererSource, /stopping before final review\/submission/);
+  assert.match(rendererSource, /step3\.dryRunStarting/);
+  assert.match(englishLocale, /stopping before final review\/submission/);
   assert.match(htmlSource, /Dry run — fill fields only; stop before final review or submission/);
 
   console.log('Step 3 dry-run and multi-claim regression tests passed.');

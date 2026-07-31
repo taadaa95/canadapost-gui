@@ -40,10 +40,11 @@ The existing Update button performs an explicit check. It does not check or down
 
 - Stable application versions consider stable releases only.
 - Prerelease application versions consider both prerelease and stable releases.
-- Downloads are stored under the application's private `userData/updates` directory.
-- The user must explicitly choose Download and then confirm that no workflow is running before installation.
-- Windows launches the verified NSIS installer and exits.
-- Linux replaces the currently running AppImage only when its location is writable; otherwise the downloaded AppImage is revealed for manual replacement.
+- Downloads are stored under the application's private `userData/updates` directory. Cancelled partial files are removed, verified packages are bounded to the current package plus a small recent set, and healthy startup prunes obsolete staging files.
+- The user must explicitly choose Download and Install. Main-process operation state—not a renderer checkbox—blocks installation during Step 1 import, Step 2 diagnostics/exports/bulk work, Step 3 dry/live work, backup/restore, migration/recovery, privacy deletion, or another authoritative-data mutation. The exact blocking operation is shown and the verified download is retained.
+- Before installation, an authoritative SQLite database receives a verified owner-only backup and a minimal pending marker records old/target versions, timestamp and recovery paths. Credentials, browser profiles and device keys are excluded.
+- Windows retains and launches the verified NSIS installer only after a last-moment idle recheck. Linux preserves the existing `.previous` AppImage rollback executable.
+- Normal updated startup completes database initialization, integrity and relationship checks before archiving the marker as healthy. Interrupted startup preserves the marker, backup, installer and previous executable and exposes sanitized recovery state without overwriting current data.
 - Isolated migration-test mode disables updates.
 
 ## Security limitations and next hardening step

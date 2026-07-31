@@ -20,15 +20,20 @@ const requiredIds = [
   , 'apiUsername', 'apiPassword', 'apiEnvironment', 'apiCredentialMetadata',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
-  'diagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest'
+  'diagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
+  'selectAllClaims', 'clearClaimSelection', 'privacyDataTitle', 'privacyTrackingNumbers',
+  'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords', 'previewPrivacyData',
+  'privacyPreviewCounts', 'privacyDestructiveConfirm', 'privacyTypedPhrase',
+  'privacySecondConfirm', 'deletePrivacyData'
 ];
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.7');
-assert.ok(preload.includes("note.id = 'step3CanadaPostSupport'"), 'Missing Step 3 Canada Post support note');
-assert.ok(preload.includes('1-888-550-6333'), 'Missing Canada Post customer-service number');
-assert.ok(preload.includes('Unsure about a claim?'), 'Missing Step 3 claim-verification guidance');
+assert.strictEqual(pkg.version, '0.4.0-dev.8');
+assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
+assert.ok(!preload.includes('document.createElement'), 'Preload must remain a narrow IPC bridge');
+assert.ok(html.includes('1-888-550-6333'), 'Missing Canada Post customer-service number');
+assert.ok(html.includes('Unsure about a claim?'), 'Missing Step 3 claim-verification guidance');
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
 assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
@@ -85,4 +90,5 @@ assert.ok(renderer.includes("$('openStep3Diagnostics')?.addEventListener"), 'Mis
 assert.ok(renderer.includes('function refreshClaimQueue'), 'Missing Step 3 claim review queue');
 assert.ok(renderer.includes('function runStep3Preflight'), 'Missing Step 3 preflight');
 assert.ok(renderer.includes('function confirmLiveSubmission'), 'Missing explicit live submission confirmation');
+assert.ok(renderer.includes('selectedClassificationRecords'), 'Step 3 selection must use stable database classification records');
 assert.ok(/id="builtinBrowser"[^>]*checked[^>]*disabled/.test(html), 'Built-in browser must be mandatory for Step 3');

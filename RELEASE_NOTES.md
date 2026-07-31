@@ -1,3 +1,17 @@
+# Canada Post Claim Runner 0.4.0-dev.8
+
+## Selected product-review corrections — 2026-07-30
+
+- Corrects Step 2/3 operator terminology to late-delivery candidates and keeps first-attempt, service, policy and claim-window data advisory. Canada Post remains the final claim-eligibility authority.
+- Starts Step 3 with zero selected candidates, adds visible-row **Select all** and global **Clear selection**, and requires a non-empty database-record selection for dry and live runs.
+- Makes the latest complete, promoted Step 2 run's immutable SQLite classifications authoritative for Step 3. `claims.csv` remains a human-readable compatibility export and is never trusted as queue input.
+- Adds explicit recalculated deadline states without coercing missing values to zero.
+- Adds main-process protected-operation coordination, verified pre-update database backups, pending/healthy markers and interrupted-update recovery while retaining Linux `.previous` and Windows installer rollback material.
+- Adds localized English/French Data Management / Privacy preview and deletion controls with non-identifying duplicate-protection tombstones, file deletion, integrity checks and sanitized receipts. The privacy documentation remains a draft requiring legal/privacy review.
+- Removes development-only mock-portal and build/test scripts from production package contents, adds an allowlist, package budgets, major-contributor reports and bounded update storage.
+
+This is `0.4.0-dev.8`, an unsigned development build. It is not a public release, and the deferred signing, fingerprint, physical/manual-gate and global reconciliation-blocking work is unchanged.
+
 # Canada Post Claim Runner 0.4.0-dev.2
 
 ## History scrolling, filter reset and navigation cleanup — 2026-07-29
