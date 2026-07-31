@@ -16,6 +16,8 @@
 - Preinstalls the Electron 43 runtime before Electron E2E and packaging jobs instead of relying on the first-launch download.
 - Separates pure mock-portal checks from the Electron visibility E2E so failures identify the correct layer.
 - Disables the unnecessary Gitleaks SARIF artifact upload and limits required CI artifact retention to seven days.
+- Runs the Linux Step 3 Electron visibility E2E under Xvfb.
+- Adds phase-level diagnostics, bounded submission handshakes, a global watchdog, and forced Windows Electron cleanup to prevent opaque E2E hangs.
 
 This is `0.4.0-dev.10`, an unsigned development build. It is not a public release.
 

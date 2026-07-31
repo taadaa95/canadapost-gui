@@ -31,8 +31,33 @@ assert.strictEqual(
 );
 assert.match(
   workflow,
-  /name: Step 3 mock visibility E2E[\s\S]{0,120}timeout-minutes: 8[\s\S]{0,120}npm run test:step3-mock-visibility/,
-  'Electron visibility E2E must be isolated and bounded'
+  /name: Step 3 mock visibility E2E \(Linux\)[\s\S]{0,180}runner\.os == 'Linux'[\s\S]{0,180}xvfb-run -a npm run test:step3-mock-visibility/,
+  'Linux Electron visibility E2E must run under Xvfb'
+);
+assert.match(
+  workflow,
+  /name: Step 3 mock visibility E2E \(Windows\)[\s\S]{0,180}runner\.os == 'Windows'[\s\S]{0,180}npm run test:step3-mock-visibility/,
+  'Windows Electron visibility E2E must remain native and bounded'
+);
+
+const visibilityE2E = fs.readFileSync(
+  path.join(root, 'tests', 'step3-mock-visibility-e2e-test.js'),
+  'utf8'
+);
+assert.match(
+  visibilityE2E,
+  /global watchdog expired during \$\{currentPhase\}/,
+  'Step 3 visibility E2E must identify the phase of a global timeout'
+);
+assert.match(
+  visibilityE2E,
+  /Hidden-slot submission rejection[\s\S]{0,80}45000/,
+  'hidden-slot submission validation must be bounded'
+);
+assert.match(
+  visibilityE2E,
+  /Executable dry-run start[\s\S]{0,80}60000/,
+  'executable dry-run start must be bounded'
 );
 assert.match(
   workflow,

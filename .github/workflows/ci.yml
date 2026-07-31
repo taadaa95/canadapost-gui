@@ -51,7 +51,12 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 5
         run: npm run test:mock-portal
-      - name: Step 3 mock visibility E2E
+      - name: Step 3 mock visibility E2E (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 8
+        run: xvfb-run -a npm run test:step3-mock-visibility
+      - name: Step 3 mock visibility E2E (Windows)
+        if: runner.os == 'Windows'
         timeout-minutes: 8
         run: npm run test:step3-mock-visibility
       - run: npm run test:accessibility
