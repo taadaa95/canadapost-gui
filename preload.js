@@ -128,6 +128,39 @@ function renderUpdateProgress(payload = {}) {
   }
 }
 
+function mountStep3SupportContact() {
+  const stepTop = document.querySelector('#step3 .step-top');
+  if (!stepTop || document.getElementById('step3CanadaPostSupport')) return;
+
+  const note = document.createElement('div');
+  note.id = 'step3CanadaPostSupport';
+  note.setAttribute('role', 'note');
+  note.setAttribute('aria-label', 'Canada Post claim support contact');
+  note.style.cssText = [
+    'margin: 10px 0 12px',
+    'padding: 10px 12px',
+    'border: 1px solid var(--line-strong)',
+    'border-left: 4px solid var(--accent-2)',
+    'background: var(--panel-soft)',
+    'color: var(--text)',
+    'line-height: 1.45'
+  ].join(';');
+
+  const label = document.createElement('strong');
+  label.textContent = 'Unsure about a claim? ';
+  note.appendChild(label);
+  note.appendChild(document.createTextNode('Contact Canada Post at '));
+
+  const number = document.createElement('strong');
+  number.textContent = '1-888-550-6333';
+  number.style.whiteSpace = 'nowrap';
+  note.appendChild(number);
+  note.appendChild(document.createTextNode(' to verify the shipment or claim details before submitting.'));
+
+  const fields = stepTop.querySelector('.step-fields');
+  stepTop.insertBefore(note, fields || stepTop.firstChild);
+}
+
 ipcRenderer.on('updates:progress', (_event, payload) => {
   window.addEventListener('DOMContentLoaded', () => renderUpdateProgress(payload), { once: true });
   if (document.body) renderUpdateProgress(payload);
@@ -136,6 +169,7 @@ ipcRenderer.on('updates:progress', (_event, payload) => {
 // Capture this control until renderer.js is decomposed, preventing the legacy
 // handler from overwriting updater status with obsolete text.
 window.addEventListener('DOMContentLoaded', () => {
+  mountStep3SupportContact();
   const button = document.getElementById('checkForUpdates');
   if (!button) return;
   button.addEventListener('click', async event => {
@@ -202,7 +236,7 @@ contextBridge.exposeInMainWorld('cpApp', {
   updateManualReview: (payload) => ipcRenderer.invoke('manualReview:update', payload),
   addManualShipment: (payload) => ipcRenderer.invoke('shipment:manualAdd', payload),
   listManualShipments: (options) => ipcRenderer.invoke('shipment:listManual', options),
-  createBackup: (options) => ipcRenderer.invoke('backup:create', options),
+  createBackup: (options) => ipcRenderer.invoke('backup:create'),
   restoreBackup: (options) => ipcRenderer.invoke('backup:restore', options),
   createDiagnostics: () => ipcRenderer.invoke('diagnostics:create'),
   runPreflight: (options) => ipcRenderer.invoke('preflight:run', options),
