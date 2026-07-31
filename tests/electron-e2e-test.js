@@ -55,9 +55,11 @@ const { createMockPortal } = require('../mock-portal/server');
     assert(rendererTargetCount >= 2, 'test must include multiple Electron renderer targets');
     const renderCandidates = async count => {
       await window.evaluate(candidateCount => window.renderClaimQueue(Array.from({ length: candidateCount }, (_, index) => ({
+        recordId: index + 1,
+        evidenceHash: String(index + 1).padStart(64, '0'),
         trackingNumber: `E2E${String(index).padStart(13, '0')}`, referenceNumber: `REFERENCE-${index}-${'x'.repeat(100)}`,
         serviceCode: 'DOM.EP', firstAttemptDate: '2026-07-20', deliveryDate: '2026-07-21', deadline: '2026-09-01',
-        businessDaysRemaining: 24, eligibilityReason: `Synthetic ${'long-reason/'.repeat(30)}`
+        deadlineState: 'known_active', businessDaysRemaining: 24, eligibilityReason: `Synthetic ${'long-reason/'.repeat(30)}`
       }))), count);
     };
     for (const count of [0, 1, 19, 50]) {
