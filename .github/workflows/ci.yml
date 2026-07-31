@@ -34,6 +34,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
       - if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium
       - if: runner.os == 'Windows'
@@ -48,6 +51,9 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 5
         run: npm run test:mock-portal
+      - name: Step 3 mock visibility E2E
+        timeout-minutes: 8
+        run: npm run test:step3-mock-visibility
       - run: npm run test:accessibility
       - if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:electron
@@ -69,6 +75,7 @@ jobs:
           name: release-metadata
           path: dist/release-metadata
           if-no-files-found: error
+          retention-days: 7
 
   gitleaks:
     name: External secret scan
@@ -80,6 +87,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
   package-linux:
     name: Linux package and content audit
@@ -96,6 +104,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
       - run: npx playwright install --with-deps chromium
       - run: npm run package:linux
       - run: npm run package:audit -- dist/packages/linux-unpacked
@@ -112,6 +123,7 @@ jobs:
             dist/release-metadata/package-manifest-linux.json
             dist/release-metadata/SHA256SUMS-linux.txt
           if-no-files-found: error
+          retention-days: 7
 
   package-windows:
     name: Windows package
@@ -129,6 +141,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
       - run: npx playwright install chromium
       - run: npm run package:windows
       - run: npm run package:audit -- dist/packages/win-unpacked
@@ -144,3 +159,4 @@ jobs:
             dist/release-metadata/package-manifest-windows.json
             dist/release-metadata/SHA256SUMS-windows.txt
           if-no-files-found: error
+          retention-days: 7

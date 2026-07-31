@@ -13,6 +13,9 @@
 - Hardens the synthetic mock portal so retained Windows sockets cannot block CI shutdown indefinitely.
 - Adds bounded mock-portal cleanup, a retained-socket regression test, and explicit CI job/step timeouts.
 - Adds the dev.10 branch to the workflow push trigger.
+- Preinstalls the Electron 43 runtime before Electron E2E and packaging jobs instead of relying on the first-launch download.
+- Separates pure mock-portal checks from the Electron visibility E2E so failures identify the correct layer.
+- Disables the unnecessary Gitleaks SARIF artifact upload and limits required CI artifact retention to seven days.
 
 This is `0.4.0-dev.10`, an unsigned development build. It is not a public release.
 
