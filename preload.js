@@ -236,7 +236,7 @@ contextBridge.exposeInMainWorld('cpApp', {
   updateManualReview: (payload) => ipcRenderer.invoke('manualReview:update', payload),
   addManualShipment: (payload) => ipcRenderer.invoke('shipment:manualAdd', payload),
   listManualShipments: (options) => ipcRenderer.invoke('shipment:listManual', options),
-  createBackup: (options) => ipcRenderer.invoke('backup:create'),
+  createBackup: (options) => ipcRenderer.invoke('backup:create', options),
   restoreBackup: (options) => ipcRenderer.invoke('backup:restore', options),
   createDiagnostics: () => ipcRenderer.invoke('diagnostics:create'),
   runPreflight: (options) => ipcRenderer.invoke('preflight:run', options),
