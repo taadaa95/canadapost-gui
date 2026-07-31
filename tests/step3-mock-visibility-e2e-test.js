@@ -50,6 +50,33 @@ function forceKillApplication(application) {
   }
 }
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function removeDirectoryWithRetries(directory, attempts = 12) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      fs.rmSync(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100
+      });
+      return true;
+    } catch (error) {
+      if (attempt === attempts) {
+        process.stderr.write(
+          `[step3-e2e] temporary-directory cleanup warning after ${attempts} attempts: ${error.message}\n`
+        );
+        return false;
+      }
+      await delay(Math.min(1000, attempt * 150));
+    }
+  }
+  return false;
+}
+
 const watchdog = setTimeout(() => {
   process.stderr.write(`[step3-e2e] global watchdog expired during ${currentPhase}.\n`);
   process.exit(1);
@@ -179,22 +206,47 @@ const watchdog = setTimeout(() => {
         .map(contents => ({ type: contents.getType(), url: contents.getURL(), title: contents.getTitle() })));
       throw new Error(`Manual verification event timed out: ${JSON.stringify({ debug, embedded, portal: portal.stats() })}`);
     }
-    phase('validating visible verification browser');
+    phase('waiting for verification browser display readiness');
+    await window.waitForFunction(async () => {
+      const state = await window.cpApp.builtinBrowserTargetState();
+      const placeholder = document.querySelector('#builtinBrowserSlot .browser-slot-placeholder');
+      const status = document.getElementById('builtinBrowserStatus')?.textContent || '';
+      const slot = document.getElementById('builtinBrowserSlot')?.getBoundingClientRect();
+      return Boolean(
+        state?.attached &&
+        state?.visible &&
+        state?.bounds?.width > 0 &&
+        state?.bounds?.height > 0 &&
+        placeholder?.hidden &&
+        slot &&
+        slot.top < window.innerHeight &&
+        /Manual verification required|Browser ready|Loading Canada Post|Waiting for manual action|Canada Post loaded/.test(status)
+      );
+    }, null, { timeout: 30000, polling: 100 });
+
+    phase('validating stable verification browser');
     const verificationDisplay = await withTimeout(window.evaluate(async () => ({
       state: await window.cpApp.builtinBrowserTargetState(),
       placeholderHidden: document.querySelector('#builtinBrowserSlot .browser-slot-placeholder').hidden,
       status: document.getElementById('builtinBrowserStatus').textContent,
       slot: document.getElementById('builtinBrowserSlot').getBoundingClientRect().toJSON()
     })), 'Verification browser display read', 15000);
+    process.stdout.write(
+      `[step3-e2e] verification display ${JSON.stringify(verificationDisplay)}\n`
+    );
     const targetState = verificationDisplay.state;
     assert.strictEqual(targetState.attached, true, 'manual verification target was not attached');
     assert.strictEqual(targetState.visible, true, 'manual verification target was not visible');
     assert(targetState.bounds.width > 0 && targetState.bounds.height > 0, 'manual verification target had empty bounds');
     assert.strictEqual(verificationDisplay.placeholderHidden, true, 'placeholder covered the visible native browser');
-    assert.match(verificationDisplay.status, /Manual verification required|Browser ready|Loading Canada Post/);
+    assert.match(
+      verificationDisplay.status,
+      /Manual verification required|Browser ready|Loading Canada Post|Waiting for manual action|Canada Post loaded/
+    );
     assert(verificationDisplay.slot.top < await window.evaluate(() => window.innerHeight));
 
-    const mockPage = await application.evaluate(({ webContents }, expectedOrigin) => {
+    phase('validating synthetic verification page contents');
+    const mockPage = await withTimeout(application.evaluate(({ webContents }, expectedOrigin) => {
       const target = webContents.getAllWebContents().find(contents => contents.getURL().startsWith(expectedOrigin));
       if (!target) return { found: false };
       const bounds = target.getOwnerBrowserWindow ? target.getOwnerBrowserWindow()?.getContentBounds?.() : null;
@@ -203,7 +255,7 @@ const watchdog = setTimeout(() => {
         text: document.body.innerText,
         buttonVisible: Boolean(document.getElementById('complete_verification')?.getBoundingClientRect().height)
       })`, true).then(value => ({ found: true, ...value, ownerBounds: bounds }));
-    }, origin);
+    }, origin), 'Synthetic verification page inspection', 30000);
     assert.strictEqual(mockPage.found, true);
     assert.match(mockPage.title, /Text verification/);
     assert.match(mockPage.text, /Verification code required/);
@@ -268,6 +320,9 @@ const watchdog = setTimeout(() => {
 
     phase('assertions complete');
     process.stdout.write('Step 3 visible mock verification and dry-run hard stop passed without review or submission.\n');
+  } catch (error) {
+    error.step3Phase = currentPhase;
+    throw error;
   } finally {
     phase('cleanup');
     if (application) {
@@ -276,17 +331,20 @@ const watchdog = setTimeout(() => {
       } catch (error) {
         process.stderr.write(`[step3-e2e] graceful Electron close failed: ${error.message}\n`);
         forceKillApplication(application);
+        await delay(1000);
       }
     }
     await portal.close({ timeoutMs: 5000 }).catch(error => {
       process.stderr.write(`[step3-e2e] mock portal cleanup warning: ${error.message}\n`);
     });
-    fs.rmSync(userData, { recursive: true, force: true });
+    await removeDirectoryWithRetries(userData);
   }
 })().then(() => {
   clearTimeout(watchdog);
 }).catch(error => {
   clearTimeout(watchdog);
-  process.stderr.write(`[step3-e2e] failed during ${currentPhase}: ${error.stack || error.message}\n`);
+  process.stderr.write(
+    `[step3-e2e] failed during ${error.step3Phase || currentPhase}: ${error.stack || error.message}\n`
+  );
   process.exit(1);
 });

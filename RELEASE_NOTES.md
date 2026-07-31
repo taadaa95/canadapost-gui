@@ -18,6 +18,8 @@
 - Disables the unnecessary Gitleaks SARIF artifact upload and limits required CI artifact retention to seven days.
 - Runs the Linux Step 3 Electron visibility E2E under Xvfb.
 - Adds phase-level diagnostics, bounded submission handshakes, a global watchdog, and forced Windows Electron cleanup to prevent opaque E2E hangs.
+- Waits for the Windows native verification view to stabilize before asserting attachment, bounds, placeholder state and browser status.
+- Preserves the original E2E failure across cleanup and retries Windows temporary-directory removal instead of masking assertions with `EPERM`.
 
 This is `0.4.0-dev.10`, an unsigned development build. It is not a public release.
 

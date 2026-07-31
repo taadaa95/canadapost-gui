@@ -60,6 +60,21 @@ assert.match(
   'executable dry-run start must be bounded'
 );
 assert.match(
+  visibilityE2E,
+  /waiting for verification browser display readiness[\s\S]{0,800}waitForFunction[\s\S]{0,800}placeholder\?\.hidden/,
+  'verification assertions must wait for the native browser display to stabilize'
+);
+assert.match(
+  visibilityE2E,
+  /error\.step3Phase = currentPhase/,
+  'cleanup must preserve the original failing E2E phase'
+);
+assert.match(
+  visibilityE2E,
+  /removeDirectoryWithRetries[\s\S]{0,500}maxRetries:\s*3/,
+  'Windows temporary-directory cleanup must retry locked files without masking test failures'
+);
+assert.match(
   workflow,
   /GITLEAKS_ENABLE_UPLOAD_ARTIFACT:\s*["']false["']/,
   'Gitleaks must not consume artifact storage for its SARIF report'
