@@ -21,6 +21,8 @@ files:
   - main.js
   - preload.js
   - renderer.js
+  - renderer/**/*.js
+  - renderer/**/*.css
   - index.html
   - package.json
   - lib/**/*.js
@@ -28,8 +30,12 @@ files:
   - config/holiday-calendar.json
   - config/update-source.json
   - locales/*.json
-  - scripts/*.js
-  - mock-portal/**
+  - scripts/import-est-history.js
+  - scripts/import-shipping-history.js
+  - scripts/get-tracking.js
+  - scripts/database-startup-probe.js
+  - scripts/site-health-check.js
+  - scripts/submit-claims.js
   - cacert.pem
   - wsdl/**
   - "!**/data/**"

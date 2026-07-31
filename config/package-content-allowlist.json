@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "allowedRoots": [
+    "bootstrap.js",
+    "main.js",
+    "preload.js",
+    "renderer.js",
+    "renderer",
+    "index.html",
+    "package.json",
+    "lib",
+    "config",
+    "locales",
+    "scripts",
+    "node_modules",
+    "cacert.pem",
+    "wsdl"
+  ],
+  "runtimeScripts": [
+    "database-startup-probe.js",
+    "get-tracking.js",
+    "import-est-history.js",
+    "import-shipping-history.js",
+    "site-health-check.js",
+    "submit-claims.js"
+  ],
+  "excludedProductionRoots": ["tests", "mock-portal", "docs", "coverage"],
+  "artifactSizeBudgets": {
+    "linux-x64-appimage": 430000000,
+    "windows-x64-nsis": 450000000
+  }
+}

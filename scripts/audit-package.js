@@ -8,6 +8,7 @@ const asar = require('@electron/asar');
 const { isProhibited } = require('../lib/release-safety');
 const { scanPaths } = require('../lib/secret-scanner');
 const { WORKERS } = require('../lib/runtime-workers');
+const packageAllowlist = require('../config/package-content-allowlist.json');
 
 const target = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dist', 'packages', 'linux-unpacked'));
 if (!fs.existsSync(target)) throw new Error('Pass an unpacked Electron application directory to audit.');
@@ -67,8 +68,15 @@ try {
   asar.extractAll(archive, extracted);
   const findings = scanPaths(extracted);
   if (findings.length) throw new Error(`Packaged application secret scan produced ${findings.length} redacted finding(s).`);
-  const unexpectedRoots = fs.readdirSync(extracted).filter(name => !['bootstrap.js', 'main.js', 'preload.js', 'renderer.js', 'index.html', 'package.json', 'lib', 'config', 'locales', 'scripts', 'mock-portal', 'node_modules', 'cacert.pem', 'wsdl'].includes(name));
+  const unexpectedRoots = fs.readdirSync(extracted).filter(name => !packageAllowlist.allowedRoots.includes(name));
   if (unexpectedRoots.length) throw new Error(`Unexpected packaged application roots: ${unexpectedRoots.join(', ')}`);
+  for (const excluded of packageAllowlist.excludedProductionRoots) {
+    if (fs.existsSync(path.join(extracted, excluded))) throw new Error(`Development-only production root is present: ${excluded}`);
+  }
+  const packagedScripts = fs.readdirSync(path.join(extracted, 'scripts')).sort();
+  if (JSON.stringify(packagedScripts) !== JSON.stringify([...packageAllowlist.runtimeScripts].sort())) {
+    throw new Error(`Packaged scripts differ from the runtime allowlist: ${packagedScripts.join(', ')}`);
+  }
 } finally {
   fs.rmSync(extracted, { recursive: true, force: true });
 }

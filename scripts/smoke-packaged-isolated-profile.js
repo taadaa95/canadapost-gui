@@ -125,7 +125,7 @@ async function launch(executable, executableArguments, env, expectedCode) {
     assert.strictEqual(first.type, 'isolated_profile_database_ready');
     assert.strictEqual(first.isolated, true);
     assert.strictEqual(first.userDataMatchesElectron, true);
-    assert.strictEqual(first.schemaVersion, 7);
+    assert.strictEqual(first.schemaVersion, 8);
     assert.strictEqual(first.migrated, true);
     assert.strictEqual(first.backupCreated, true);
     assert.strictEqual(first.backupDelta, 1);
@@ -138,7 +138,7 @@ async function launch(executable, executableArguments, env, expectedCode) {
     const firstBackupCount = fs.readdirSync(backupDirectory).filter(name => name.endsWith('.sqlite')).length;
     assert.strictEqual(firstBackupCount, 1);
     const second = await launch(executable, executableArguments, baseEnvironment, 0);
-    assert.strictEqual(second.schemaVersion, 7);
+    assert.strictEqual(second.schemaVersion, 8);
     assert.strictEqual(second.migrated, false);
     assert.strictEqual(second.backupCreated, false);
     assert.strictEqual(second.backupDelta, 0);
@@ -147,7 +147,7 @@ async function launch(executable, executableArguments, env, expectedCode) {
 
     const migrated = new DatabaseSync(path.join(isolatedProfile, 'database', 'app.sqlite'));
     assert.strictEqual(migrated.prepare("SELECT count(*) AS count FROM shipments WHERE tracking_number = 'SYNTHETIC-PACKAGED-ISOLATED'").get().count, 1);
-    assert.strictEqual(migrated.prepare('PRAGMA user_version').get().user_version, 7);
+    assert.strictEqual(migrated.prepare('PRAGMA user_version').get().user_version, 8);
     assert.strictEqual(migrated.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
     assert.strictEqual(migrated.prepare('PRAGMA foreign_key_check').all().length, 0);
     migrated.close();

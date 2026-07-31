@@ -80,7 +80,7 @@ async function launchProbe(packageRoot, databasePath, backupDirectory) {
     const first = await launchProbe(packageRoot, databasePath, backupDirectory);
     assert.strictEqual(first.migrated, true);
     assert.strictEqual(first.backupCreated, true);
-    assert.strictEqual(first.schemaVersion, 7);
+    assert.strictEqual(first.schemaVersion, 8);
 
     const verified = new DatabaseSync(databasePath);
     assert.strictEqual(verified.prepare("SELECT count(*) AS count FROM shipments WHERE tracking_number = 'SYNTHETIC-PACKAGED-MIGRATION'").get().count, 1);

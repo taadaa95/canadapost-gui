@@ -38,6 +38,7 @@
     "lib": [".js", ".json"],
     "locales": [".json"],
     "mock-portal": [".js", ".html", ".css", ".json"],
+    "renderer": [".js", ".css"],
     "scripts": [".js"],
     "tests": [".js", ".json", ".xml", ".csv", ".html", ".txt"],
     "wsdl": [".wsdl", ".xsd"]
