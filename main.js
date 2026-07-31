@@ -12,10 +12,13 @@ const archiveTools = require('./lib/archive-tools');
 const encryptedBackup = require('./lib/encrypted-backup');
 const { pruneStep3DiagnosticRuns } = require('./lib/step3-diagnostics');
 const inputValidation = require('./lib/input-validation');
-const claimQueue = require('./lib/claim-queue');
+const step3QueueService = require('./lib/step3-queue-service');
+const privacyDeletion = require('./lib/privacy-deletion');
+const updateInstallGuard = require('./lib/update-install-guard');
+const githubReleaseUpdater = require('./lib/github-release-updater');
+const { coordinator: operationCoordinator } = require('./lib/operation-coordinator');
 const { buildPreflightReport } = require('./lib/preflight');
-const { classifyEligibility, policy: eligibilityPolicy } = require('./lib/policy-engine');
-const { createQueueSnapshot } = require('./lib/eligibility-revalidation');
+const { policy: eligibilityPolicy } = require('./lib/policy-engine');
 const { isAllowedCanadaPostUrl, portalUrl } = require('./lib/origin-policy');
 const { parseDecimalToMinor } = require('./lib/money');
 const i18n = require('./lib/i18n');
@@ -120,6 +123,7 @@ let activeStep3DiagnosticsDir = '';
 let latestStep3DiagnosticsDir = '';
 let lastBrowserBoundsDiagnosticAt = 0;
 let pendingRestorePath = '';
+let updateRecovery = Object.freeze({ pending: false });
 
 
 function sanitizeDiagnosticUrl(value) {
@@ -274,6 +278,19 @@ function createWindow() {
   win.on('maximize', () => requestDisplayRefresh('window-maximize'));
   win.on('unmaximize', () => requestDisplayRefresh('window-unmaximize'));
   win.on('move', () => requestDisplayRefresh('window-move'));
+  win.on('close', event => {
+    const operation = operationCoordinator.blockingOperation();
+    if (!operation) return;
+    event.preventDefault();
+    const bundle = i18n.loadLocale(readConfig().locale || 'en-CA');
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      title: i18n.translate(bundle, 'update.blocked.title', 'Close blocked'),
+      message: i18n.interpolate(i18n.translate(bundle, 'update.exitBlocked.message', 'The application cannot close while {operation} is active.'), { operation }),
+      buttons: [i18n.translate(bundle, 'action.continue', 'Continue')],
+      noLink: true
+    }).catch(() => {});
+  });
   win.on('closed', () => {
     stopActiveChildForShutdown();
     destroyBuiltinBrowserView();
@@ -1172,7 +1189,18 @@ function spawnJsonProcess(workerName, options, stage, logPath, hooks = {}) {
     ...options,
     env: { ...options.env, PLAYWRIGHT_BROWSERS_PATH: bundledPlaywrightBrowserPath() }
   };
-  const launch = runtimeWorkers.spawnResolvedWorker(resolution, launchOptions);
+  const protectedOperation = stage === 'tracking'
+    ? (options.env?.TRACKING_STRUCTURE_EXPORT === '1' ? 'step2_structure_export' : (options.env?.TRACKING_DIAGNOSTIC_MODE === '1' ? 'step2_diagnostic' : 'step2_bulk_run'))
+    : (stage === 'submit' ? (options.env?.DRY_RUN === 'true' ? 'step3_dry_run' : 'step3_live_run')
+      : (stage === 'history' || stage === 'est-history' ? 'step1_import' : 'authoritative_data_mutation'));
+  const operationToken = operationCoordinator.begin(protectedOperation, { code: stage });
+  let launch;
+  try {
+    launch = runtimeWorkers.spawnResolvedWorker(resolution, launchOptions);
+  } catch (error) {
+    operationCoordinator.end(operationToken);
+    throw error;
+  }
   const completion = new Promise((resolve) => {
     const { child, useStdinJson } = launch;
     activeChild = child;
@@ -1226,6 +1254,7 @@ function spawnJsonProcess(workerName, options, stage, logPath, hooks = {}) {
       settled = true;
       if (activeChild === child) activeChild = null;
       activeStage = 'idle';
+      operationCoordinator.end(operationToken);
       resolve({ ...result, lastEvent, lastEventsByType, eventCounts });
     };
 
@@ -1304,17 +1333,30 @@ function applicationStorageWritable() {
 }
 
 function currentClaimPreview() {
-  const latestTracking = claimDb.latestTrackingRun(DB_PATH);
-  if (latestTracking && !['complete', 'complete_with_warnings'].includes(latestTracking.status)) {
-    return {
-      count: 0,
-      items: [],
-      blocked: true,
-      reason: 'INCOMPLETE_TRACKING_RUN',
-      message: 'Step 3 is blocked until Step 2 is recomputed and completes successfully.'
-    };
-  }
-  return claimQueue.previewClaims(path.join(DATA_DIR, 'claims.csv'));
+  return step3QueueService.previewCandidates(DB_PATH, { now: new Date() });
+}
+
+function localizedText(key, values = {}, fallback = '') {
+  const bundle = i18n.loadLocale(readConfig().locale || 'en-CA');
+  return i18n.interpolate(i18n.translate(bundle, key, fallback), values);
+}
+
+function localizedOperation(operation) {
+  const code = String(operation || 'unknown');
+  return localizedText(`operation.${code}`, {}, code);
+}
+
+function localizedStep3Error(error) {
+  const code = String(error?.code || 'STEP3_SNAPSHOT_FAILED');
+  const keys = {
+    STEP2_RUN_MISSING: 'step3.error.step2Missing',
+    STEP2_RUN_NOT_AUTHORITATIVE: 'step3.error.step2NotAuthoritative',
+    STEP3_SELECTION_EMPTY: 'step3.zeroSelectionRecovery',
+    STEP3_EVIDENCE_CHANGED: 'step3.error.evidenceChanged',
+    STEP3_TERMINAL_OUTCOME: 'step3.error.terminalOutcome',
+    STEP3_UNRESOLVED_ATTEMPT: 'step3.error.unresolvedAttempt'
+  };
+  return localizedText(keys[code] || 'step3.error.snapshotFailed', {}, code);
 }
 
 function diagnosticSensitiveValues(config = {}) {
@@ -1349,7 +1391,12 @@ ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
   const config = readConfig();
   const submitted = options.submitOptions || {};
   const dependencies = dependencyStatus();
-  const preview = currentClaimPreview();
+  let preview;
+  try {
+    preview = currentClaimPreview();
+  } catch (error) {
+    preview = { count: 0, items: [], blocked: true, reason: error.code || 'STEP3_QUEUE_UNAVAILABLE' };
+  }
   const reconciliationCount = claimDb.listReconciliation(DB_PATH, 10000).length;
   const workerReady = name => preflightWorkerLaunch(name).ok;
   const trackingEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
@@ -1382,22 +1429,24 @@ ipcMain.handle('claims:preview', () => {
   try {
     return { ok: true, ...currentClaimPreview() };
   } catch (error) {
-    return { ok: false, error: error.message, count: 0, items: [] };
+    return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_QUEUE_UNAVAILABLE', count: 0, items: [] };
   }
 });
 
-ipcMain.handle('tracking:discardIncomplete', (_event, payload = {}) => {
+ipcMain.handle('tracking:discardIncomplete', async (_event, payload = {}) => {
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
   if (activeChild) return { ok: false, error: 'Stop the active process before discarding an incomplete Step 2 run.' };
-  const result = claimDb.discardIncompleteTrackingRun(DB_PATH);
-  if (!result.discarded) return { ok: true, ...result, message: 'No incomplete Step 2 run was found.' };
-  const fileRestore = restorePreviousTextFiles(path.join(DATA_DIR, 'tracking-runs', `run-${result.runId}`), DATA_DIR);
-  return {
-    ok: true,
-    ...result,
-    fileRestore,
-    message: `Incomplete Step 2 run discarded. Its history was preserved${fileRestore.restored ? ' and the preceding completed output files were restored' : ''}; Step 3 remains blocked until a new Step 2 run completes.`
-  };
+  return operationCoordinator.run('authoritative_data_mutation', async () => {
+    const result = claimDb.discardIncompleteTrackingRun(DB_PATH);
+    if (!result.discarded) return { ok: true, ...result, message: 'No incomplete Step 2 run was found.' };
+    const fileRestore = restorePreviousTextFiles(path.join(DATA_DIR, 'tracking-runs', `run-${result.runId}`), DATA_DIR);
+    return {
+      ok: true,
+      ...result,
+      fileRestore,
+      message: `Incomplete Step 2 run discarded. Its history was preserved${fileRestore.restored ? ' and the preceding completed output files were restored' : ''}; Step 3 remains blocked until a new Step 2 run completes.`
+    };
+  });
 });
 
 ipcMain.handle('browser:showBuiltin', async (_event, options = {}) => {
@@ -1486,16 +1535,18 @@ ipcMain.handle('browser:clearSession', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Browser profile actions are disabled while isolated test data is active.' };
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
   if (activeChild) return { ok: false, error: 'Stop the active process before clearing browser data.' };
-  hideBuiltinBrowserView();
-  destroyBuiltinBrowserView();
-  const browserSession = session.fromPartition('persist:canadapost-claims-builtin');
-  await browserSession.clearStorageData({ storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'serviceworkers'] });
-  await browserSession.clearCache();
-  claimDb.recordAuditEvent(DB_PATH, payload.resetProfile ? 'browser_profile_reset' : 'browser_session_cleared', {
-    claimHistoryPreserved: true,
-    cookiesAndStorageCleared: true
+  return operationCoordinator.run('authoritative_data_mutation', async () => {
+    hideBuiltinBrowserView();
+    destroyBuiltinBrowserView();
+    const browserSession = session.fromPartition('persist:canadapost-claims-builtin');
+    await browserSession.clearStorageData({ storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'serviceworkers'] });
+    await browserSession.clearCache();
+    claimDb.recordAuditEvent(DB_PATH, payload.resetProfile ? 'browser_profile_reset' : 'browser_session_cleared', {
+      claimHistoryPreserved: true,
+      cookiesAndStorageCleared: true
+    });
+    return { ok: true, claimHistoryPreserved: true };
   });
-  return { ok: true, claimHistoryPreserved: true };
 });
 
 ipcMain.handle('config:load', () => {
@@ -1538,6 +1589,7 @@ ipcMain.handle('config:load', () => {
     isolatedUserDataPath: USER_DATA_PROFILE.active ? USER_DATA_PROFILE.userDataRoot : '',
     liveSubmissionEnabled: !USER_DATA_PROFILE.active,
     updateActionsEnabled: !USER_DATA_PROFILE.active,
+    updateRecovery,
     setupReadiness: (() => {
       const saved = storage.publicConfig();
       let browserAvailable = false;
@@ -1756,17 +1808,19 @@ ipcMain.handle('financial:get', (_event, options = {}) => {
   catch (error) { return { ok: false, error: error.message }; }
 });
 
-ipcMain.handle('financial:record', (_event, payload = {}) => {
+ipcMain.handle('financial:record', async (_event, payload = {}) => {
   try {
-    const id = claimDb.recordFinancialEntry(DB_PATH, {
-      trackingNumber: String(payload.trackingNumber || '').trim(),
-      valueType: String(payload.valueType || ''),
-      amountMinor: parseDecimalToMinor(payload.amount, 2),
-      currency: String(payload.currency || 'CAD'),
-      source: String(payload.source || 'manual'),
-      note: String(payload.note || '')
+    return await operationCoordinator.run('authoritative_data_mutation', async () => {
+      const id = claimDb.recordFinancialEntry(DB_PATH, {
+        trackingNumber: String(payload.trackingNumber || '').trim(),
+        valueType: String(payload.valueType || ''),
+        amountMinor: parseDecimalToMinor(payload.amount, 2),
+        currency: String(payload.currency || 'CAD'),
+        source: String(payload.source || 'manual'),
+        note: String(payload.note || '')
+      });
+      return { ok: true, id, report: claimDb.financialReport(DB_PATH, String(payload.currency || 'CAD')) };
     });
-    return { ok: true, id, report: claimDb.financialReport(DB_PATH, String(payload.currency || 'CAD')) };
   } catch (error) { return { ok: false, error: error.message }; }
 });
 
@@ -1792,10 +1846,12 @@ ipcMain.handle('reconciliation:list', () => {
   return { ok: true, items: claimDb.listReconciliation(DB_PATH, 1000) };
 });
 
-ipcMain.handle('reconciliation:update', (_event, payload = {}) => {
+ipcMain.handle('reconciliation:update', async (_event, payload = {}) => {
   try {
-    const item = claimDb.reconcileAttempt(DB_PATH, payload.attemptId, String(payload.action || ''), String(payload.note || ''), String(payload.confirmationNumber || ''));
-    return { ok: true, item, reconciliationCount: claimDb.listReconciliation(DB_PATH, 10000).length };
+    return await operationCoordinator.run('authoritative_data_mutation', async () => {
+      const item = claimDb.reconcileAttempt(DB_PATH, payload.attemptId, String(payload.action || ''), String(payload.note || ''), String(payload.confirmationNumber || ''));
+      return { ok: true, item, reconciliationCount: claimDb.listReconciliation(DB_PATH, 10000).length };
+    });
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -1819,13 +1875,15 @@ ipcMain.handle('classification:list', (_event, payload = {}) => {
   catch (error) { return { ok: false, error: error.message, items: [] }; }
 });
 
-ipcMain.handle('manualReview:update', (_event, payload = {}) => {
+ipcMain.handle('manualReview:update', async (_event, payload = {}) => {
   try {
     const reviewId = Number(payload.reviewId);
     if (!Number.isSafeInteger(reviewId) || reviewId < 1) throw new Error('Invalid manual-review identifier.');
     const action = String(payload.action || '').slice(0, 64);
     const note = String(payload.note || '').slice(0, 4096);
-    return { ok: true, item: claimDb.updateManualReview(DB_PATH, reviewId, action, note) };
+    return await operationCoordinator.run('authoritative_data_mutation', async () => (
+      { ok: true, item: claimDb.updateManualReview(DB_PATH, reviewId, action, note) }
+    ));
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -1836,19 +1894,21 @@ ipcMain.handle('shipment:listManual', (_event, options = {}) => {
   return { ok: true, items: claimDb.listManualShipments(DB_PATH, options) };
 });
 
-ipcMain.handle('shipment:manualAdd', (_event, payload = {}) => {
+ipcMain.handle('shipment:manualAdd', async (_event, payload = {}) => {
   try {
-    const shipment = claimDb.upsertShipment(DB_PATH, {
-      trackingNumber: payload.trackingNumber,
-      referenceNumber: payload.referenceNumber,
-      serviceCode: payload.serviceCode,
-      destinationPostalCode: payload.destinationPostalCode,
-      expectedDate: payload.expectedDate,
-      deliveryDate: payload.deliveryDate,
-      classification: payload.classification || 'MANUAL_ENTRY',
-      eligibilityReason: payload.note || 'Manually entered shipment.'
+    return await operationCoordinator.run('authoritative_data_mutation', async () => {
+      const shipment = claimDb.upsertShipment(DB_PATH, {
+        trackingNumber: payload.trackingNumber,
+        referenceNumber: payload.referenceNumber,
+        serviceCode: payload.serviceCode,
+        destinationPostalCode: payload.destinationPostalCode,
+        expectedDate: payload.expectedDate,
+        deliveryDate: payload.deliveryDate,
+        classification: payload.classification || 'MANUAL_ENTRY',
+        eligibilityReason: payload.note || 'Manually entered shipment.'
+      });
+      return { ok: true, shipment };
     });
-    return { ok: true, shipment };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -1865,6 +1925,7 @@ ipcMain.handle('backup:create', async (_event, payload = {}) => {
     filters: [{ name: 'Encrypted Claim Runner backups', extensions: ['cpcrbackup'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  const operationToken = operationCoordinator.begin('backup_creation');
   try {
     await encryptedBackup.createEncryptedBackup({
       dbPath: DB_PATH,
@@ -1879,6 +1940,8 @@ ipcMain.handle('backup:create', async (_event, payload = {}) => {
     return { ok: true, path: result.filePath };
   } catch (error) {
     return { ok: false, error: error.message };
+  } finally {
+    operationCoordinator.end(operationToken);
   }
 });
 
@@ -1898,6 +1961,7 @@ ipcMain.handle('backup:restore', async (_event, payload = {}) => {
     if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
     pendingRestorePath = result.filePaths[0];
   }
+  let operationToken = '';
   try {
     const encrypted = encryptedBackup.isEncryptedBackup(pendingRestorePath);
     if (encrypted && (typeof payload.password !== 'string' || !payload.password)) return { ok: false, passwordRequired: true };
@@ -1917,6 +1981,7 @@ ipcMain.handle('backup:restore', async (_event, payload = {}) => {
       tempDirectory: BACKUP_RESTORE_TEMP_DIR,
       configWriter: restoredSettings => writeConfig({ ...readConfig(), ...storage.sanitizeConfig(restoredSettings) })
     };
+    operationToken = operationCoordinator.begin('backup_restore');
     const restored = encrypted
       ? encryptedBackup.restoreEncryptedBackup({ ...restoreOptions, password: payload.password })
       : archiveTools.restoreBackup(restoreOptions);
@@ -1928,6 +1993,60 @@ ipcMain.handle('backup:restore', async (_event, payload = {}) => {
   } catch (error) {
     if (!/password may be wrong/i.test(error.message)) pendingRestorePath = '';
     return { ok: false, error: error.message };
+  } finally {
+    if (operationToken) operationCoordinator.end(operationToken);
+  }
+});
+
+function validatedPrivacyScope(payload = {}) {
+  return {
+    allRecords: payload.allRecords === true,
+    trackingNumbers: Array.isArray(payload.trackingNumbers)
+      ? payload.trackingNumbers.slice(0, 10000).map(value => String(value || '').slice(0, 128))
+      : [],
+    dateFrom: String(payload.dateFrom || '').slice(0, 10),
+    dateTo: String(payload.dateTo || '').slice(0, 10)
+  };
+}
+
+ipcMain.handle('privacy:preview', (_event, payload = {}) => {
+  try {
+    return { ok: true, ...privacyDeletion.previewData(DB_PATH, validatedPrivacyScope(payload)) };
+  } catch (_error) {
+    return { ok: false, error: localizedText('privacy.previewFailed', {}, 'PRIVACY_PREVIEW_INVALID'), code: 'PRIVACY_PREVIEW_INVALID' };
+  }
+});
+
+ipcMain.handle('privacy:delete', (_event, payload = {}) => {
+  try {
+    operationCoordinator.assertInactive();
+  } catch (error) {
+    return {
+      ok: false,
+      error: localizedText('privacy.operationActive', { operation: localizedOperation(error.operation) }, 'PRIVACY_OPERATION_ACTIVE'),
+      code: error.code,
+      operation: error.operation
+    };
+  }
+  const operationToken = operationCoordinator.begin('privacy_deletion');
+  try {
+    return privacyDeletion.deleteData({
+      dbPath: DB_PATH,
+      scope: validatedPrivacyScope(payload),
+      locale: i18n.normalizeLocale(payload.locale),
+      confirmed: payload.confirmed === true,
+      typedPhrase: String(payload.typedPhrase || '').slice(0, 128),
+      secondConfirmed: payload.secondConfirmed === true,
+      applicationVersion: APP_VERSION,
+      operationId: crypto.randomUUID(),
+      ownedRoots: [DATA_DIR, LOG_DIR],
+      transactionRoot: path.join(USER_DATA_ROOT, 'tmp', 'privacy-deletion'),
+      receiptDirectory: path.join(USER_DATA_ROOT, 'privacy-receipts')
+    });
+  } catch (_error) {
+    return { ok: false, error: localizedText('privacy.deleteFailed', {}, 'PRIVACY_DELETION_FAILED'), code: 'PRIVACY_DELETION_FAILED' };
+  } finally {
+    operationCoordinator.end(operationToken);
   }
 });
 
@@ -2559,7 +2678,7 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
       );
       emit('run', {
         status: Number(summary.errorCount || 0) > 0 ? 'complete_with_warnings' : 'complete',
-        message: `Tracking check complete: ${counts}.${hasClaims ? ' claims.csv contains late-delivery candidates for Canada Post to decide.' : ' No claims are ready for submission.'}`,
+        message: `${localizedText('step2.runComplete', { counts }, 'STEP2_RUN_COMPLETE')} ${localizedText(hasClaims ? 'step2.runCompleteCandidates' : 'step2.runCompleteNoCandidates')}`,
         logPath
       });
     } catch (error) {
@@ -2604,20 +2723,12 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   const claimSettingsValid = validateClaimSettings(claimSettingsEnv);
   if (!claimSettingsValid.ok) return claimSettingsValid;
 
-  const claimsPath = path.join(DATA_DIR, 'claims.csv');
-  if (!fs.existsSync(claimsPath) || fs.readFileSync(claimsPath, 'utf8').trim().split(/\r?\n/).length < 2) {
-    return { ok: false, error: `Missing usable ${claimsPath}. Run Step 2 first.` };
+  const selectedClassificationRecords = options.selectedClassificationRecords;
+  if (!selectedClassificationRecords.length) {
+    return { ok: false, error: 'No late-delivery candidates are selected. Refresh the Step 3 candidate queue and select at least one candidate.', code: 'STEP3_SELECTION_EMPTY' };
   }
-
-  const queuePreview = claimQueue.previewClaims(claimsPath);
-  const selectedTrackingNumbers = options.selectedTrackingNumbers.length
-    ? options.selectedTrackingNumbers
-    : queuePreview.items.map(item => item.trackingNumber);
-  if (!selectedTrackingNumbers.length) {
-    return { ok: false, error: 'No eligible claims are selected. Refresh the Step 3 review queue and select at least one claim.' };
-  }
-  if (options.expectedClaimCount && options.expectedClaimCount !== selectedTrackingNumbers.length) {
-    return { ok: false, error: 'The Step 3 claim selection changed before the run started. Refresh the review queue and confirm the selection again.' };
+  if (options.expectedClaimCount !== selectedClassificationRecords.length) {
+    return { ok: false, error: 'The Step 3 candidate selection changed before the run started. Refresh the candidate queue and confirm the selection again.', code: 'STEP3_SELECTION_COUNT_CHANGED' };
   }
   if (!options.dryRun && !options.liveSubmissionConfirmed) {
     return { ok: false, error: 'Live submission was not explicitly confirmed. Review the selected claims and confirm the live run.' };
@@ -2630,42 +2741,36 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
 
   const logPath = path.join(LOG_DIR, `submit-${timestamp()}.log`);
 
+  let submissionOperationToken;
+  try {
+    submissionOperationToken = operationCoordinator.begin(options.dryRun ? 'step3_dry_run' : 'step3_live_run');
+  } catch (error) {
+    return { ok: false, error: error.message, code: error.code || 'PROTECTED_OPERATION_BLOCKED' };
+  }
   const submitRunId = claimDb.startRun(DB_PATH, 'submission', {
     dryRun: Boolean(options.dryRun),
-    selectedClaimCount: selectedTrackingNumbers.length,
+    selectedClaimCount: selectedClassificationRecords.length,
     canaryMode: Boolean(options.canaryMode)
   });
-  const selectedClaimsPath = path.join(DATA_DIR, `claims-selected-run-${submitRunId}.csv`);
-  const queueSnapshotPath = path.join(DATA_DIR, `queue-snapshot-run-${submitRunId}.json`);
+  const privateSnapshotDirectory = path.join(DATA_DIR, 'private-step3-snapshots', `run-${submitRunId}`);
+  fs.mkdirSync(privateSnapshotDirectory, { recursive: true, mode: 0o700 });
+  const selectedClaimsPath = path.join(privateSnapshotDirectory, 'worker-claims.csv');
+  const queueSnapshotPath = path.join(privateSnapshotDirectory, 'queue-snapshot.json');
   let selectedClaims;
   let queueSnapshotId = null;
   try {
-    selectedClaims = claimQueue.writeSelectedClaimsCsv(claimsPath, selectedClaimsPath, selectedTrackingNumbers);
-    if (selectedClaims.count !== selectedTrackingNumbers.length) {
-      throw new Error('One or more selected claims no longer match claims.csv. Refresh the Step 3 queue before running.');
-    }
-    const selectedRows = claimQueue.readClaimsCsv(selectedClaimsPath).rows;
-    const policyInputs = selectedRows.map(row => claimQueue.claimInputFromRow(row, { ...config, ...options }));
-    const classifiedAt = new Date().toISOString();
-    const blocked = [];
-    for (const input of policyInputs) {
-      const classification = classifyEligibility(input, { asOf: classifiedAt, classificationTimestamp: classifiedAt });
-      claimDb.recordClassification(DB_PATH, input.trackingNumber, classification, input);
-      if (classification.classification !== 'LATE_CANDIDATE') {
-        blocked.push(`${input.trackingNumber}: ${classification.explanation}`);
-      }
-    }
-    if (blocked.length) {
-      throw new Error(`Pre-submission late-candidate revalidation blocked ${blocked.length} claim(s). Refresh tracking evidence and review the review-required queue. ${blocked[0]}`);
-    }
-    const queueSnapshot = createQueueSnapshot(policyInputs, { createdAt: classifiedAt, asOf: classifiedAt, policyDataVersion: eligibilityPolicy.dataVersion });
-    queueSnapshotId = claimDb.saveQueueSnapshot(DB_PATH, queueSnapshot);
-    fs.writeFileSync(queueSnapshotPath, `${JSON.stringify(queueSnapshot, null, 2)}\n`, { mode: 0o600 });
+    selectedClaims = step3QueueService.createRunSnapshot(
+      DB_PATH,
+      selectedClassificationRecords,
+      { csvPath: selectedClaimsPath, snapshotPath: queueSnapshotPath },
+      { allowedDirectory: privateSnapshotDirectory, now: new Date() }
+    );
+    queueSnapshotId = selectedClaims.snapshotId;
   } catch (error) {
-    fs.rmSync(selectedClaimsPath, { force: true });
-    fs.rmSync(queueSnapshotPath, { force: true });
+    fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message, stage: 'claim-selection' });
-    return { ok: false, error: error.message };
+    operationCoordinator.end(submissionOperationToken);
+    return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_SNAPSHOT_FAILED' };
   }
   const step3DiagnosticsRunDir = path.join(LOG_DIR, 'step3-runs', `step3-${timestamp()}-run-${submitRunId}`);
   fs.mkdirSync(step3DiagnosticsRunDir, { recursive: true, mode: 0o700 });
@@ -2700,13 +2805,13 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     });
     activeStep3DiagnosticsDir = '';
     activeBrowserVisibilityFile = '';
-    fs.rmSync(selectedClaimsPath, { force: true });
-    fs.rmSync(queueSnapshotPath, { force: true });
+    fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, {
       stage: 'browser-handshake',
       errorCode: error.code || 'BROWSER_HANDSHAKE_FAILED',
       error: error.message
     });
+    operationCoordinator.end(submissionOperationToken);
     return { ok: false, error: error.message, code: error.code || 'BROWSER_HANDSHAKE_FAILED' };
   }
   const envBase = {
@@ -2771,8 +2876,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
       appendStep3ElectronDiagnostic('submission-worker-closed', { code, signal, eventCounts });
       activeStep3DiagnosticsDir = '';
       activeBrowserVisibilityFile = '';
-      fs.rmSync(selectedClaimsPath, { force: true });
-      fs.rmSync(queueSnapshotPath, { force: true });
+      fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     }
   });
   const started = await submitProcess.started;
@@ -2780,9 +2884,9 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     const failed = await submitProcess;
     activeStep3DiagnosticsDir = '';
     activeBrowserVisibilityFile = '';
-    fs.rmSync(selectedClaimsPath, { force: true });
-    fs.rmSync(queueSnapshotPath, { force: true });
+    fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: failed.error?.message || 'Worker spawn failed.' });
+    operationCoordinator.end(submissionOperationToken);
     return { ok: false, error: failed.error?.message || 'Submission worker could not be started.' };
   }
 
@@ -2807,10 +2911,11 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
       appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
       activeStep3DiagnosticsDir = '';
       activeBrowserVisibilityFile = '';
-      fs.rmSync(selectedClaimsPath, { force: true });
-      fs.rmSync(queueSnapshotPath, { force: true });
+      fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
       try { claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });
+    } finally {
+      operationCoordinator.end(submissionOperationToken);
     }
   })();
 
@@ -2843,11 +2948,37 @@ async function startApplication() {
   fs.mkdirSync(BACKUP_RESTORE_TEMP_DIR, { recursive: true, mode: 0o700 });
   storage.migrateLegacyData();
   ensureDirs();
-  await claimDb.initializeDatabase(DB_PATH, { backupDirectory: DATABASE_BACKUP_DIR });
+  updateRecovery = Object.freeze(updateInstallGuard.recoveryState(USER_DATA_ROOT));
+  const migrationToken = operationCoordinator.begin('database_migration');
+  try {
+    await claimDb.initializeDatabase(DB_PATH, { backupDirectory: DATABASE_BACKUP_DIR });
+  } finally {
+    operationCoordinator.end(migrationToken);
+  }
+  const recoveryToken = operationCoordinator.begin('database_recovery');
+  try {
+    privacyDeletion.recoverInterruptedTransactions({
+      dbPath: DB_PATH,
+      transactionRoot: path.join(USER_DATA_ROOT, 'tmp', 'privacy-deletion'),
+      ownedRoots: [DATA_DIR, LOG_DIR]
+    });
+  } finally {
+    operationCoordinator.end(recoveryToken);
+  }
   databaseReady = true;
   claimDb.importLegacyData(DB_PATH, DATA_DIR);
   claimDb.markInterruptedAttempts(DB_PATH);
   claimDb.quarantineLegacyDryRunReadyAttempts(DB_PATH);
+  const databaseHealth = claimDb.integrityCheck(DB_PATH);
+  const pendingUpdate = updateInstallGuard.readPendingMarker(USER_DATA_ROOT);
+  if (pendingUpdate && pendingUpdate.targetVersion === APP_VERSION && databaseHealth.ok) {
+    updateInstallGuard.acknowledgeHealthyStartup(USER_DATA_ROOT, { integrity: databaseHealth.result });
+    updateRecovery = Object.freeze({ pending: false, acknowledged: true });
+    githubReleaseUpdater.cleanupUpdateStorage(USER_DATA_ROOT, {
+      keepRecent: 2,
+      protectedPaths: [pendingUpdate.downloadedPath]
+    });
+  }
   createWindow();
   screen.on('display-metrics-changed', () => {
     if (!builtinBrowserView) return;
@@ -2861,6 +2992,7 @@ async function handleStartupFailure(error) {
   databaseReady = false;
   let diagnosticPath = '';
   const diagnostic = startupDatabase.buildDiagnostic(error);
+  updateRecovery = Object.freeze(updateInstallGuard.recoveryState(USER_DATA_ROOT));
   try { diagnosticPath = startupDatabase.writeDiagnostic(LOG_DIR, diagnostic); } catch (_) {}
   const safeText = startupDatabase.diagnosticText(diagnostic);
   const details = [
@@ -2870,12 +3002,15 @@ async function handleStartupFailure(error) {
     '',
     'No database contents or credentials are included in this diagnostic.'
   ].join('\n');
+  const recoveryDetails = updateRecovery.pending
+    ? `\n\nA pending update was preserved. Pre-update backup available: ${updateRecovery.backupPreserved ? 'yes' : 'no'}. Previous executable available: ${updateRecovery.previousExecutablePreserved ? 'yes' : 'no'}.`
+    : '';
   try {
     const choice = await dialog.showMessageBox({
       type: 'error',
       title: 'Database recovery required',
       message: 'Canada Post Claim Runner could not start safely.',
-      detail: details,
+      detail: `${details}${recoveryDetails}`,
       buttons: ['Open data folder', 'Copy diagnostic', 'Exit'],
       defaultId: 2,
       cancelId: 2,
@@ -2895,7 +3030,20 @@ app.whenReady()
   .catch(error => handleStartupFailure(error))
   .catch(() => app.exit(1));
 
-app.on('before-quit', () => {
+app.on('before-quit', event => {
+  try {
+    operationCoordinator.assertInactive();
+  } catch (error) {
+    event.preventDefault();
+    if (!isShuttingDown) {
+      const focused = BrowserWindow.getFocusedWindow();
+      const bundle = i18n.loadLocale(readConfig().locale || 'en-CA');
+      const operation = i18n.translate(bundle, `operation.${error.operation}`, error.operation);
+      const message = i18n.interpolate(i18n.translate(bundle, 'update.exitBlocked.message', 'UPDATE_EXIT_BLOCKED'), { operation });
+      dialog.showMessageBox(focused || undefined, { type: 'warning', title: i18n.translate(bundle, 'update.blocked.title', 'Close blocked'), message, buttons: [i18n.translate(bundle, 'action.continue', 'Continue')] }).catch(() => {});
+    }
+    return;
+  }
   if (isShuttingDown) return;
   isShuttingDown = true;
   stopActiveChildForShutdown();

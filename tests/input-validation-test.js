@@ -20,6 +20,11 @@ const validated = validateSubmitOptions({
   dryRun: 'false',
   liveSubmissionConfirmed: true,
   selectedTrackingNumbers: [' 123 ', '456'],
+  selectedClassificationRecords: [
+    { recordId: 7, evidenceHash: 'A'.repeat(64) },
+    { recordId: 7, evidenceHash: 'b'.repeat(64) },
+    { recordId: 'invalid', evidenceHash: 'c'.repeat(64) }
+  ],
   afterSubmitMs: 1,
   betweenClaimsMs: 999999
 });
@@ -27,6 +32,7 @@ assert.strictEqual(validated.browserMode, 'builtin', 'Step 3 must remain built-i
 assert.strictEqual(validated.afterSubmitMs, 5000);
 assert.strictEqual(validated.betweenClaimsMs, 60000);
 assert.deepStrictEqual(validated.selectedTrackingNumbers, ['123', '456']);
+assert.deepStrictEqual(validated.selectedClassificationRecords, [{ recordId: 7, evidenceHash: 'a'.repeat(64) }]);
 assert.strictEqual(validated.liveSubmissionConfirmed, true);
 
 console.log('IPC input validation tests passed.');

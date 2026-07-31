@@ -139,6 +139,14 @@ async function migrateAndRepeat(filePath, options = {}, expected = {}) {
     const legacyResult = await migrateAndRepeat(legacy, {}, { shipments: 1, claimAttempts: 1, classifications: 0 });
     assert.ok(fs.existsSync(legacyResult.backupPath));
 
+    // Every schema version still accepted by the migration framework upgrades
+    // transactionally and becomes a no-op on its second startup.
+    for (const version of [0, 1, 2, 3, 5, 6, 7]) {
+      const supported = path.join(root, `supported-v${version}`, 'app.sqlite');
+      legacyDatabase(supported, { version });
+      await migrateAndRepeat(supported, {}, { shipments: 1, claimAttempts: 1 });
+    }
+
     // 4. classification_records exists but is missing supported newer columns.
     const oldClassification = path.join(root, 'old-classification', 'app.sqlite');
     legacyDatabase(oldClassification, { version: 6 });

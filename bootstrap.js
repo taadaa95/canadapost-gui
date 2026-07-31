@@ -40,13 +40,16 @@ if (bootstrapState) {
     });
   } else {
     require('./main');
+    const storage = require('./lib/app-storage');
     require('./lib/github-release-updater').registerGithubReleaseUpdater({
       app,
       ipcMain,
       dialog,
       BrowserWindow,
       shell,
-      isolated: Boolean(bootstrapState.active)
+      isolated: Boolean(bootstrapState.active),
+      operationCoordinator: require('./lib/operation-coordinator').coordinator,
+      localeProvider: () => storage.publicConfig().locale || 'en-CA'
     });
   }
 }

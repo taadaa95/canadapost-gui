@@ -177,7 +177,7 @@ function createLegacyDatabase(filePath) {
     createLegacyDatabase(databasePath);
     const first = await claimDb.initializeDatabase(databasePath, { backupDirectory: manifest.databaseBackups });
     assert.strictEqual(first.migrated, true);
-    assert.strictEqual(first.schemaVersion, 7);
+    assert.strictEqual(first.schemaVersion, 8);
     assert.ok(first.backupPath && fs.existsSync(first.backupPath));
     const backupCount = fs.readdirSync(manifest.databaseBackups).filter(name => name.endsWith('.sqlite')).length;
     assert.strictEqual(backupCount, 1);
@@ -187,7 +187,7 @@ function createLegacyDatabase(filePath) {
     assert.strictEqual(fs.readdirSync(manifest.databaseBackups).filter(name => name.endsWith('.sqlite')).length, 1);
     const verified = claimDb.openDatabase(databasePath, { migrate: false });
     assert.strictEqual(verified.prepare("SELECT count(*) AS count FROM shipments WHERE tracking_number = 'SYNTHETIC-ISOLATED-PROFILE'").get().count, 1);
-    assert.strictEqual(verified.prepare('PRAGMA user_version').get().user_version, 7);
+    assert.strictEqual(verified.prepare('PRAGMA user_version').get().user_version, 8);
     verified.close();
     assert.strictEqual(digestDirectory(normal), defaultBefore);
 
