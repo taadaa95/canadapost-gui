@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const claimDb = require('../lib/claim-database');
+const claimQueue = require('../lib/claim-queue');
 const { classifyEligibility } = require('../lib/policy-engine');
 const { walkBusinessDays } = require('../lib/business-calendar');
 const service = require('../lib/step3-queue-service');
@@ -80,6 +81,9 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     }, { allowedDirectory: snapshotDirectory, now: '2026-06-05T12:00:00.000Z' });
     const stableCsv = fs.readFileSync(snapshot.csvPath, 'utf8');
     const stableJson = fs.readFileSync(snapshot.snapshotPath, 'utf8');
+    const workerRows = claimQueue.readClaimsCsv(snapshot.csvPath).rows;
+    assert.strictEqual(workerRows[0].Status, 'LATE CANDIDATE', 'database snapshot must preserve the worker-side late-candidate guard');
+    assert.strictEqual(claimQueue.claimInputFromRow(workerRows[0]).trackingNumber, '1111111111111111');
 
     const run2 = claimDb.startRun(dbPath, 'tracking', { synthetic: true });
     candidate(run2, '2222222222222222');
