@@ -63,7 +63,7 @@
     "lint": "eslint main.js preload.js renderer.js lib scripts mock-portal tests",
     "format:check": "prettier --check package.json config/*.json locales/*.json electron-builder.yml .github/workflows/*.yml tsconfig.json eslint.config.js",
     "typecheck": "tsc -p tsconfig.json",
-    "test:mock-portal": "node tests/mock-portal-test.js && node tests/step3-mock-visibility-e2e-test.js",
+    "test:mock-portal": "node tests/mock-portal-test.js && node tests/mock-portal-shutdown-test.js && node tests/step3-mock-visibility-e2e-test.js",
     "test:step3-visibility": "node tests/step3-browser-visibility-test.js && node tests/step3-mock-visibility-e2e-test.js",
     "test:electron": "node tests/electron-e2e-test.js",
     "test:accessibility": "node tests/accessibility-test.js",

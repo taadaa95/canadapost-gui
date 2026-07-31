@@ -4,6 +4,29 @@ const assert = require('assert');
 const { chromium } = require('playwright');
 const { createMockPortal, SCENARIOS } = require('../mock-portal/server');
 
+const TEST_TIMEOUT_MS = 120000;
+const CLEANUP_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, label, timeoutMs = CLEANUP_TIMEOUT_MS) {
+  let timeout = null;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error(`${label} did not complete within ${timeoutMs} ms.`)),
+        timeoutMs
+      );
+    })
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
+const watchdog = setTimeout(() => {
+  process.stderr.write(`Mock portal test exceeded ${TEST_TIMEOUT_MS} ms.\n`);
+  process.exit(1);
+}, TEST_TIMEOUT_MS);
+
 (async () => {
   const portal = createMockPortal();
   const origin = await portal.start();
@@ -33,11 +56,17 @@ const { createMockPortal, SCENARIOS } = require('../mock-portal/server');
     assert.strictEqual(changed.status(), 200);
     assert.strictEqual(await page.locator('#ticket_open').count(), 0);
   } finally {
-    await browser.close();
-    await portal.close();
+    const cleanup = await Promise.allSettled([
+      withTimeout(browser.close(), 'Chromium shutdown'),
+      withTimeout(portal.close(), 'Mock portal shutdown')
+    ]);
+    const failedCleanup = cleanup.find(result => result.status === 'rejected');
+    if (failedCleanup) throw failedCleanup.reason;
   }
+  clearTimeout(watchdog);
   process.stdout.write('Mock portal tests passed.\n');
 })().catch(error => {
+  clearTimeout(watchdog);
   process.stderr.write(`${error.stack || error.message}\n`);
-  process.exitCode = 1;
+  process.exit(1);
 });

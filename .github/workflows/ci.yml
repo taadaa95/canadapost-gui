@@ -8,6 +8,7 @@ on:
         v0.4.0-productization,
         feature/github-release-updater,
         feature/dev9-ui-debloat,
+        feature/dev10-step3-executable-queue,
       ]
   pull_request:
   workflow_dispatch:
@@ -25,6 +26,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         node: [24]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,9 +40,13 @@ jobs:
         run: npx playwright install chromium
       - run: npm test
       - run: npm run test:dev10
-      - if: runner.os == 'Linux'
+      - name: Mock portal tests (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: xvfb-run -a npm run test:mock-portal
-      - if: runner.os == 'Windows'
+      - name: Mock portal tests (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
         run: npm run test:mock-portal
       - run: npm run test:accessibility
       - if: runner.os == 'Linux'

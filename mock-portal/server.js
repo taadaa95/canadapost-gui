@@ -89,6 +89,7 @@ function claimHtml(url, scenario) {
 function createMockPortal({ host = '127.0.0.1', port = 0, defaultScenario = 'success' } = {}) {
   let origin = '';
   const metrics = { requests: 0, loginPosts: 0, claimStages: {}, finalReviewVisits: 0, submittedClaims: 0 };
+  const sockets = new Set();
   const server = http.createServer((request, response) => {
     const url = new URL(request.url || '/', origin || `http://${host}`);
     const scenario = scenarioFrom(url, defaultScenario);
@@ -124,6 +125,11 @@ function createMockPortal({ host = '127.0.0.1', port = 0, defaultScenario = 'suc
     return send(response, 404, page('Not found', '<p>Synthetic route not found.</p>'));
   });
 
+  server.on('connection', socket => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+
   return {
     scenarios: SCENARIOS,
     async start() {
@@ -132,9 +138,37 @@ function createMockPortal({ host = '127.0.0.1', port = 0, defaultScenario = 'suc
       origin = `http://${host}:${address.port}`;
       return origin;
     },
-    async close() {
-      if (!server.listening) return;
-      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    async close({ timeoutMs = 5000 } = {}) {
+      if (!server.listening) {
+        for (const socket of sockets) socket.destroy();
+        sockets.clear();
+        return;
+      }
+
+      let timeout = null;
+      const closed = new Promise((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+      });
+
+      try {
+        if (typeof server.closeIdleConnections === 'function') server.closeIdleConnections();
+        if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+        for (const socket of sockets) socket.destroy();
+
+        await Promise.race([
+          closed,
+          new Promise((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error(`Mock portal did not close within ${timeoutMs} ms.`)),
+              timeoutMs
+            );
+          })
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+        for (const socket of sockets) socket.destroy();
+        sockets.clear();
+      }
     },
     stats() {
       return JSON.parse(JSON.stringify(metrics));

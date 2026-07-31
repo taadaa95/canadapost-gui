@@ -10,6 +10,10 @@
 - Replaces the misleading white idle browser and generic Browser ready state with explicit idle, preparing, opening, loaded, hidden, and failure states.
 - Keeps schema version 8, duplicate protection, SQLite queue authority, evidence hashes, update guards, dry-run protection, and CAPTCHA handling unchanged.
 
+- Hardens the synthetic mock portal so retained Windows sockets cannot block CI shutdown indefinitely.
+- Adds bounded mock-portal cleanup, a retained-socket regression test, and explicit CI job/step timeouts.
+- Adds the dev.10 branch to the workflow push trigger.
+
 This is `0.4.0-dev.10`, an unsigned development build. It is not a public release.
 
 # Canada Post Claim Runner 0.4.0-dev.9
