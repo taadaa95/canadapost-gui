@@ -3764,7 +3764,7 @@
     /* v0.4.0 operator-control layer */
     .step3-control-grid {
       display: grid;
-      grid-template-columns: minmax(320px, .8fr) minmax(520px, 1.4fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       margin: 12px 0;
     }
@@ -3884,23 +3884,6 @@
 
     .queue-toolbar { margin: 8px 0; grid-template-columns: repeat(3, minmax(150px, 1fr)); }
     .claim-queue-row { grid-template-columns: 26px minmax(150px,.75fr) minmax(130px,.65fr) minmax(100px,.45fr) minmax(135px,.6fr) minmax(120px,.55fr) minmax(130px,.7fr); min-width: 1020px; }
-
-    .canary-option {
-      margin: 10px 0 0;
-      padding: 9px 10px;
-      border: 1px solid var(--line);
-      background: var(--panel-soft);
-    }
-
-    .canary-option label {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      font-size: 12px;
-      line-height: 1.4;
-      text-transform: none;
-      letter-spacing: 0;
-    }
 
     .live-submit-summary {
       display: grid;
@@ -4087,8 +4070,6 @@
       grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(140px, 190px) !important;
     }
 
-    .diagnostic-explanation { font-size: 12px; }
-
     #step3 .step3-log-card {
       height: clamp(150px, 18vh, 220px) !important;
       min-height: 150px !important;
@@ -4144,10 +4125,6 @@
     #step3 .step-browser-card,
     #step3 .step3-progress-card,
     #step3 .step3-log-card,
-    #step3 .history-content,
-    #step3 .history-section,
-    #step3 .history-list,
-    #step3 .preflight-list,
     #step3 .claim-queue-list,
     #step3 .browser-slot {
       min-width: 0 !important;
@@ -4200,31 +4177,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
-    #step3 .preflight-list,
-    #step3 .claim-queue-list,
-    #step3 .history-list {
+    #step3 .claim-queue-list {
       max-width: 100%;
       overflow-y: auto !important;
       overscroll-behavior: contain;
-    }
-
-    #step3 .history-content {
-      grid-template-columns: minmax(0, 1fr) !important;
-      height: auto !important;
-      min-height: 0 !important;
-      overflow: hidden !important;
-    }
-
-    #step3 .history-section {
-      height: auto !important;
-      min-height: 0 !important;
-      overflow: hidden !important;
-    }
-
-    #step3 .history-list {
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: 180px !important;
     }
 
     #step3 .step3-workspace {
@@ -4479,8 +4435,6 @@
       overflow: visible !important;
     }
 
-    #step3 .step3-control-grid > .step3-control-card:nth-child(2) { order: -1; }
-
     #step3 .step3-control-card,
     #step3 .step3-progress-card,
     #step3 .step-browser-card,
@@ -4502,37 +4456,12 @@
 
     #step3 .claim-queue-list {
       width: 100% !important;
-      height: clamp(320px, 42vh, 440px) !important;
-      min-height: 320px !important;
-      max-height: 440px !important;
+      height: clamp(420px, 52vh, 620px) !important;
+      min-height: 420px !important;
+      max-height: 620px !important;
       overflow-x: auto !important;
       overflow-y: auto !important;
       scrollbar-gutter: stable !important;
-    }
-
-    #step3 .history-content {
-      display: grid !important;
-      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-      gap: 16px !important;
-      width: 100% !important;
-      height: auto !important;
-      min-height: 0 !important;
-      margin-top: 16px !important;
-      overflow: visible !important;
-    }
-
-    #step3 .history-section {
-      height: auto !important;
-      min-height: 220px !important;
-      padding: 12px !important;
-    }
-
-    #step3 .history-list {
-      height: 180px !important;
-      min-height: 180px !important;
-      max-height: 180px !important;
-      overflow-x: auto !important;
-      overflow-y: auto !important;
     }
 
     #step3 .step3-progress-card {
@@ -4698,8 +4627,7 @@
       body.page-scroll-layout #step3 .step3-fields,
       body.page-scroll-layout #step3 .step-actions-3 { grid-column: 1 !important; grid-row: auto !important; }
       #step3 .step3-fields,
-      #step3 .step-actions-3,
-      #step3 .history-content { grid-template-columns: minmax(0, 1fr) !important; }
+      #step3 .step-actions-3 { grid-template-columns: minmax(0, 1fr) !important; }
       #step3 .browser-slot { height: 650px !important; }
       .history-panel .history-toolbar .field:first-child { grid-column: auto; }
       .history-panel .manual-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -4835,25 +4763,6 @@
           </div>
 
           <div class="settings-section">
-            <h3>Legacy Developer Program credentials — deprecated</h3>
-            <div class="field">
-              <label for="apiUsername">Legacy API username</label>
-              <input id="apiUsername" type="text" placeholder="Deprecated legacy API username" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="apiPassword">Legacy API password</label>
-              <input id="apiPassword" type="password" placeholder="Deprecated legacy API password" autocomplete="new-password" />
-            </div>
-            <div class="field">
-              <label for="apiEnvironment">Legacy API environment</label>
-              <select id="apiEnvironment"><option value="production">Production</option><option value="development">Development</option></select>
-            </div>
-            <div id="apiCredentialMetadata" class="settings-note">Legacy credentials not inspected yet.</div>
-            <label class="check-row"><input type="checkbox" disabled /> Legacy Tracking API — deprecated and inactive in the public beta</label>
-            <div class="settings-note">These values are preserved for migration safety and legacy shipping-history workflows. Step 2 never uses them and never falls back from OAuth2/JSON to Basic/XML.</div>
-          </div>
-
-          <div class="settings-section">
             <h3>EST Export</h3>
             <div class="field">
               <label for="estCustomerNumber">EST customer number</label>
@@ -4916,9 +4825,13 @@
           </div>
 <div class="settings-section wide">
             <button id="saveUserSettings" class="success" type="button">Save Settings</button>
+            <details class="settings-note advanced-settings">
+              <summary id="advancedSettingsTitle">Advanced Settings</summary>
+              <button id="manageStoredData" class="secondary" type="button">Manage stored data…</button>
+            </details>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.4.0-dev.4</strong></div>
+              <div class="app-version">Version <strong id="appVersion">0.4.0-dev.9</strong></div>
             </div>
           </div>
         </div>
@@ -4999,7 +4912,6 @@
             <button id="discardIncompleteTracking" class="warning" type="button">Discard incomplete Step 2 run</button>
             <button id="forceStopStep2" class="danger" data-force-stop="step2">Force Stop</button>
           </div>
-          <div class="step-copy-box diagnostic-explanation"><label for="diagnosticRow">Authorized tracking.csv row for one-request test</label><input id="diagnosticRow" type="number" min="1" step="1" value="1" /> The test validates configuration, obtains an OAuth token when needed, and performs one Tracking API JSON lookup. The export action performs the same single request and writes only property paths, types, array lengths, safe enum-like values, and semantic validation results. It does not modify claim state, claims.csv, eligibility state, queues, or summary counts; neither action uses the legacy API or continues into the full run.</div>
         </div>
         <div class="step-workspace">
           <div class="card step-status-card">
@@ -5051,21 +4963,6 @@
         <div class="step3-body">
         <div class="step3-side-pane">
         <div class="step3-control-grid">
-          <section class="step3-control-card" aria-labelledby="step3PreflightTitle">
-            <div class="step3-control-head">
-              <div>
-                <h3 id="step3PreflightTitle">Step 3 readiness</h3>
-                <span id="step3PreflightSummary" class="pill">Not checked</span>
-              </div>
-              <div class="step3-control-actions">
-                <button id="refreshStep3Preflight" class="secondary" type="button">Run preflight</button>
-              </div>
-            </div>
-            <div id="step3PreflightList" class="preflight-list" aria-live="polite">
-              <div class="preflight-item warning"><div class="preflight-icon">•</div><div><strong>Preflight not run</strong><span>Run the readiness check before starting Step 3.</span></div></div>
-            </div>
-          </section>
-
           <section class="step3-control-card" aria-labelledby="claimQueueTitle">
             <div class="step3-control-head">
               <div>
@@ -5087,13 +4984,6 @@
             </div>
             <div id="claimQueueList" class="claim-queue-list" aria-live="polite">
               <div class="history-empty">Refresh to load late-delivery candidates from the database.</div>
-            </div>
-            <div class="history-content" aria-label="Separated classification queues">
-              <div class="history-section"><div class="history-section-head"><h3>Manual-review queue</h3><span id="step3ManualCount" class="pill">0</span></div><div id="step3ManualQueue" class="history-list compact"></div></div>
-              <div class="history-section"><div class="history-section-head"><h3>On-time classification queue</h3><span id="step3IneligibleCount" class="pill">0</span></div><div id="step3IneligibleQueue" class="history-list compact"></div></div>
-            </div>
-            <div class="canary-option">
-              <label><input id="canaryMode" type="checkbox" /> <span><strong>Canary mode</strong> — process only the first selected claim, then stop. Verify the Canada Post result before running the remaining queue.</span></label>
             </div>
           </section>
         </div>
@@ -5147,39 +5037,6 @@
           <div class="stat"><div id="historyFailed" class="num">0</div><div class="label">Retryable failures</div></div>
         </div>
 
-        <section class="step3-control-card" aria-labelledby="financialReportTitle">
-          <div class="step3-control-head"><div><h3 id="financialReportTitle">Financial recovery</h3><span class="pill">CAD · integer cents</span></div><button id="refreshFinancialReport" class="secondary" type="button">Refresh</button></div>
-          <div id="financialSummary" class="history-summary" aria-live="polite"></div>
-          <details><summary>Record an explicitly known amount</summary><div class="manual-entry-grid">
-            <div class="field"><label for="financialTracking">Tracking number</label><input id="financialTracking" type="text" /></div>
-            <div class="field"><label for="financialType">Value status</label><select id="financialType"><option value="estimated">Estimated</option><option value="claimed">Claimed</option><option value="approved">Approved</option><option value="received">Received</option><option value="rejected">Rejected</option></select></div>
-            <div class="field"><label for="financialAmount">Amount (CAD)</label><input id="financialAmount" type="text" inputmode="decimal" placeholder="0.00" /></div>
-            <div class="field"><label for="financialSource">Source</label><select id="financialSource"><option value="manual">Manually entered</option><option value="claim">Claim submission</option><option value="canada_post">Canada Post decision</option><option value="calculated">Calculated estimate</option></select></div>
-            <div class="field wide"><label for="financialNote">Note</label><input id="financialNote" type="text" maxlength="4096" /></div>
-            <button id="recordFinancialEntry" class="secondary" type="button">Record Amount</button>
-          </div></details>
-        </section>
-
-        <section class="step3-control-card" aria-labelledby="privacyDataTitle">
-          <div class="step3-control-head"><div><h3 id="privacyDataTitle">Data Management / Privacy</h3><span id="privacyDataStatus" class="pill">Preview required</span></div><button id="previewPrivacyData" class="secondary" type="button">Preview selected data</button></div>
-          <p id="privacyDataIntro">Preview and remove application data by tracking number, date range, or all records. Duplicate-submission protection is retained only as non-identifying hashes and terminal outcomes.</p>
-          <div class="privacy-management-grid">
-            <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers">Tracking numbers (separated by spaces, commas, or new lines)</label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
-            <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom">From date (optional)</label><input id="privacyDateFrom" type="date" /></div>
-            <div class="field"><label id="privacyDateToLabel" for="privacyDateTo">To date (optional)</label><input id="privacyDateTo" type="date" /></div>
-            <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel">Include all application records</span></label>
-          </div>
-          <div id="privacyPreviewCounts" class="privacy-preview-counts" aria-live="polite"></div>
-          <div id="privacyDeletionControls" class="privacy-management-grid hidden">
-            <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel">I understand this removes the selected personal and shipment data from this application.</span></label>
-            <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase">Type the displayed confirmation phrase exactly</label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
-            <div id="privacyExpectedPhrase" class="live-submit-warning wide"></div>
-            <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel">Confirm again that all application data should be deleted.</span></label>
-            <button id="deletePrivacyData" class="danger wide" type="button">Delete previewed data</button>
-          </div>
-          <p id="privacyExternalCopiesNotice">External exports and backups are separate copies. The operator is responsible for deleting external copies. Encrypted backups may still contain previously exported data. Deletion from this application does not delete Canada Post’s records.</p>
-        </section>
-
         <div>
           <div class="history-toolbar">
             <div class="field">
@@ -5230,6 +5087,10 @@
               <button id="addManualShipment" class="secondary" type="button">Save Shipment</button>
             </div>
             <div id="manualShipmentList" class="history-list compact" aria-live="polite"></div>
+          </details>
+          <details class="history-details">
+            <summary id="historyClassificationsTitle">Step 2 classification records</summary>
+            <div id="historyClassificationList" class="history-list compact" aria-live="polite"></div>
           </details>
         </div>
 
@@ -5311,11 +5172,54 @@
       </div>
       <div id="liveSubmitSummary" class="live-submit-summary"></div>
       <div class="live-submit-warning">This action will interact with Canada Post and may create real support tickets. Dry run must remain unchecked for this dialog to appear.</div>
+      <label class="live-submit-ack"><input id="liveSubmitCanary" type="checkbox" checked /> <span id="liveSubmitCanaryLabel">Process only the first selected candidate, then stop.</span></label>
       <label class="live-submit-ack"><input id="liveSubmitAcknowledge" type="checkbox" /> <span>I reviewed the selected claim queue and understand that this is a live submission run.</span></label>
       <div class="live-submit-modal-actions">
         <button id="cancelLiveSubmit" class="secondary" type="button">Cancel</button>
         <button id="confirmLiveSubmit" class="success" type="button" disabled>Start live submission</button>
       </div>
+    </div>
+  </div>
+
+  <div id="trackingDiagnosticModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="trackingDiagnosticTitle">
+      <div class="modal-head"><h2 id="trackingDiagnosticTitle">Choose one authorized shipment</h2></div>
+      <p id="trackingDiagnosticMessage">Exactly one authorized shipment will be queried. This does not modify claim state or start the bulk queue.</p>
+      <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow">Tracking CSV row</label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
+      <div id="trackingDiagnosticError" class="live-submit-warning hidden" role="alert"></div>
+      <div class="live-submit-modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button">Cancel</button><button id="confirmTrackingDiagnostic" class="success" type="button">Continue</button></div>
+    </div>
+  </div>
+
+  <div id="step3PreflightModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="step3PreflightDialogTitle">
+      <div class="modal-head"><h2 id="step3PreflightDialogTitle">Step 3 cannot continue</h2></div>
+      <div id="step3PreflightFailures" class="blocking-check-list" role="alert"></div>
+      <div id="step3PreflightWarningCount" class="modal-summary"></div>
+      <div class="live-submit-modal-actions"><button id="cancelStep3Preflight" class="secondary" type="button">Cancel</button><button id="openSettingsFromPreflight" class="secondary" type="button">Open Settings</button></div>
+    </div>
+  </div>
+
+  <div id="privacyDataModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card privacy-modal-card" role="dialog" aria-modal="true" aria-labelledby="privacyDataTitle">
+      <div class="modal-head"><div><h2 id="privacyDataTitle">Data Management / Privacy</h2><span id="privacyDataStatus" class="pill">Preview required</span></div><button id="closePrivacyDataModal" class="secondary" type="button">Close</button></div>
+      <p id="privacyDataIntro">Preview and remove application data by tracking number, date range, or all records. Duplicate-submission protection is retained only as non-identifying hashes and terminal outcomes.</p>
+      <div class="privacy-management-grid">
+        <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers">Tracking numbers (separated by spaces, commas, or new lines)</label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
+        <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom">From date (optional)</label><input id="privacyDateFrom" type="date" /></div>
+        <div class="field"><label id="privacyDateToLabel" for="privacyDateTo">To date (optional)</label><input id="privacyDateTo" type="date" /></div>
+        <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel">Include all application records</span></label>
+      </div>
+      <button id="previewPrivacyData" class="secondary" type="button">Preview selected data</button>
+      <div id="privacyPreviewCounts" class="privacy-preview-counts" aria-live="polite"></div>
+      <div id="privacyDeletionControls" class="privacy-management-grid hidden">
+        <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel">I understand this removes the selected personal and shipment data from this application.</span></label>
+        <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase">Type the displayed confirmation phrase exactly</label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
+        <div id="privacyExpectedPhrase" class="live-submit-warning wide"></div>
+        <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel">Confirm again that all application data should be deleted.</span></label>
+        <button id="deletePrivacyData" class="danger wide" type="button">Delete previewed data</button>
+      </div>
+      <p id="privacyExternalCopiesNotice">External exports and backups are separate copies. The operator is responsible for deleting external copies. Encrypted backups may still contain previously exported data. Deletion from this application does not delete Canada Post’s records.</p>
     </div>
   </div>
 

@@ -37,10 +37,16 @@ async function applyLocale(locale) {
   const textTargets = {
     appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title',
     setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
-    restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession', financialReportTitle: 'financial.title',
-    clearHistoryFilters: 'history.clearFilters', claimQueueTitle: 'step3.candidateQueue',
+    restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession',
+    clearHistoryFilters: 'history.clearFilters', historyClassificationsTitle: 'history.classifications', claimQueueTitle: 'step3.candidateQueue',
     selectAllClaims: 'step3.selectAll', clearClaimSelection: 'step3.clearSelection',
-    runSubmitOnly: 'step3.submitSelected', privacyDataTitle: 'privacy.title',
+    runSubmitOnly: 'step3.submitSelected', privacyDataTitle: 'privacy.title', manageStoredData: 'privacy.manageStoredData',
+    advancedSettingsTitle: 'settings.advanced', closePrivacyDataModal: 'action.close',
+    liveSubmitCanaryLabel: 'step3.confirm.canaryOption', trackingDiagnosticTitle: 'step2.diagnostic.title',
+    trackingDiagnosticMessage: 'step2.diagnostic.message', trackingDiagnosticRowLabel: 'step2.diagnostic.rowLabel',
+    cancelTrackingDiagnostic: 'action.cancel', confirmTrackingDiagnostic: 'action.continue',
+    step3PreflightDialogTitle: 'step3.preflight.blockedTitle', cancelStep3Preflight: 'action.cancel',
+    openSettingsFromPreflight: 'action.openSettings',
     privacyDataIntro: 'privacy.intro', previewPrivacyData: 'privacy.preview',
     deletePrivacyData: 'privacy.delete', privacyTrackingLabel: 'privacy.trackingLabel',
     privacyDateFromLabel: 'privacy.dateFrom', privacyDateToLabel: 'privacy.dateTo',
@@ -111,7 +117,6 @@ function activateTab(tabId) {
   }
   if (target === 'step3') {
     if (!state.claimQueueLoaded) refreshClaimQueue().catch((error) => console.error(error));
-    runStep3Preflight().catch((error) => console.error(error));
   }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
@@ -427,8 +432,6 @@ const state = {
   submitTotal: 0,
   developerMode: false,
   passwordStored: false,
-  apiCredentialsStored: false,
-  apiEnvironment: 'production',
   trackingApiCredentialsStored: false,
   trackingApiEnvironment: 'test',
   trackingDiagnosticGateSatisfied: false,
@@ -440,7 +443,6 @@ const state = {
   dryRunDefault: false,
   claimQueueItems: [],
   claimQueueLoaded: false,
-  step3Preflight: null,
   privacyPreview: null
 };
 
@@ -1975,6 +1977,27 @@ function renderManualReviews(items = []) {
   }
 }
 
+function renderHistoryClassifications(items = []) {
+  const target = $('historyClassificationList');
+  if (!target) return;
+  target.textContent = '';
+  if (!items.length) {
+    target.appendChild(queueCell(tr('history.classificationsEmpty', 'No matching classification records.')));
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    row.append(
+      queueCell(item.tracking_number, 'history-primary'),
+      queueCell(tr(`classification.${item.classification}`, item.classification)),
+      queueCell(item.service_code),
+      queueCell(item.eligibility_reason)
+    );
+    target.appendChild(row);
+  }
+}
+
 async function refreshHistory(options = {}) {
   if (!window.cpApp?.listHistory) return;
   if (options.resetPage) {
@@ -1989,12 +2012,15 @@ async function refreshHistory(options = {}) {
   renderHistoryRecordMessage('historyList', 'Loading claim attempts…', 'loading');
   renderHistoryRecordMessage('reconciliationList', 'Loading reconciliation records…', 'loading');
   renderHistoryRecordMessage('manualReviewList', 'Loading manual reviews…', 'loading');
-  const [history, reconciliation, dashboard, manualShipments, manualReviews] = await Promise.all([
+  const [history, reconciliation, dashboard, manualShipments, manualReviews, reviewClassifications, trackingErrors, onTimeClassifications] = await Promise.all([
     window.cpApp.listHistory({ search, status, limit: 500, page: historyViewState.page, offset: historyViewState.offset }),
     window.cpApp.listReconciliation(),
     window.cpApp.getDashboard(),
     window.cpApp.listManualShipments({ search, limit: 250 }),
-    window.cpApp.listManualReviews({ search, status: 'open', limit: 250 })
+    window.cpApp.listManualReviews({ search, status: 'open', limit: 250 }),
+    window.cpApp.listClassificationQueue({ classification: 'REVIEW_REQUIRED', search, limit: 250 }),
+    window.cpApp.listClassificationQueue({ classification: 'TRACKING_ERROR', search, limit: 250 }),
+    window.cpApp.listClassificationQueue({ classification: 'ON_TIME', search, limit: 250 })
   ]);
   if (history.ok) renderHistory(history.items || []);
   else {
@@ -2004,6 +2030,11 @@ async function refreshHistory(options = {}) {
   if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
   if (manualReviews.ok) renderManualReviews(manualReviews.items || []);
   else renderHistoryRecordMessage('manualReviewList', manualReviews.error || 'Could not load manual reviews.');
+  renderHistoryClassifications([
+    ...(reviewClassifications.items || []),
+    ...(trackingErrors.items || []),
+    ...(onTimeClassifications.items || [])
+  ]);
   if (reconciliation.ok) {
     renderReconciliation(reconciliation.items || []);
     updateReconciliationCount((reconciliation.items || []).length);
@@ -2020,7 +2051,6 @@ async function refreshHistory(options = {}) {
       integrity.className = dashboard.integrity?.ok ? 'pill good' : 'pill bad';
     }
   }
-  await refreshFinancialReport();
 }
 
 async function clearHistoryFilters() {
@@ -2030,35 +2060,6 @@ async function clearHistoryFilters() {
   Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS);
   updateClearHistoryFiltersButton();
   await refreshHistory({ resetPage: true });
-}
-
-function formatMoneyMinor(value, currency = 'CAD') {
-  return new Intl.NumberFormat(document.documentElement.lang || 'en-CA', { style: 'currency', currency }).format(Number(value || 0) / 100);
-}
-
-async function refreshFinancialReport() {
-  const result = await window.cpApp.getFinancialReport({ currency: 'CAD' });
-  if (!result.ok || !$('financialSummary')) return;
-  const report = result.report;
-  const values = report.totalsMinor || {};
-  const entries = [
-    [tr('financial.estimated', 'Estimated'), values.estimated], [tr('financial.claimed', 'Claimed'), values.claimed], [tr('financial.approved', 'Approved'), values.approved],
-    [tr('financial.received', 'Received'), values.received], [tr('financial.rejected', 'Rejected'), values.rejected], [tr('financial.pending', 'Pending'), report.pendingMinor]
-  ];
-  $('financialSummary').innerHTML = entries.map(([label, amount]) => `<div class="stat"><div class="num">${formatMoneyMinor(amount, report.currency)}</div><div class="label">${label}</div></div>`).join('')
-    + `<div class="stat"><div class="num">${report.recoveryRateBasisPoints === null ? '—' : `${(report.recoveryRateBasisPoints / 100).toFixed(2)}%`}</div><div class="label">${tr('financial.recoveryRate', 'Recovery rate')}</div></div>`;
-}
-
-async function recordFinancialEntry() {
-  const result = await window.cpApp.recordFinancialEntry({
-    trackingNumber: $('financialTracking')?.value || '', valueType: $('financialType')?.value || '',
-    amount: $('financialAmount')?.value || '', source: $('financialSource')?.value || 'manual',
-    currency: 'CAD', note: $('financialNote')?.value || ''
-  });
-  if (!result.ok) return window.alert(result.error || 'Could not record financial value.');
-  $('financialAmount').value = '';
-  $('financialNote').value = '';
-  await refreshFinancialReport();
 }
 
 function setSiteHealthRunning(running) {
@@ -2170,6 +2171,21 @@ function privacyElements() {
   };
 }
 
+function openPrivacyDataModal() {
+  resetPrivacyPreview();
+  const modal = $('privacyDataModal');
+  modal?.classList.remove('hidden');
+  modal?.setAttribute('aria-hidden', 'false');
+  $('privacyTrackingNumbers')?.focus();
+}
+
+function closePrivacyDataModal() {
+  resetPrivacyPreview();
+  $('privacyDataModal')?.classList.add('hidden');
+  $('privacyDataModal')?.setAttribute('aria-hidden', 'true');
+  $('manageStoredData')?.focus();
+}
+
 function currentPrivacyScope() {
   return window.PrivacyDataManagement.scopeFromElements(privacyElements());
 }
@@ -2227,6 +2243,7 @@ async function deletePrivacyData() {
   resetPrivacyPreview({ preserveStatus: true });
   await refreshHistory();
   await refreshClaimQueue();
+  closePrivacyDataModal();
 }
 
 async function refreshBrowserSessionStatus() {
@@ -2305,9 +2322,6 @@ function collectUserSettingsOptions() {
   return {
     webUsername: getFieldValue('webUsername'),
     webPassword: $('webPassword')?.value || '',
-    apiUsername: getFieldValue('apiUsername'),
-    apiPassword: $('apiPassword')?.value || '',
-    apiEnvironment: $('apiEnvironment')?.value || state.apiEnvironment || 'production',
     trackingClientId: getFieldValue('trackingClientId'),
     trackingClientSecret: $('trackingClientSecret')?.value || '',
     trackingApiEnvironment: $('trackingApiEnvironment')?.value || state.trackingApiEnvironment || 'test',
@@ -2362,7 +2376,6 @@ async function saveUserSettings(showLog = true) {
   }
   if (res.ok) {
     state.passwordStored = !!res.passwordStored;
-    state.apiCredentialsStored = !!res.apiCredentialsStored;
     state.trackingApiCredentialsStored = !!res.trackingApiCredentialsStored;
     state.trackingDiagnosticGateSatisfied = !!res.trackingDiagnosticGateSatisfied;
     const status = $('settingsStatus');
@@ -2371,11 +2384,8 @@ async function saveUserSettings(showLog = true) {
       status.className = res.warning ? 'pill warn' : 'pill good';
     }
     if ($('webPassword')) $('webPassword').value = '';
-    if ($('apiUsername')) $('apiUsername').value = '';
-    if ($('apiPassword')) $('apiPassword').value = '';
     if ($('trackingClientId')) $('trackingClientId').value = '';
     if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
-    if ($('apiCredentialMetadata') && res.apiCredentialMetadata) renderApiCredentialMetadata(res.apiCredentialMetadata);
     if ($('trackingApiCredentialMetadata') && res.trackingApiCredentialMetadata) renderTrackingApiCredentialMetadata(res.trackingApiCredentialMetadata);
     renderTrackingDiagnosticGate();
     if (showLog) log(res.warning || 'User settings saved.', res.warning ? 'log-warning' : '', 'step1');
@@ -2384,14 +2394,14 @@ async function saveUserSettings(showLog = true) {
 }
 
 async function clearTrackingApiCredentials() {
-  const confirmed = window.confirm('Clear only the current Tracking API client ID and client secret from encrypted storage? Legacy and website credentials will be preserved.');
+  const confirmed = window.confirm(tr('tracking.credentials.clearConfirm', 'Clear the current Tracking API client ID and client secret from encrypted storage? Website credentials will not be changed.'));
   if (!confirmed) return;
   const result = await window.cpApp.clearTrackingApiCredentials({ confirmed: true });
   if (!result.ok) return window.alert(result.error || 'Could not clear Tracking API credentials.');
   state.trackingApiCredentialsStored = false;
   state.trackingDiagnosticGateSatisfied = false;
   await refreshConfig();
-  window.alert('Tracking API credentials and the diagnostic gate were cleared. No legacy or website credentials were removed.');
+  window.alert(tr('tracking.credentials.clearComplete', 'Tracking API credentials and the diagnostic gate were cleared. Website credentials were not changed.'));
 }
 
 function buildEstHistoryOptions() {
@@ -2443,14 +2453,6 @@ function buildTrackingOnlyOptions() {
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
     developerMode: false
   };
-}
-
-function renderApiCredentialMetadata(metadata = {}) {
-  const element = $('apiCredentialMetadata');
-  if (!element) return;
-  const username = metadata.username || {};
-  const password = metadata.password || {};
-  element.textContent = `Legacy credentials — username: ${username.present ? 'present' : 'missing'}; password: ${password.present ? 'present' : 'missing'}; environment: ${metadata.credentialEnvironment || 'unknown'}. Deprecated and inactive for Step 2.`;
 }
 
 function renderTrackingApiCredentialMetadata(metadata = {}) {
@@ -2505,19 +2507,6 @@ function filteredClaimQueue(items = []) {
     dateFrom: $('claimQueueDateFrom')?.value,
     dateTo: $('claimQueueDateTo')?.value
   });
-}
-
-function renderClassificationQueue(targetId, countId, items = []) {
-  const target = $(targetId); const count = $(countId);
-  if (count) count.textContent = String(items.length);
-  if (!target) return;
-  target.textContent = '';
-  if (!items.length) { target.appendChild(queueCell('No records in this queue.')); return; }
-  for (const item of items) {
-    const row = document.createElement('div'); row.className = 'history-item';
-    row.append(queueCell(item.tracking_number, 'history-primary'), queueCell(item.service_code), queueCell(item.eligibility_reason));
-    target.appendChild(row);
-  }
 }
 
 function renderClaimQueue(items = [], preserveState = false) {
@@ -2599,63 +2588,44 @@ async function refreshClaimQueue() {
     return result;
   }
   renderClaimQueue(result.items || []);
-  const search = String($('claimQueueSearch')?.value || '').trim();
-  const [reviewRequired, trackingErrors, onTime] = await Promise.all([
-    window.cpApp.listClassificationQueue({ classification: 'REVIEW_REQUIRED', search }),
-    window.cpApp.listClassificationQueue({ classification: 'TRACKING_ERROR', search }),
-    window.cpApp.listClassificationQueue({ classification: 'ON_TIME', search })
-  ]);
-  renderClassificationQueue('step3ManualQueue', 'step3ManualCount', [...(reviewRequired.items || []), ...(trackingErrors.items || [])]);
-  renderClassificationQueue('step3IneligibleQueue', 'step3IneligibleCount', onTime.items || []);
   return result;
 }
 
-function renderStep3Preflight(report) {
-  const list = $('step3PreflightList');
-  const summary = $('step3PreflightSummary');
-  state.step3Preflight = report || null;
-  if (!list || !summary) return;
-  list.textContent = '';
-
-  if (!report) {
-    summary.textContent = 'Unavailable';
-    summary.className = 'pill bad';
-    return;
-  }
-
-  summary.textContent = report.ready
-    ? (report.warningCount ? `Ready · ${report.warningCount} warning` : 'Ready')
-    : `${report.blockingCount} blocking issue${report.blockingCount === 1 ? '' : 's'}`;
-  summary.className = `pill ${report.ready ? (report.warningCount ? 'warn' : 'good') : 'bad'}`;
-
-  for (const item of report.checks || []) {
-    const row = document.createElement('div');
-    const kind = item.ok ? 'good' : (item.severity === 'warning' ? 'warning' : 'bad');
-    row.className = `preflight-item ${kind}`;
-    const icon = document.createElement('div');
-    icon.className = 'preflight-icon';
-    icon.textContent = item.ok ? '✓' : (item.severity === 'warning' ? '!' : '×');
-    const copy = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = item.label || item.id || 'Check';
-    const detail = document.createElement('span');
-    detail.textContent = [item.message, !item.ok ? item.action : ''].filter(Boolean).join(' ');
-    copy.append(title, detail);
-    row.append(icon, copy);
-    list.appendChild(row);
-  }
+function closeStep3PreflightModal() {
+  $('step3PreflightModal')?.classList.add('hidden');
+  $('step3PreflightModal')?.setAttribute('aria-hidden', 'true');
 }
 
-async function runStep3Preflight() {
+function showStep3PreflightFailures(report = {}) {
+  const modal = $('step3PreflightModal');
+  const target = $('step3PreflightFailures');
+  if (!modal || !target) return;
+  target.textContent = '';
+  for (const item of (report.checks || []).filter(check => !check.ok && check.severity === 'blocking')) {
+    const row = document.createElement('div');
+    row.className = 'blocking-check-item';
+    const label = document.createElement('strong'); label.textContent = tr(`step3.preflight.check.${item.id}.label`, item.label || item.id);
+    const action = document.createElement('span'); action.textContent = tr(`step3.preflight.check.${item.id}.action`, item.action || '');
+    row.append(label, action); target.appendChild(row);
+  }
+  const warningCount = Number(report.warningCount || 0);
+  if ($('step3PreflightWarningCount')) {
+    $('step3PreflightWarningCount').textContent = warningCount
+      ? trf('step3.preflight.warningCount', { count: warningCount }, '{count} advisory warning(s) remain.')
+      : '';
+  }
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  $('cancelStep3Preflight')?.focus();
+}
+
+async function runStep3Preflight(submitOptions) {
   const result = await window.cpApp.runPreflight({
     scope: 'step3',
-    submitOptions: collectUserSettingsOptions()
+    submitOptions: submitOptions || collectUserSettingsOptions()
   });
-  if (!result?.ok) {
-    renderStep3Preflight(null);
-    return null;
-  }
-  renderStep3Preflight(result.report);
+  if (!result?.ok) return null;
+  if (!result.report?.ready) showStep3PreflightFailures(result.report);
   return result.report;
 }
 
@@ -2673,17 +2643,18 @@ function closeLiveSubmitModal(confirmed) {
   if (confirmButton) confirmButton.disabled = true;
   const resolver = liveSubmitResolver;
   liveSubmitResolver = null;
-  resolver?.(Boolean(confirmed));
+  const canaryMode = confirmed ? Boolean($('liveSubmitCanary')?.checked) : false;
+  resolver?.({ confirmed: Boolean(confirmed), canaryMode });
 }
 
-function confirmLiveSubmission(selectedCount, canaryMode) {
+function confirmLiveSubmission(selectedCount) {
   const modal = $('liveSubmitModal');
   const summary = $('liveSubmitSummary');
-  if (!modal || !summary) return Promise.resolve(false);
+  if (!modal || !summary) return Promise.resolve({ confirmed: false, canaryMode: false });
+  if ($('liveSubmitCanary')) $('liveSubmitCanary').checked = true;
   summary.textContent = '';
   const lines = [
     trf('step3.confirm.selectedCount', { count: selectedCount }, 'Selected candidates: {count}'),
-    tr(canaryMode ? 'step3.confirm.modeCanary' : 'step3.confirm.modeFull'),
     tr('step3.confirm.browser'),
     tr('step3.confirm.dryRunOff')
   ];
@@ -2698,7 +2669,7 @@ function confirmLiveSubmission(selectedCount, canaryMode) {
   return new Promise(resolve => { liveSubmitResolver = resolve; });
 }
 
-function buildSubmitOnlyOptions(liveSubmissionConfirmed = false) {
+function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false } = {}) {
 
   return {
     ...collectUserSettingsOptions(),
@@ -2708,7 +2679,7 @@ function buildSubmitOnlyOptions(liveSubmissionConfirmed = false) {
     dryRun: Boolean($('dryRun')?.checked),
     selectedClassificationRecords: selectedClassificationRecords(),
     expectedClaimCount: selectedClassificationRecords().length,
-    canaryMode: Boolean($('canaryMode')?.checked),
+    canaryMode: Boolean(canaryMode),
     liveSubmissionConfirmed: Boolean(liveSubmissionConfirmed),
     developerMode: false
   };
@@ -2769,46 +2740,68 @@ async function startTrackingOnly() {
   log('Tracking check started.');
 }
 
-async function testTrackingConnection() {
-  const confirmed = window.confirm('Obtain an OAuth token when needed and run exactly one current Tracking API JSON lookup? This diagnostic does not modify claims, eligibility state, queues, or summary counts and will not continue into the full run.');
-  if (!confirmed) return;
+let trackingDiagnosticResolver = null;
+
+function closeTrackingDiagnosticModal(row = null) {
+  $('trackingDiagnosticModal')?.classList.add('hidden');
+  $('trackingDiagnosticModal')?.setAttribute('aria-hidden', 'true');
+  const resolver = trackingDiagnosticResolver;
+  trackingDiagnosticResolver = null;
+  resolver?.(row);
+}
+
+function confirmTrackingDiagnosticRow() {
+  const raw = String($('trackingDiagnosticRow')?.value || '');
+  const row = Number(raw);
+  const error = $('trackingDiagnosticError');
+  if (!Number.isSafeInteger(row) || row < 1) {
+    if (error) { error.textContent = tr('step2.diagnostic.invalidRow', 'Choose a valid tracking CSV row.'); error.classList.remove('hidden'); }
+    return;
+  }
+  closeTrackingDiagnosticModal(row);
+}
+
+async function requestTrackingDiagnosticRow() {
+  const modal = $('trackingDiagnosticModal');
+  if (!modal) return null;
+  const defaults = await window.cpApp.getTrackingDiagnosticDefaultRow();
+  if (!defaults?.ok) {
+    window.alert(defaults?.error || tr('step2.diagnostic.noUsableRow', 'No usable tracking row is available.'));
+    return null;
+  }
+  if ($('trackingDiagnosticRow')) $('trackingDiagnosticRow').value = String(defaults.row);
+  $('trackingDiagnosticError')?.classList.add('hidden');
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  $('trackingDiagnosticRow')?.focus();
+  return new Promise(resolve => { trackingDiagnosticResolver = resolve; });
+}
+
+async function runTrackingDiagnostic({ structureExport = false } = {}) {
+  const diagnosticRow = await requestTrackingDiagnosticRow();
+  if (!diagnosticRow) return;
   currentProcessStep = 'step2';
-  setStatus('Diagnostic running', 'warn', 'step2');
-  setAction('Testing the selected Developer Portal Tracking API environment with one authorized shipment.', 'step2');
-  log('One-request OAuth/JSON diagnostic deliberately confirmed. Configuration, token, resource, and state-integrity stages will be reported without secrets.', '', 'step2');
+  setStatus(structureExport ? 'Structural diagnostic running' : 'Diagnostic running', 'warn', 'step2');
+  setAction(structureExport ? 'Generating a value-free structural report from one authorized Tracking API response.' : 'Testing the selected Developer Portal Tracking API environment with one authorized shipment.', 'step2');
+  if (!structureExport) log('One-request OAuth/JSON diagnostic deliberately confirmed. Configuration, token, resource, and state-integrity stages will be reported without secrets.', '', 'step2');
   const res = await window.cpApp.runTracking({
     ...buildTrackingOnlyOptions(),
     fresh: false,
     diagnosticMode: true,
     diagnosticConfirmed: true,
-    diagnosticRow: Math.max(1, Number.parseInt(getFieldValue('diagnosticRow') || '1', 10) || 1)
+    structureExport,
+    diagnosticRow
   });
   if (!res.ok) {
-    setStatus('Diagnostic blocked', 'bad', 'step2');
-    setAction(res.error || 'Could not start one-request API diagnostic.', 'step2');
-    log(res.error || 'Could not start one-request API diagnostic.', 'log-submit-error', 'step2');
+    setStatus(structureExport ? 'Structural diagnostic blocked' : 'Diagnostic blocked', 'bad', 'step2');
+    setAction(res.error || (structureExport ? 'Could not start sanitized structural diagnostic.' : 'Could not start one-request API diagnostic.'), 'step2');
+    if (!structureExport) log(res.error || 'Could not start one-request API diagnostic.', 'log-submit-error', 'step2');
   }
 }
 
-async function exportTrackingStructure() {
-  const confirmed = window.confirm('Make exactly one authorized Tracking API request and export a sanitized structural report? The raw JSON body and shipment values will not be saved. Claim and queue state will remain unchanged.');
-  if (!confirmed) return;
-  currentProcessStep = 'step2';
-  setStatus('Structural diagnostic running', 'warn', 'step2');
-  setAction('Generating a value-free structural report from one authorized Tracking API response.', 'step2');
-  const res = await window.cpApp.runTracking({
-    ...buildTrackingOnlyOptions(),
-    fresh: false,
-    diagnosticMode: true,
-    diagnosticConfirmed: true,
-    structureExport: true,
-    diagnosticRow: Math.max(1, Number.parseInt(getFieldValue('diagnosticRow') || '1', 10) || 1)
-  });
-  if (!res.ok) {
-    setStatus('Structural diagnostic blocked', 'bad', 'step2');
-    setAction(res.error || 'Could not start sanitized structural diagnostic.', 'step2');
-  }
-}
+async function testTrackingConnection() { return runTrackingDiagnostic({ structureExport: false }); }
+
+async function exportTrackingStructure() { return runTrackingDiagnostic({ structureExport: true }); }
 
 async function discardIncompleteTracking() {
   const confirmed = window.confirm('Discard the active incomplete Step 2 staging state? Historical completed runs will be preserved.');
@@ -2822,16 +2815,25 @@ async function discardIncompleteTracking() {
 
 async function startSubmitOnly() {
   currentProcessStep = 'step3';
-  const missing = validateSettingsForStep('step3');
-  if (missing.length) {
-    setStatus('Failed', 'bad', 'step3');
-    setAction(`Missing settings: ${missing.join(', ')}. Open User Settings.`, 'step3');
-    log(`Missing settings: ${missing.join(', ')}. Open User Settings.`, 'log-late', 'step3');
-    return;
-  }
-
   if (!state.claimQueueLoaded) await refreshClaimQueue();
   const selected = selectedClassificationRecords();
+  const dryRun = Boolean($('dryRun')?.checked);
+  const preflightOptions = {
+    ...collectUserSettingsOptions(),
+    dryRun,
+    browserMode: 'builtin',
+    selectedClassificationRecords: selected,
+    expectedClaimCount: selected.length,
+    canaryMode: false,
+    liveSubmissionConfirmed: false
+  };
+  const preflight = await runStep3Preflight(preflightOptions);
+  if (!preflight?.ready) {
+    setStatus('Blocked', 'bad', 'step3');
+    setAction('Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
+    log('Step 3 was blocked by the readiness check.', 'log-submit-error', 'step3');
+    return;
+  }
   if (!selected.length) {
     setStatus('Blocked', 'bad', 'step3');
     setAction(tr('step3.zeroSelection', 'No late-delivery candidates are selected in the Step 3 candidate queue.'), 'step3');
@@ -2839,20 +2841,13 @@ async function startSubmitOnly() {
     return;
   }
 
-  const preflight = await runStep3Preflight();
-  if (!preflight?.ready) {
-    setStatus('Blocked', 'bad', 'step3');
-    setAction('Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
-    log('Step 3 was blocked by the readiness check.', 'log-submit-error', 'step3');
-    return;
-  }
-
-  const dryRun = Boolean($('dryRun')?.checked);
-  const canaryMode = Boolean($('canaryMode')?.checked);
   let liveSubmissionConfirmed = false;
+  let canaryMode = false;
   if (!dryRun) {
-    liveSubmissionConfirmed = await confirmLiveSubmission(selected.length, canaryMode);
-    if (!liveSubmissionConfirmed) {
+    const confirmation = await confirmLiveSubmission(selected.length);
+    liveSubmissionConfirmed = confirmation.confirmed;
+    canaryMode = confirmation.canaryMode;
+    if (!confirmation.confirmed) {
       setStatus('Cancelled', '', 'step3');
       setAction('Live submission cancelled before the browser workflow started.', 'step3');
       log('Live submission cancelled.', 'log-warning', 'step3');
@@ -2905,8 +2900,14 @@ async function startSubmitOnly() {
     setBuiltinBrowserStatus('Browser ready', 'good');
   }
 
-  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions(liveSubmissionConfirmed));
+  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode }));
   if (!res.ok) {
+    if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
+      showStep3PreflightFailures({
+        checks: (res.preflight.failedChecks || []).map(item => ({ ...item, ok: false, severity: 'blocking' })),
+        warningCount: res.preflight.warningCount
+      });
+    }
     setStatus('Failed', 'bad');
     setAction(res.error || 'Could not start claim submission.');
     updateCurrentItem({ step: 'Could not start claim submission', result: res.error || 'Failed', kind: 'failed' });
@@ -2943,8 +2944,6 @@ async function refreshConfig() {
     if (state.isolatedTestMode) control.title = 'Disabled while isolated test data is active.';
   }
   state.passwordStored = !!cfg.passwordStored;
-  state.apiCredentialsStored = !!(cfg.apiCredentialsStored || cfg.hasApiCredentials);
-  state.apiEnvironment = cfg.apiEnvironment || 'production';
   state.trackingApiCredentialsStored = !!(cfg.trackingApiCredentialsStored || cfg.hasTrackingApiCredentials);
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
   state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
@@ -2957,10 +2956,6 @@ async function refreshConfig() {
     $('webPassword').value = '';
     $('webPassword').placeholder = state.passwordStored ? 'Saved password available — leave blank to reuse' : 'Web login password';
   }
-  if ($('apiUsername')) { $('apiUsername').value = ''; $('apiUsername').placeholder = state.apiCredentialsStored ? 'Saved API username available — enter both fields to replace' : 'API key username — not website login'; }
-  if ($('apiPassword')) { $('apiPassword').value = ''; $('apiPassword').placeholder = state.apiCredentialsStored ? 'Saved API password available — enter both fields to replace' : 'API key password — not EST password'; }
-  if ($('apiEnvironment')) $('apiEnvironment').value = state.apiEnvironment;
-  renderApiCredentialMetadata(cfg.apiCredentialMetadata || {});
   if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = state.trackingApiCredentialsStored ? 'Saved API Key available — enter both current fields to replace' : 'Developer Portal API Key'; }
   if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = state.trackingApiCredentialsStored ? 'Saved API Secret available — enter both current fields to replace' : 'Developer Portal API Secret'; }
   if ($('trackingApiEnvironment')) $('trackingApiEnvironment').value = state.trackingApiEnvironment;
@@ -2994,7 +2989,7 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.8';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.9';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
@@ -3091,6 +3086,9 @@ $('historySearch')?.addEventListener('input', () => {
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
 $('createBackup')?.addEventListener('click', createAppBackup);
 $('restoreBackup')?.addEventListener('click', restoreAppBackup);
+$('manageStoredData')?.addEventListener('click', openPrivacyDataModal);
+$('closePrivacyDataModal')?.addEventListener('click', closePrivacyDataModal);
+$('privacyDataModal')?.addEventListener('click', event => { if (event.target === $('privacyDataModal')) closePrivacyDataModal(); });
 $('previewPrivacyData')?.addEventListener('click', previewPrivacyData);
 $('deletePrivacyData')?.addEventListener('click', deletePrivacyData);
 for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords']) {
@@ -3099,8 +3097,11 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
 }
 $('refreshBrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('clearBrowserSession')?.addEventListener('click', clearBrowserSession);
-$('refreshFinancialReport')?.addEventListener('click', refreshFinancialReport);
-$('recordFinancialEntry')?.addEventListener('click', recordFinancialEntry);
+$('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
+$('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
+$('trackingDiagnosticRow')?.addEventListener('keydown', event => { if (event.key === 'Enter') confirmTrackingDiagnosticRow(); });
+$('cancelStep3Preflight')?.addEventListener('click', closeStep3PreflightModal);
+$('openSettingsFromPreflight')?.addEventListener('click', () => { closeStep3PreflightModal(); activateTab('settingsTab'); });
 $('cancelBackupPassword')?.addEventListener('click', () => closeBackupPasswordModal(''));
 $('confirmBackupPassword')?.addEventListener('click', submitBackupPassword);
 $('backupPassword')?.addEventListener('keydown', event => { if (event.key === 'Enter') submitBackupPassword(); if (event.key === 'Escape') closeBackupPasswordModal(''); });
@@ -3168,6 +3169,9 @@ document.addEventListener('keydown', (event) => {
     if (modal.id === 'warningModal') closeStep1Warnings();
     else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
     else if (modal.id === 'liveSubmitModal') closeLiveSubmitModal(false);
+    else if (modal.id === 'trackingDiagnosticModal') closeTrackingDiagnosticModal(null);
+    else if (modal.id === 'step3PreflightModal') closeStep3PreflightModal();
+    else if (modal.id === 'privacyDataModal') closePrivacyDataModal();
     event.preventDefault();
     return;
   }
@@ -3237,8 +3241,7 @@ $('trackingApiEnvironment')?.addEventListener('change', () => { state.trackingAp
 for (const id of ['trackingClientId', 'trackingClientSecret']) $(id)?.addEventListener('input', () => { if ($(id).value) { state.trackingDiagnosticGateSatisfied = false; renderTrackingDiagnosticGate(); } });
 $('builtinBrowser')?.addEventListener('change', requestBuiltinBrowserLayout);
 $('runSubmitOnly')?.addEventListener('click', startSubmitOnly);
-$('refreshClaimQueue')?.addEventListener('click', async () => { await refreshClaimQueue(); await runStep3Preflight(); });
-$('refreshStep3Preflight')?.addEventListener('click', runStep3Preflight);
+$('refreshClaimQueue')?.addEventListener('click', refreshClaimQueue);
 $('selectAllClaims')?.addEventListener('click', () => {
   step3QueueController.selectVisible({
     search: $('claimQueueSearch')?.value,

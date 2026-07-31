@@ -47,7 +47,6 @@ for (const required of [
   'lib/step3-browser-handshake.js',
   'lib/cdp-page-target.js',
   'lib/browser-visibility.js',
-  'lib/legacy-tracking-client.js',
   'lib/tracking-client.js',
   'lib/tracking-normalizer.js',
   'config/policy-rules.json',

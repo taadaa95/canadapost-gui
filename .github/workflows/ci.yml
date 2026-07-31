@@ -7,7 +7,7 @@ on:
         main,
         v0.4.0-productization,
         feature/github-release-updater,
-        feature/dev8-product-review-corrections,
+        feature/dev9-ui-debloat,
       ]
   pull_request:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: npx playwright install chromium
       - run: npm test
-      - run: npm run test:dev8
+      - run: npm run test:dev9
       - if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:mock-portal
       - if: runner.os == 'Windows'
@@ -48,7 +48,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: npm run test:electron
       - run: npm run lint
-      - run: npm run lint:dev8
+      - run: npm run lint:dev9
       - if: runner.os == 'Linux'
         run: npm run format:check
       - run: npm run typecheck

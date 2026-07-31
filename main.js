@@ -20,7 +20,6 @@ const { coordinator: operationCoordinator } = require('./lib/operation-coordinat
 const { buildPreflightReport } = require('./lib/preflight');
 const { policy: eligibilityPolicy } = require('./lib/policy-engine');
 const { isAllowedCanadaPostUrl, portalUrl } = require('./lib/origin-policy');
-const { parseDecimalToMinor } = require('./lib/money');
 const i18n = require('./lib/i18n');
 const runtimeWorkers = require('./lib/runtime-workers');
 const { credentialMetadata: trackingCredentialMetadata, normalizeEnvironment: normalizeTrackingEnvironment, normalizeResourceTimeoutMs, TRACKING_API_VERSION, DEFAULT_RESOURCE_TIMEOUT_MS } = require('./lib/tracking-client');
@@ -29,6 +28,7 @@ const { TRACKING_PARSER_VERSION } = require('./lib/tracking-json');
 const { DEFAULT_DELAY_MS, normalizeDelayMs } = require('./lib/tracking-rate-limiter');
 const { restorePreviousTextFiles, validatePromotedTrackingSummary, validateTrackingRunForSubmission } = require('./lib/tracking-run-staging');
 const { rowsAsObjects } = require('./lib/csv');
+const trackingDiagnosticSelection = require('./lib/tracking-diagnostic-selection');
 const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browser-handshake');
 const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
 
@@ -944,18 +944,6 @@ function resolveApiCredentials(selectedEnvironment = 'production') {
   };
 }
 
-function apiCredentialStatus(selectedEnvironment = 'production') {
-  const credentials = resolveApiCredentials(selectedEnvironment);
-  return {
-    username: { present: Boolean(credentials.username) },
-    password: { present: Boolean(credentials.password) },
-    selectedEnvironment: normalizeLegacyEnvironment(selectedEnvironment),
-    credentialEnvironment: credentials.environment || 'unknown',
-    deprecated: true,
-    activeForStep2: false
-  };
-}
-
 function ensureApiCredentialFiles(selectedEnvironment = 'production') {
   const userIniRoot = path.join(ROOT, 'user.ini');
   const userIniData = path.join(DATA_DIR, 'user.ini');
@@ -1336,6 +1324,17 @@ function currentClaimPreview() {
   return step3QueueService.previewCandidates(DB_PATH, { now: new Date() });
 }
 
+function trackingDiagnosticRows() {
+  const trackingPath = path.join(DATA_DIR, 'tracking.csv');
+  if (!fs.existsSync(trackingPath)) return { rows: [], trackingPath };
+  return { rows: rowsAsObjects(fs.readFileSync(trackingPath, 'utf8')), trackingPath };
+}
+
+function validateDiagnosticRow(value) {
+  const { rows } = trackingDiagnosticRows();
+  return trackingDiagnosticSelection.validateRow(rows, value);
+}
+
 function localizedText(key, values = {}, fallback = '') {
   const bundle = i18n.loadLocale(readConfig().locale || 'en-CA');
   return i18n.interpolate(i18n.translate(bundle, key, fallback), values);
@@ -1385,7 +1384,7 @@ function trackingRunCounts(summary = {}) {
   return { total, success, warning, failure };
 }
 
-ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
+function runPreflight(rawOptions = {}) {
   ensureDirs();
   const options = inputValidation.validatePreflightOptions(rawOptions);
   const config = readConfig();
@@ -1411,7 +1410,6 @@ ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
     step3WorkersAvailable: workerReady('siteHealth') && workerReady('submitClaims'),
     apiCredentialsAvailable: storage.trackingApiCredentialsStored(),
     apiCredentialMetadata: trackingApiCredentialStatus(trackingEnvironment),
-    legacyApiCredentialsAvailable: storage.apiCredentialsStored(),
     trackingDiagnosticGateSatisfied: trackingDiagnosticGateSatisfied(config, trackingEnvironment),
     trackingCsvAvailable: fs.existsSync(path.join(DATA_DIR, 'tracking.csv')),
     webUsernameAvailable: Boolean(String(submitted.webUsername || config.webUsername || '').trim()),
@@ -1422,6 +1420,32 @@ ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
     reconciliationCount
   });
   return { ok: true, report, claimPreview: preview };
+}
+
+function blockedStep3Preflight(result) {
+  const report = result?.report || { checks: [], blockingCount: 1, warningCount: 0 };
+  return {
+    ok: false,
+    code: 'STEP3_PREFLIGHT_BLOCKED',
+    error: 'Step 3 preflight found blocking issues.',
+    preflight: {
+      blockingCount: Number(report.blockingCount || 0),
+      warningCount: Number(report.warningCount || 0),
+      failedChecks: (report.checks || []).filter(item => !item.ok && item.severity === 'blocking').map(item => ({
+        id: String(item.id || ''),
+        label: String(item.label || ''),
+        action: String(item.action || '')
+      }))
+    }
+  };
+}
+
+ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
+  try {
+    return runPreflight(rawOptions);
+  } catch (error) {
+    return { ok: false, error: error.message, code: error.code || 'PREFLIGHT_OPTIONS_INVALID' };
+  }
 });
 
 ipcMain.handle('claims:preview', () => {
@@ -1430,6 +1454,17 @@ ipcMain.handle('claims:preview', () => {
     return { ok: true, ...currentClaimPreview() };
   } catch (error) {
     return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_QUEUE_UNAVAILABLE', count: 0, items: [] };
+  }
+});
+
+ipcMain.handle('tracking:diagnosticDefaultRow', () => {
+  try {
+    const { rows } = trackingDiagnosticRows();
+    const row = trackingDiagnosticSelection.firstUsableRow(rows);
+    if (row === null) return { ok: false, error: 'No usable tracking row is available.', code: 'TRACKING_DIAGNOSTIC_ROW_MISSING' };
+    return { ok: true, row, rowCount: rows.length };
+  } catch (error) {
+    return { ok: false, error: error.message, code: error.code || 'TRACKING_DIAGNOSTIC_ROW_READ_FAILED' };
   }
 });
 
@@ -1552,11 +1587,13 @@ ipcMain.handle('browser:clearSession', async (_event, payload = {}) => {
 ipcMain.handle('config:load', () => {
   ensureDirs();
   const config = storage.publicConfig();
-  const apiEnvironment = normalizeLegacyEnvironment(config.apiEnvironment || 'production');
+  const publicConfig = { ...config };
+  delete publicConfig.apiEnvironment;
+  delete publicConfig.apiCredentialsStored;
+  delete publicConfig.apiCredentialEnvironment;
   const trackingApiEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
   return {
-    ...config,
-    apiEnvironment,
+    ...publicConfig,
     trackingApiEnvironment,
     duplicateClaimFixVersion: DUPLICATE_CLAIM_FIX_VERSION,
     root: ROOT,
@@ -1569,8 +1606,6 @@ ipcMain.handle('config:load', () => {
     hasTrackingCsv: fs.existsSync(path.join(DATA_DIR, 'tracking.csv')),
     hasClaimsCsv: fs.existsSync(path.join(DATA_DIR, 'claims.csv')),
     hasUserIni: fs.existsSync(path.join(DATA_DIR, 'user.ini')) || fs.existsSync(path.join(ROOT, 'user.ini')),
-    hasApiCredentials: (() => { const api = resolveApiCredentials(apiEnvironment); return Boolean(api.username && api.password); })(),
-    apiCredentialMetadata: apiCredentialStatus(apiEnvironment),
     hasTrackingApiCredentials: storage.trackingApiCredentialsStored(),
     trackingApiCredentialMetadata: trackingApiCredentialStatus(trackingApiEnvironment),
     trackingDiagnosticGateSatisfied: trackingDiagnosticGateSatisfied(config, trackingApiEnvironment),
@@ -1627,7 +1662,7 @@ ipcMain.handle('config:save', (_event, input = {}) => {
     return { ok: false, error: 'Enter both the Tracking API client ID and client secret together. Legacy and website credentials are never copied into these fields.' };
   }
   const sanitized = storage.sanitizeConfig(input);
-  sanitized.apiEnvironment = normalizeLegacyEnvironment(input.apiEnvironment || existing.apiEnvironment || 'production');
+  delete sanitized.apiEnvironment;
   sanitized.trackingApiEnvironment = normalizeTrackingEnvironment(input.trackingApiEnvironment || existing.trackingApiEnvironment || 'test');
   sanitized.trackingRequestDelayMs = trackingRequestDelayMs;
   sanitized.trackingResourceTimeoutMs = trackingResourceTimeoutMs;
@@ -1639,15 +1674,6 @@ ipcMain.handle('config:save', (_event, input = {}) => {
   if (trackingClientIdSupplied || trackingEnvironmentChanged) next = invalidateTrackingDiagnosticGate(next, { newRevision: true });
   writeConfig(next);
   const credentialResult = persistPasswordFromOptions(input, next);
-  const apiUsernameSupplied = Boolean(String(input.apiUsername || '').trim());
-  const apiPasswordSupplied = Boolean(String(input.apiPassword || '').trim());
-  if (apiUsernameSupplied !== apiPasswordSupplied) {
-    return { ok: false, error: 'Enter both the Developer Program API username and API password together. The website password is never copied into these fields.' };
-  }
-  let apiResult = { stored: storage.apiCredentialsStored(), warning: '' };
-  if (apiUsernameSupplied && apiPasswordSupplied) {
-    apiResult = storage.saveApiCredentials(input.apiUsername, input.apiPassword, { environment: sanitized.apiEnvironment });
-  }
   let trackingApiResult = { stored: storage.trackingApiCredentialsStored(), warning: '' };
   if (trackingClientIdSupplied && trackingClientSecretSupplied) {
     trackingApiResult = storage.saveTrackingApiCredentials(input.trackingClientId, input.trackingClientSecret, { environment: sanitized.trackingApiEnvironment });
@@ -1655,13 +1681,11 @@ ipcMain.handle('config:save', (_event, input = {}) => {
   return {
     ok: true,
     passwordStored: credentialResult.stored,
-    apiCredentialsStored: apiResult.stored,
-    apiCredentialMetadata: apiCredentialStatus(sanitized.apiEnvironment),
     trackingApiCredentialsStored: trackingApiResult.stored,
     trackingApiCredentialMetadata: trackingApiCredentialStatus(sanitized.trackingApiEnvironment),
     trackingDiagnosticGateSatisfied: trackingDiagnosticGateSatisfied(next, sanitized.trackingApiEnvironment),
     credentialBackend: credentialResult.backend,
-    warning: credentialResult.warning || apiResult.warning || trackingApiResult.warning || ''
+    warning: credentialResult.warning || trackingApiResult.warning || ''
   };
 });
 
@@ -1801,27 +1825,6 @@ ipcMain.handle('evidence:open', async (_event, filePath) => {
 ipcMain.handle('dashboard:get', () => {
   ensureDirs();
   return { ok: true, dashboard: claimDb.dashboard(DB_PATH), integrity: claimDb.integrityCheck(DB_PATH) };
-});
-
-ipcMain.handle('financial:get', (_event, options = {}) => {
-  try { return { ok: true, report: claimDb.financialReport(DB_PATH, String(options.currency || 'CAD')) }; }
-  catch (error) { return { ok: false, error: error.message }; }
-});
-
-ipcMain.handle('financial:record', async (_event, payload = {}) => {
-  try {
-    return await operationCoordinator.run('authoritative_data_mutation', async () => {
-      const id = claimDb.recordFinancialEntry(DB_PATH, {
-        trackingNumber: String(payload.trackingNumber || '').trim(),
-        valueType: String(payload.valueType || ''),
-        amountMinor: parseDecimalToMinor(payload.amount, 2),
-        currency: String(payload.currency || 'CAD'),
-        source: String(payload.source || 'manual'),
-        note: String(payload.note || '')
-      });
-      return { ok: true, id, report: claimDb.financialReport(DB_PATH, String(payload.currency || 'CAD')) };
-    });
-  } catch (error) { return { ok: false, error: error.message }; }
 });
 
 ipcMain.handle('history:list', (_event, options = {}) => {
@@ -2564,6 +2567,11 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
   if (diagnosticMode && options.diagnosticConfirmed !== true) {
     return { ok: false, error: 'One-request diagnostic requires deliberate confirmation.' };
   }
+  let diagnosticRow = null;
+  if (diagnosticMode) {
+    try { diagnosticRow = validateDiagnosticRow(options.diagnosticRow).row; }
+    catch (error) { return { ok: false, error: error.message, code: error.code }; }
+  }
   if (!diagnosticMode && !trackingDiagnosticGateSatisfied(config, trackingApiEnvironment)) {
     return { ok: false, error: `Step 2 is blocked until “Test API connection with one shipment” succeeds for credential revision, ${trackingApiEnvironment}, and Tracking API ${TRACKING_API_VERSION}.` };
   }
@@ -2587,7 +2595,7 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
     CANADAPOST_API_ENVIRONMENT: trackingApiEnvironment,
     TRACKING_DIAGNOSTIC_MODE: diagnosticMode ? '1' : '0',
     TRACKING_DIAGNOSTIC_CONFIRM: diagnosticMode ? 'ONE_REQUEST_NO_STATE_CHANGE' : '',
-    TRACKING_DIAGNOSTIC_ROW: diagnosticMode ? String(Math.max(1, Number(options.diagnosticRow || 1))) : '',
+    TRACKING_DIAGNOSTIC_ROW: diagnosticMode ? String(diagnosticRow) : '',
     TRACKING_STRUCTURE_EXPORT: structureExport ? '1' : '0',
     TRACKING_STRUCTURE_REPORT: structureExport ? path.join(LOG_DIR, `tracking-response-structure-${timestamp()}.json`) : '',
     DATABASE_PATH: DB_PATH,
@@ -2695,11 +2703,15 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
 ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Live claim submission is disabled while isolated test data is active.' };
   ensureDirs();
-  const options = inputValidation.validateSubmitOptions(rawOptions);
+  let options;
+  try { options = inputValidation.validateSubmitOptions(rawOptions); }
+  catch (error) { return { ok: false, error: error.message, code: error.code || 'SUBMIT_OPTIONS_INVALID' }; }
 
   if (activeChild) {
     return { ok: false, error: 'A process is already active.' };
   }
+  const initialPreflight = runPreflight({ scope: 'step3', submitOptions: options });
+  if (!initialPreflight.report.ready) return blockedStep3Preflight(initialPreflight);
   const authoritativeTracking = claimDb.latestTrackingRun(DB_PATH);
   const trackingRunGate = validateTrackingRunForSubmission(authoritativeTracking);
   if (!trackingRunGate.ok) {
@@ -2723,16 +2735,20 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   const claimSettingsValid = validateClaimSettings(claimSettingsEnv);
   if (!claimSettingsValid.ok) return claimSettingsValid;
 
-  const selectedClassificationRecords = options.selectedClassificationRecords;
-  if (!selectedClassificationRecords.length) {
+  const requestedClassificationRecords = options.selectedClassificationRecords;
+  if (!requestedClassificationRecords.length) {
     return { ok: false, error: 'No late-delivery candidates are selected. Refresh the Step 3 candidate queue and select at least one candidate.', code: 'STEP3_SELECTION_EMPTY' };
   }
-  if (options.expectedClaimCount !== selectedClassificationRecords.length) {
+  if (options.expectedClaimCount !== requestedClassificationRecords.length) {
     return { ok: false, error: 'The Step 3 candidate selection changed before the run started. Refresh the candidate queue and confirm the selection again.', code: 'STEP3_SELECTION_COUNT_CHANGED' };
   }
   if (!options.dryRun && !options.liveSubmissionConfirmed) {
     return { ok: false, error: 'Live submission was not explicitly confirmed. Review the selected claims and confirm the live run.' };
   }
+  const effectiveCanaryMode = !options.dryRun && options.canaryMode;
+  let selectedClassificationRecords;
+  try { selectedClassificationRecords = step3QueueService.selectionForRun(requestedClassificationRecords, { ...options, canaryMode: effectiveCanaryMode }); }
+  catch (error) { return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_SELECTION_INVALID' }; }
 
   const nextConfig = saveRememberedUserSettings({ ...config, developerMode: false }, options, claimSettingsEnv);
   nextConfig.dryRunDefault = Boolean(options.dryRun);
@@ -2750,12 +2766,20 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   const submitRunId = claimDb.startRun(DB_PATH, 'submission', {
     dryRun: Boolean(options.dryRun),
     selectedClaimCount: selectedClassificationRecords.length,
-    canaryMode: Boolean(options.canaryMode)
+    requestedSelectedClaimCount: requestedClassificationRecords.length,
+    canaryMode: Boolean(effectiveCanaryMode)
   });
   const privateSnapshotDirectory = path.join(DATA_DIR, 'private-step3-snapshots', `run-${submitRunId}`);
   fs.mkdirSync(privateSnapshotDirectory, { recursive: true, mode: 0o700 });
   const selectedClaimsPath = path.join(privateSnapshotDirectory, 'worker-claims.csv');
   const queueSnapshotPath = path.join(privateSnapshotDirectory, 'queue-snapshot.json');
+  const finalPreflight = runPreflight({ scope: 'step3', submitOptions: options });
+  if (!finalPreflight.report.ready) {
+    fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
+    claimDb.finishRun(DB_PATH, submitRunId, 'blocked', { failure: 1 }, { stage: 'last-moment-preflight' });
+    operationCoordinator.end(submissionOperationToken);
+    return blockedStep3Preflight(finalPreflight);
+  }
   let selectedClaims;
   let queueSnapshotId = null;
   try {
@@ -2823,9 +2847,9 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     CANADAPOST_SECRETS_STDIN: '1',
     AFTER_SUBMIT_MS: String(options.afterSubmitMs || 20000),
     BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 750),
-    MAX_CLAIMS: options.canaryMode ? '1' : (options.maxClaims ? String(options.maxClaims) : ''),
+    MAX_CLAIMS: effectiveCanaryMode ? '1' : '',
     BROWSER_MODE: 'builtin',
-    CANARY_MODE: options.canaryMode ? 'true' : 'false',
+    CANARY_MODE: effectiveCanaryMode ? 'true' : 'false',
     ELECTRON_CDP_URL: browserHandshake.endpoint,
     ELECTRON_TARGET_ID: browserHandshake.targetId,
     ELECTRON_TARGET_NONCE: browserHandshake.targetNonce,
@@ -2849,13 +2873,13 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   }, 'submit', logPath, {
     onSpawn: () => {
       emit('run', { status: 'started', logPath });
-      appendLog(logPath, `Canada Post claim submission started ${new Date().toISOString()}\nStep tabs version: ${STEP_TABS_VERSION}\nSelected claims: ${selectedClaims.count}\nCanary mode: ${options.canaryMode ? 'yes' : 'no'}\nDry run: ${options.dryRun ? 'yes' : 'no'}\n`);
+      appendLog(logPath, `Canada Post claim submission started ${new Date().toISOString()}\nStep tabs version: ${STEP_TABS_VERSION}\nSelected claims: ${selectedClaims.count}\nCanary mode: ${effectiveCanaryMode ? 'yes' : 'no'}\nDry run: ${options.dryRun ? 'yes' : 'no'}\n`);
       appendStep3ElectronDiagnostic('submission-run-started', {
         runId: submitRunId,
         dryRun: Boolean(options.dryRun),
         browserMode: 'builtin',
         selectedClaimCount: selectedClaims.count,
-        canaryMode: Boolean(options.canaryMode),
+        canaryMode: Boolean(effectiveCanaryMode),
         logPath
       });
     },
@@ -2919,7 +2943,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     }
   })();
 
-  return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir, selectedClaimCount: selectedClaims.count, canaryMode: Boolean(options.canaryMode) };
+  return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir, selectedClaimCount: selectedClaims.count, canaryMode: Boolean(effectiveCanaryMode) };
 });
 
 ipcMain.handle('run:requestStop', () => {

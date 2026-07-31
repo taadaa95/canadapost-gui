@@ -55,7 +55,7 @@ const updater = require('../lib/github-release-updater');
     }), /backup failure/i);
 
     const backup = path.join(root, 'database-backups', 'pre-update.sqlite');
-    const download = path.join(root, 'updates', '0.4.0-dev.8', 'installer.exe');
+    const download = path.join(root, 'updates', '0.4.0-dev.9', 'installer.exe');
     fs.mkdirSync(path.dirname(backup), { recursive: true });
     fs.mkdirSync(path.dirname(download), { recursive: true });
     fs.writeFileSync(backup, 'synthetic backup');
@@ -63,7 +63,7 @@ const updater = require('../lib/github-release-updater');
     const pending = guard.createPendingMarker({
       userDataRoot: root,
       oldVersion: '0.4.0-dev.7',
-      targetVersion: '0.4.0-dev.8',
+      targetVersion: '0.4.0-dev.9',
       backupPath: backup,
       downloadedPath: download,
       previousExecutable: path.join(root, 'runner.AppImage.previous'),

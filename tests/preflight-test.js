@@ -36,14 +36,15 @@ assert.strictEqual(blocked.ready, false);
 assert.strictEqual(blocked.blockingCount, 4);
 assert.strictEqual(blocked.warningCount, 1);
 
-const legacyOnly = buildPreflightReport({
+const missingCurrent = buildPreflightReport({
   scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },
   apiCredentialsAvailable: false, legacyApiCredentialsAvailable: true,
   apiCredentialMetadata: { selectedEnvironment: 'production', credentialEnvironment: 'unknown', apiVersion: TRACKING_API_VERSION },
   trackingDiagnosticGateSatisfied: false, trackingCsvAvailable: true, nodeRuntimeAvailable: true
 });
-assert.strictEqual(legacyOnly.ready, false);
-assert.match(legacyOnly.checks.find(item => item.id === 'tracking-api-credentials').message, /Only deprecated legacy/);
+assert.strictEqual(missingCurrent.ready, false);
+assert.match(missingCurrent.checks.find(item => item.id === 'tracking-api-credentials').message, /client ID or client secret is missing/);
+assert.doesNotMatch(missingCurrent.checks.find(item => item.id === 'tracking-api-credentials').message, /legacy/i);
 
 const currentStep2 = buildPreflightReport({
   scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },

@@ -99,7 +99,7 @@ function classification(trackingNumber) {
       locale: 'en-CA',
       confirmed: true,
       typedPhrase: 'WRONG',
-      applicationVersion: '0.4.0-dev.8',
+      applicationVersion: '0.4.0-dev.9',
       ownedRoots: [dataDir, logDir],
       transactionRoot: path.join(root, 'transactions'),
       receiptDirectory: path.join(root, 'receipts')
@@ -112,7 +112,7 @@ function classification(trackingNumber) {
       confirmed: true,
       typedPhrase: privacy.CONFIRMATION_PHRASES['en-CA'].selected,
       secondConfirmed: false,
-      applicationVersion: '0.4.0-dev.8',
+      applicationVersion: '0.4.0-dev.9',
       ownedRoots: [dataDir, logDir],
       transactionRoot: path.join(root, 'transactions'),
       receiptDirectory: path.join(root, 'receipts'),
@@ -175,7 +175,7 @@ function classification(trackingNumber) {
       locale: 'en-CA',
       confirmed: true,
       typedPhrase: privacy.CONFIRMATION_PHRASES['en-CA'].selected,
-      applicationVersion: '0.4.0-dev.8',
+      applicationVersion: '0.4.0-dev.9',
       ownedRoots: [dataDir, logDir],
       transactionRoot: path.join(root, 'transactions'),
       receiptDirectory: path.join(root, 'receipts')
@@ -193,7 +193,7 @@ function classification(trackingNumber) {
       confirmed: true,
       typedPhrase: privacy.CONFIRMATION_PHRASES['fr-CA'].all,
       secondConfirmed: false,
-      applicationVersion: '0.4.0-dev.8',
+      applicationVersion: '0.4.0-dev.9',
       ownedRoots: [dataDir, logDir],
       transactionRoot: path.join(root, 'transactions'),
       receiptDirectory: path.join(root, 'receipts')

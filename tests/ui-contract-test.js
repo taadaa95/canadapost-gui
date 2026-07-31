@@ -16,12 +16,11 @@ const requiredIds = [
   'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
   'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
   'runSiteHealth', 'siteHealthResult', 'exportHistory', 'refreshHistory',
-  'dryRun', 'canaryMode', 'step3PreflightList', 'claimQueueList', 'liveSubmitModal', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'financialSummary', 'recordFinancialEntry', 'claimQueueDateFrom', 'claimQueueDateTo', 'step3ManualQueue', 'step3IneligibleQueue'
-  , 'apiUsername', 'apiPassword', 'apiEnvironment', 'apiCredentialMetadata',
+  'dryRun', 'claimQueueList', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
-  'diagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
-  'selectAllClaims', 'clearClaimSelection', 'privacyDataTitle', 'privacyTrackingNumbers',
+  'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
+  'selectAllClaims', 'clearClaimSelection', 'manageStoredData', 'privacyDataModal', 'privacyDataTitle', 'privacyTrackingNumbers',
   'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords', 'previewPrivacyData',
   'privacyPreviewCounts', 'privacyDestructiveConfirm', 'privacyTypedPhrase',
   'privacySecondConfirm', 'deletePrivacyData'
@@ -29,7 +28,7 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.8');
+assert.strictEqual(pkg.version, '0.4.0-dev.9');
 assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
 assert.ok(!preload.includes('document.createElement'), 'Preload must remain a narrow IPC bridge');
 assert.ok(html.includes('1-888-550-6333'), 'Missing Canada Post customer-service number');
@@ -66,7 +65,7 @@ assert.ok(!renderer.includes('OVERDUE / NOT DELIVERED'), 'Delivered and overdue 
 assert.ok(renderer.includes('first qualifying code'), 'Semantic diagnostic must report first-attempt evidence without shipment descriptions');
 assert.ok(main.includes('validatePromotedTrackingSummary'), 'Step 3 authority must require proof of a fully promoted Step 2 traversal');
 assert.match(html, /Tracking API 2\.0 platform client ID/i);
-assert.match(html, /Legacy Developer Program credentials[^<]*— deprecated/i);
+assert.doesNotMatch(html, /Legacy Developer Program credentials|Legacy API username|Legacy API password/i);
 assert.match(html, /does not modify claim state/i);
 assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Current credential metadata must not disclose secret lengths');
 assert.ok(/scrollbar-gutter:\s*stable both-edges/.test(html));

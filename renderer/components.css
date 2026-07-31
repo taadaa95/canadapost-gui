@@ -16,3 +16,12 @@
 .privacy-preview-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .privacy-preview-count { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel-soft); }
 @media (max-width: 800px) { .privacy-management-grid, .privacy-preview-counts { grid-template-columns: 1fr; } }
+.advanced-settings { margin-top: 12px; }
+.advanced-settings > summary { cursor: pointer; margin-bottom: 10px; }
+.advanced-settings > button { min-height: 34px; }
+.modal-card-compact { width: min(520px, calc(100vw - 48px)); grid-template-rows: auto auto auto auto; overflow: auto; }
+.privacy-modal-card { width: min(760px, calc(100vw - 48px)); display: block; overflow: auto; padding: 16px; }
+.privacy-modal-card > * + * { margin-top: 12px; }
+.blocking-check-list { display: grid; gap: 8px; }
+.blocking-check-item { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--danger); background: var(--danger-soft); }
+.blocking-check-item span { color: var(--muted); }
