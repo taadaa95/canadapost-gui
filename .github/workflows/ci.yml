@@ -2,12 +2,13 @@ name: Validate and package
 
 on:
   push:
-    branches: [main, v0.4.0-productization]
+    branches: [main, v0.4.0-productization, feature/github-release-updater]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test:
@@ -25,19 +26,23 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm test
       - if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium
       - if: runner.os == 'Windows'
         run: npx playwright install chromium
-      - run: npm run test:mock-portal
+      - run: npm test
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:mock-portal
+      - if: runner.os == 'Windows'
+        run: npm run test:mock-portal
       - run: npm run test:accessibility
       - if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:electron
       - if: runner.os == 'Windows'
         run: npm run test:electron
       - run: npm run lint
-      - run: npm run format:check
+      - if: runner.os == 'Linux'
+        run: npm run format:check
       - run: npm run typecheck
       - run: npm run coverage
       - run: npm run secret-scan
@@ -69,6 +74,7 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
+      RELEASE_PLATFORM: linux
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,7 +91,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-beta-unsigned
-          path: dist/packages/*
+          path: |
+            dist/packages/*
+            dist/release-metadata/package-manifest-linux.json
+            dist/release-metadata/SHA256SUMS-linux.txt
           if-no-files-found: error
 
   package-windows:
@@ -95,6 +104,7 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
+      RELEASE_PLATFORM: windows
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
@@ -111,5 +121,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-beta-unsigned
-          path: dist/packages/*
+          path: |
+            dist/packages/*
+            dist/release-metadata/package-manifest-windows.json
+            dist/release-metadata/SHA256SUMS-windows.txt
           if-no-files-found: error

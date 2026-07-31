@@ -26,6 +26,7 @@ files:
   - lib/**/*.js
   - config/policy-rules.json
   - config/holiday-calendar.json
+  - config/update-source.json
   - locales/*.json
   - scripts/*.js
   - mock-portal/**
@@ -40,7 +41,7 @@ files:
   - "!**/config.local.json"
   - "!**/*.sqlite*"
   - "!**/*browser-profile*"
-artifactName: "${productName}-${version}-${os}-${arch}-${env.RELEASE_CHANNEL}.${ext}"
+artifactName: "Canada.Post.Claim.Runner-${version}-${os}-${arch}-${env.RELEASE_CHANNEL}.${ext}"
 directories:
   output: dist/packages
 win:

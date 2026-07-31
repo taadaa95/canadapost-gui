@@ -1,0 +1,9 @@
+{
+  "provider": "github-releases",
+  "owner": "taadaa95",
+  "repository": "canadapost-claim-runner-releases",
+  "manifestAssets": {
+    "windows": "package-manifest-windows.json",
+    "linux": "package-manifest-linux.json"
+  }
+}

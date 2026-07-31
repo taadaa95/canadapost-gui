@@ -19,6 +19,7 @@ const nodeGlobals = {
   structuredClone: "readonly",
   AbortSignal: "readonly",
   Headers: "readonly",
+  Response: "readonly",
   fetch: "readonly",
   URLSearchParams: "readonly",
   window: "readonly",
