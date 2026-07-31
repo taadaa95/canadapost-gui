@@ -1,6 +1,6 @@
 {
   "name": "canadapost-gui",
-  "version": "0.4.0-dev.6",
+  "version": "0.4.0-dev.7",
   "description": "Local Canada Post tracking, eligibility, claim submission, reconciliation, backup and audit workflow.",
   "author": "Canada Post Claim Runner contributors",
   "desktopName": "Canada Post Claim Runner",
@@ -54,7 +54,7 @@
     "test:packaged-database-legacy": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked legacy",
     "test:packaged-database-advanced": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked advanced",
     "test:packaged-isolated-profile": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js dist/packages/linux-unpacked",
-    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/step3-visibility-fix-packages/Canada.Post.Claim.Runner-0.4.0-dev.6-linux-x86_64-beta.AppImage\"",
+    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/step3-visibility-fix-packages/Canada.Post.Claim.Runner-0.4.0-dev.7-linux-x86_64-beta.AppImage\"",
     "sbom": "node scripts/generate-sbom.js",
     "release:finalize": "node scripts/finalize-artifacts.js",
     "lint": "eslint main.js preload.js renderer.js lib scripts mock-portal tests",
