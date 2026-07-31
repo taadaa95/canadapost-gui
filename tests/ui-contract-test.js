@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const renderer = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const pkg = require('../package.json');
@@ -24,7 +25,10 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.6');
+assert.strictEqual(pkg.version, '0.4.0-dev.7');
+assert.ok(preload.includes("note.id = 'step3CanadaPostSupport'"), 'Missing Step 3 Canada Post support note');
+assert.ok(preload.includes('1-888-550-6333'), 'Missing Canada Post customer-service number');
+assert.ok(preload.includes('Unsure about a claim?'), 'Missing Step 3 claim-verification guidance');
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
 assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
