@@ -60,6 +60,7 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  differentialPackage: false
 linux:
   category: Office
   syncDesktopName: true
