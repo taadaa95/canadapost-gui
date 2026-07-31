@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { _electron: electron } = require('playwright');
 const claimDb = require('../lib/claim-database');
+const { classifyEligibility } = require('../lib/policy-engine');
 const { createMockPortal } = require('../mock-portal/server');
 
 (async () => {
@@ -21,7 +22,27 @@ const { createMockPortal } = require('../mock-portal/server');
     `${trackingNumber},K1A0B1,2026-07-15,2026-07-15,2026-07-18,SYNTHETIC-REFERENCE,DOM.EP,LATE CANDIDATE,Synthetic late delivery`
   ].join('\n') + '\n', { mode: 0o600 });
   const trackingRunId = claimDb.startRun(dbPath, 'tracking', { synthetic: true });
+  const classificationInput = {
+    trackingNumber,
+    referenceNumber: 'SYNTHETIC-REFERENCE',
+    destinationPostalCode: 'K1A0B1',
+    destinationProvince: 'ON',
+    serviceCode: 'DOM.EP',
+    originalExpectedDeliveryDate: '2026-07-15',
+    expectedDeliveryDate: '2026-07-15',
+    firstAttemptDate: '2026-07-16',
+    actualDeliveryDate: '2026-07-18',
+    exclusionSignals: [],
+    conflictCodes: [],
+    normalizedEvents: []
+  };
+  const classification = classifyEligibility(classificationInput, {
+    asOf: '2026-07-20',
+    classificationTimestamp: '2026-07-20T12:00:00.000Z'
+  });
+  const classificationRecord = claimDb.recordClassification(dbPath, trackingNumber, classification, classificationInput, { runId: trackingRunId });
   claimDb.finishRun(dbPath, trackingRunId, 'complete', { total: 1, success: 1 }, { synthetic: true });
+  const selectedClassificationRecords = [{ recordId: classificationRecord.id, evidenceHash: classification.evidenceHash }];
 
   const portal = createMockPortal({ defaultScenario: 'text-verification' });
   const origin = await portal.start();
@@ -50,13 +71,13 @@ const { createMockPortal } = require('../mock-portal/server');
       window.cpApp.onRun(payload => window.__step3Runs.push(payload));
     });
 
-    const hiddenStart = await window.evaluate(number => window.cpApp.runSubmit({
+    const hiddenStart = await window.evaluate(selection => window.cpApp.runSubmit({
       webUsername: 'synthetic-user', webPassword: 'synthetic-password', rememberSettings: false,
       claimStreetNumber: '1', claimStreetName: 'Example Street', claimCity: 'Ottawa', claimProvince: 'ON',
       claimPostalCode: 'K1A0B1', claimContactName: 'Synthetic Operator', claimContactEmail: 'operator@example.invalid',
       dryRun: true, liveSubmissionConfirmed: false, canaryMode: true,
-      selectedTrackingNumbers: [number], expectedClaimCount: 1, afterSubmitMs: 5000
-    }), trackingNumber);
+      selectedClassificationRecords: selection, expectedClaimCount: selection.length, afterSubmitMs: 5000
+    }), selectedClassificationRecords);
     assert.strictEqual(hiddenStart.ok, false, 'submission must not start while the browser slot cannot be displayed');
     assert.strictEqual(hiddenStart.code, 'BROWSER_VISIBILITY_REQUIRED');
     assert.strictEqual(portal.stats().requests, 0, 'visibility watchdog failure must occur before portal navigation');
@@ -66,7 +87,7 @@ const { createMockPortal } = require('../mock-portal/server');
       document.getElementById('builtinBrowserSlot').scrollIntoView({ block: 'center' });
     });
 
-    const started = await window.evaluate(number => window.cpApp.runSubmit({
+    const started = await window.evaluate(selection => window.cpApp.runSubmit({
       webUsername: 'synthetic-user',
       webPassword: 'synthetic-password',
       rememberSettings: false,
@@ -80,10 +101,10 @@ const { createMockPortal } = require('../mock-portal/server');
       dryRun: true,
       liveSubmissionConfirmed: false,
       canaryMode: true,
-      selectedTrackingNumbers: [number],
-      expectedClaimCount: 1,
+      selectedClassificationRecords: selection,
+      expectedClaimCount: selection.length,
       afterSubmitMs: 5000
-    }), trackingNumber);
+    }), selectedClassificationRecords);
     assert.strictEqual(started.ok, true, started.error || 'mock dry run did not start');
 
     try {
