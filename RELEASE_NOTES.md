@@ -1,16 +1,16 @@
-# Canada Post Claim Runner 0.4.0-dev.8
+# Canada Post Claim Runner 0.4.0-dev.9
 
-## Selected product-review corrections — 2026-07-30
+## Focused UI debloat — 2026-07-31
 
-- Corrects Step 2/3 operator terminology to late-delivery candidates and keeps first-attempt, service, policy and claim-window data advisory. Canada Post remains the final claim-eligibility authority.
-- Starts Step 3 with zero selected candidates, adds visible-row **Select all** and global **Clear selection**, and requires a non-empty database-record selection for dry and live runs.
-- Makes the latest complete, promoted Step 2 run's immutable SQLite classifications authoritative for Step 3. `claims.csv` remains a human-readable compatibility export and is never trusted as queue input.
-- Adds explicit recalculated deadline states without coercing missing values to zero.
-- Adds main-process protected-operation coordination, verified pre-update database backups, pending/healthy markers and interrupted-update recovery while retaining Linux `.previous` and Windows installer rollback material.
-- Adds localized English/French Data Management / Privacy preview and deletion controls with non-identifying duplicate-protection tombstones, file deletion, integrity checks and sanitized receipts. The privacy documentation remains a draft requiring legal/privacy review.
-- Removes development-only mock-portal and build/test scripts from production package contents, adds an allowlist, package budgets, major-contributor reports and bounded update storage.
+- Removes deprecated Developer Program credentials from normal Settings; Step 2 remains OAuth/JSON-only with no Basic/XML fallback.
+- Replaces the permanent Step 2 diagnostic-row panel with a compact, localized one-shipment dialog opened only by the diagnostic actions.
+- Removes Step 3 readiness, manual-review, on-time and canary panels. Mandatory preflight now runs automatically, and the live confirmation contains a default-on first-candidate option.
+- Keeps Step 3 selection, SQLite queue authority, transactional snapshots, evidence hashes, duplicate protection and reconciliation safeguards unchanged.
+- Removes Financial recovery from the visible renderer and preload mutation surface while retaining historical schema-8 records for compatibility.
+- Moves localized privacy preview/deletion controls into a closed-by-default modal opened from one Advanced Settings button.
+- Gives the candidate queue additional vertical space without redesigning the existing dark, square-cornered interface.
 
-This is `0.4.0-dev.8`, an unsigned development build. It is not a public release, and the deferred signing, fingerprint, physical/manual-gate and global reconciliation-blocking work is unchanged.
+This is `0.4.0-dev.9`, an unsigned development build. It is not a public release. No schema version change was made.
 
 # Canada Post Claim Runner 0.4.0-dev.2
 
