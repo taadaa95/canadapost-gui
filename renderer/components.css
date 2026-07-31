@@ -25,3 +25,11 @@
 .blocking-check-list { display: grid; gap: 8px; }
 .blocking-check-item { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--danger); background: var(--danger-soft); }
 .blocking-check-item span { color: var(--muted); }
+.claim-queue-row.blocked { background: var(--danger-soft); }
+.claim-queue-row.blocked > * { opacity: 0.88; }
+.claim-queue-row.blocked input[type="checkbox"] { cursor: not-allowed; opacity: 0.45; }
+.claim-queue-status { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.claim-queue-status .pill { justify-self: start; }
+.claim-queue-block-reason { color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.claim-queue-status .compact-button { justify-self: start; min-height: 30px; padding: 4px 8px; }
+.reconciliation-row.focused { outline: 2px solid var(--accent-2); outline-offset: -2px; background: var(--accent-soft); }

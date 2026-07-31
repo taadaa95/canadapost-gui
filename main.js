@@ -410,12 +410,28 @@ function isAllowedBuiltinBrowserUrl(value) {
   return isBuiltinMarkerUrl(value) || isAllowedCanadaPostUrl(value);
 }
 
+function isLoadedCanadaPostUrl(value) {
+  return !isBuiltinMarkerUrl(value) && isAllowedCanadaPostUrl(value);
+}
+
 async function markBuiltinBrowserTarget(view = builtinBrowserView) {
   if (!view) throw Object.assign(new Error('The Step 3 browser view was not created.'), { code: 'BROWSER_VIEW_NOT_CREATED' });
   if (view.webContents.isDestroyed()) throw Object.assign(new Error('The Step 3 browser webContents was destroyed.'), { code: 'BROWSER_WEBCONTENTS_DESTROYED' });
   await view.webContents.executeJavaScript(`window.name = ${JSON.stringify(builtinBrowserTargetNonce)}; window.name`, true);
   const marker = await view.webContents.executeJavaScript('window.name', true);
   if (marker !== builtinBrowserTargetNonce) throw Object.assign(new Error('The Step 3 target marker could not be published.'), { code: 'TARGET_NOT_PUBLISHED' });
+}
+
+async function styleBuiltinBrowserMarker(view = builtinBrowserView) {
+  if (!view || view.webContents.isDestroyed() || !isBuiltinMarkerUrl(view.webContents.getURL())) return;
+  await view.webContents.executeJavaScript(`(() => {
+    document.documentElement.style.background = '#07101f';
+    if (document.body) {
+      document.body.replaceChildren();
+      document.body.style.margin = '0';
+      document.body.style.background = '#07101f';
+    }
+  })()`, true);
 }
 
 function ensureBuiltinBrowserView() {
@@ -483,33 +499,41 @@ function ensureBuiltinBrowserView() {
 
   builtinBrowserView.webContents.on('did-start-navigation', (_event, url, isInPlace, isMainFrame) => {
     appendStep3ElectronDiagnostic('did-start-navigation', { url, isInPlace, isMainFrame });
-    if (isMainFrame) {
-      emitBuiltinBrowserActivity(true, 'Loading Canada Post');
+    if (isMainFrame && isLoadedCanadaPostUrl(url)) {
+      emitBuiltinBrowserActivity(true, 'Opening Canada Post…');
       requestBuiltinBrowserVisibility({ reason: 'navigation-start', requireVisible: false }).catch(() => {});
     }
   });
 
   builtinBrowserView.webContents.on('did-start-loading', () => {
-    appendStep3ElectronDiagnostic('did-start-loading', { url: builtinBrowserView?.webContents.getURL() });
-    emitBuiltinBrowserActivity(true, 'Loading Canada Post…');
+    const url = builtinBrowserView?.webContents.getURL();
+    appendStep3ElectronDiagnostic('did-start-loading', { url });
+    if (isLoadedCanadaPostUrl(url)) emitBuiltinBrowserActivity(true, 'Opening Canada Post…');
   });
 
   builtinBrowserView.webContents.on('dom-ready', () => {
-    appendStep3ElectronDiagnostic('dom-ready', { url: builtinBrowserView?.webContents.getURL() });
+    const url = builtinBrowserView?.webContents.getURL();
+    appendStep3ElectronDiagnostic('dom-ready', { url });
     markBuiltinBrowserTarget().catch(error => appendStep3ElectronDiagnostic('browser-target-marker-failed', { code: error.code || 'TARGET_NOT_PUBLISHED' }));
-    emitBuiltinBrowserActivity(true, 'Rendering Canada Post page…');
-    requestBuiltinBrowserVisibility({ reason: 'navigation-dom-ready', requireVisible: false }).catch(() => {});
+    if (isLoadedCanadaPostUrl(url)) {
+      emitBuiltinBrowserActivity(true, 'Rendering Canada Post page…');
+      requestBuiltinBrowserVisibility({ reason: 'navigation-dom-ready', requireVisible: false }).catch(() => {});
+    }
   });
 
   builtinBrowserView.webContents.on('did-stop-loading', () => {
-    appendStep3ElectronDiagnostic('did-stop-loading', { url: builtinBrowserView?.webContents.getURL() });
-    emitBuiltinBrowserActivity(false, 'Canada Post page ready');
+    const url = builtinBrowserView?.webContents.getURL();
+    appendStep3ElectronDiagnostic('did-stop-loading', { url });
+    if (isLoadedCanadaPostUrl(url)) emitBuiltinBrowserActivity(false, 'Canada Post loaded');
   });
 
   builtinBrowserView.webContents.on('did-finish-load', () => {
-    appendStep3ElectronDiagnostic('did-finish-load', { url: builtinBrowserView?.webContents.getURL() });
-    emitBuiltinBrowserActivity(false, 'Canada Post page ready');
-    requestBuiltinBrowserVisibility({ reason: 'navigation-ready', requireVisible: false }).catch(() => {});
+    const url = builtinBrowserView?.webContents.getURL();
+    appendStep3ElectronDiagnostic('did-finish-load', { url });
+    if (isLoadedCanadaPostUrl(url)) {
+      emitBuiltinBrowserActivity(false, 'Canada Post loaded');
+      requestBuiltinBrowserVisibility({ reason: 'navigation-ready', requireVisible: false }).catch(() => {});
+    }
   });
 
   builtinBrowserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
@@ -561,6 +585,7 @@ async function prepareBuiltinBrowserForWorker(options = {}) {
     await view.webContents.loadURL(BUILTIN_BROWSER_MARKER_URL);
   }
   await markBuiltinBrowserTarget(view);
+  await styleBuiltinBrowserMarker(view);
   let publication = await publishBrowserTarget({
     view,
     endpoint: BUILTIN_BROWSER_CDP_URL,
@@ -1415,7 +1440,7 @@ function runPreflight(rawOptions = {}) {
     webUsernameAvailable: Boolean(String(submitted.webUsername || config.webUsername || '').trim()),
     webPasswordAvailable: Boolean(submitted.webPassword || storage.passwordStored()),
     claimAddressAvailable: Boolean(String(submitted.claimStreetNumber || config.claimStreetNumber || '').trim() && String(submitted.claimStreetName || config.claimStreetName || '').trim()),
-    claimCount: preview.count,
+    claimCount: Number(preview.executableCount ?? preview.count ?? 0),
     builtinBrowserRequired: true,
     reconciliationCount
   });
@@ -2703,6 +2728,7 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
 ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Live claim submission is disabled while isolated test data is active.' };
   ensureDirs();
+  hideBuiltinBrowserView('submission-validation');
   let options;
   try { options = inputValidation.validateSubmitOptions(rawOptions); }
   catch (error) { return { ok: false, error: error.message, code: error.code || 'SUBMIT_OPTIONS_INVALID' }; }
@@ -2794,7 +2820,15 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message, stage: 'claim-selection' });
     operationCoordinator.end(submissionOperationToken);
-    return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_SNAPSHOT_FAILED' };
+    hideBuiltinBrowserView('submission-selection-blocked');
+    return {
+      ok: false,
+      error: localizedStep3Error(error),
+      code: error.code || 'STEP3_SNAPSHOT_FAILED',
+      recordId: error.recordId || null,
+      attemptId: error.attemptId || null,
+      executionState: error.executionState || ''
+    };
   }
   const step3DiagnosticsRunDir = path.join(LOG_DIR, 'step3-runs', `step3-${timestamp()}-run-${submitRunId}`);
   fs.mkdirSync(step3DiagnosticsRunDir, { recursive: true, mode: 0o700 });
@@ -2829,6 +2863,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     });
     activeStep3DiagnosticsDir = '';
     activeBrowserVisibilityFile = '';
+    hideBuiltinBrowserView('browser-handshake-failed');
     fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, {
       stage: 'browser-handshake',
@@ -2900,6 +2935,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
       appendStep3ElectronDiagnostic('submission-worker-closed', { code, signal, eventCounts });
       activeStep3DiagnosticsDir = '';
       activeBrowserVisibilityFile = '';
+      hideBuiltinBrowserView('submission-worker-closed');
       fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     }
   });
@@ -2908,6 +2944,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
     const failed = await submitProcess;
     activeStep3DiagnosticsDir = '';
     activeBrowserVisibilityFile = '';
+    hideBuiltinBrowserView('submission-worker-start-failed');
     fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
     claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: failed.error?.message || 'Worker spawn failed.' });
     operationCoordinator.end(submissionOperationToken);
@@ -2935,6 +2972,7 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
       appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
       activeStep3DiagnosticsDir = '';
       activeBrowserVisibilityFile = '';
+      hideBuiltinBrowserView('submission-run-error');
       fs.rmSync(privateSnapshotDirectory, { recursive: true, force: true });
       try { claimDb.finishRun(DB_PATH, submitRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });

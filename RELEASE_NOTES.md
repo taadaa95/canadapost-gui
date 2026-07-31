@@ -1,3 +1,17 @@
+# Canada Post Claim Runner 0.4.0-dev.10
+
+## Step 3 executable queue and idle-browser correction — 2026-07-31
+
+- Separates late-delivery candidates from candidates that are currently executable in Step 3.
+- Prevents submitted, duplicate, terminal, unresolved, and reconciliation-required records from being selected or included by Select all.
+- Revalidates claim-attempt state transactionally before creating the immutable worker snapshot.
+- Routes unresolved attempts directly to their matching reconciliation record in History without adding a retry bypass.
+- Keeps the native browser hidden until an executable snapshot passes mandatory preflight and main-process validation.
+- Replaces the misleading white idle browser and generic Browser ready state with explicit idle, preparing, opening, loaded, hidden, and failure states.
+- Keeps schema version 8, duplicate protection, SQLite queue authority, evidence hashes, update guards, dry-run protection, and CAPTCHA handling unchanged.
+
+This is `0.4.0-dev.10`, an unsigned development build. It is not a public release.
+
 # Canada Post Claim Runner 0.4.0-dev.9
 
 ## Focused UI debloat — 2026-07-31

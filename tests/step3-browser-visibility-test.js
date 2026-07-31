@@ -89,8 +89,12 @@ assert.strictEqual(inactive.reason, 'step3-inactive');
     'positive visibility synchronization must attach the native child view');
   assert.doesNotMatch(mainSource, /if \(!builtinBrowserView \|\| !builtinBrowserAttached\) return \{ ok: true, hidden: true \}/,
     'a detached target must be reattachable by a later bounds update');
-  assert.match(rendererSource, /step3-run-start[\s\S]*scrollIntoView: true/,
-    'run start must force a fresh slot measurement and scroll the slot into view');
+  assert.doesNotMatch(rendererSource, /step3-run-start/,
+    'renderer must not expose the native browser before main-process snapshot validation');
+  assert.match(rendererSource, /deactivateBuiltinBrowser\('validating-selection'/,
+    'run start must keep the native browser hidden while executable selection is validated');
+  assert.match(rendererSource, /onBuiltinBrowserVisibilityRequest[\s\S]*scrollIntoView: Boolean\(payload\?\.scrollIntoView\)[\s\S]*activate: true/,
+    'the post-snapshot main-process visibility request must activate and scroll the browser slot into view');
   assert.match(rendererSource, /browser-slot-placeholder[\s\S]*placeholder\.hidden = !visible/,
     'placeholder visibility must follow the native display state');
   assert.match(rendererSource, /Manual verification required/);

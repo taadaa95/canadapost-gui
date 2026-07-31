@@ -1,6 +1,6 @@
 {
   "name": "canadapost-gui",
-  "version": "0.4.0-dev.9",
+  "version": "0.4.0-dev.10",
   "description": "Local Canada Post tracking, eligibility, claim submission, reconciliation, backup and audit workflow.",
   "author": "Canada Post Claim Runner contributors",
   "desktopName": "Canada Post Claim Runner",
@@ -17,9 +17,7 @@
     "test:est-import": "node tests/est-import-v4-test.js",
     "test:database-migrations": "node --unhandled-rejections=strict tests/database-migration-recovery-test.js",
     "test:updates": "node tests/github-release-updater-test.js",
-    "test:dev9": "node --check renderer/step2-copy.js && node --check renderer/step3-queue.js && node --check renderer/privacy-data-management.js && node --check renderer/update-progress.js && node --check lib/operation-coordinator.js && node --check lib/update-install-guard.js && node --check lib/step3-queue-service.js && node --check lib/privacy-deletion.js && node --check lib/deletion-receipt.js && node tests/ui-debloat-contract-test.js && node tests/product-review-contract-test.js && node tests/step3-queue-service-test.js && node tests/operation-update-guard-test.js && node tests/privacy-deletion-test.js && node tests/package-content-test.js && npm run test:release-metadata",
     "test:release-metadata": "node tests/release-metadata-contract-test.js",
-    "lint:dev9": "eslint renderer lib/operation-coordinator.js lib/update-install-guard.js lib/step3-queue-service.js lib/privacy-deletion.js lib/deletion-receipt.js tests/product-review-contract-test.js tests/step3-queue-service-test.js tests/operation-update-guard-test.js tests/privacy-deletion-test.js tests/ui-debloat-contract-test.js tests/package-content-test.js tests/release-metadata-contract-test.js scripts/package-size-report.js scripts/finalize-artifacts.js scripts/validate-release-metadata.js",
     "install-browsers": "playwright install chromium",
     "secret-scan": "node scripts/secret-scan.js .",
     "release:audit": "node scripts/audit-release.js",
@@ -58,7 +56,7 @@
     "test:packaged-database-legacy": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked legacy",
     "test:packaged-database-advanced": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked advanced",
     "test:packaged-isolated-profile": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js dist/packages/linux-unpacked",
-    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/Canada.Post.Claim.Runner-0.4.0-dev.9-linux-x86_64-beta.AppImage\"",
+    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/Canada.Post.Claim.Runner-0.4.0-dev.10-linux-x86_64-beta.AppImage\"",
     "sbom": "node scripts/generate-sbom.js",
     "release:finalize": "node scripts/finalize-artifacts.js",
     "release:validate": "node scripts/validate-release-metadata.js",
@@ -70,7 +68,9 @@
     "test:electron": "node tests/electron-e2e-test.js",
     "test:accessibility": "node tests/accessibility-test.js",
     "test:ui-layout": "node tests/live-log-layout-test.js && node tests/history-refinement-test.js",
-    "coverage": "c8 --check-coverage --lines 70 --functions 65 --branches 60 --include='lib/policy-engine.js' --include='lib/tracking-normalizer.js' --include='lib/eligibility-revalidation.js' --include='lib/encrypted-backup.js' --include='lib/zip-safety.js' --include='lib/update-security.js' --include='lib/i18n.js' node tests/coverage-suite.js"
+    "coverage": "c8 --check-coverage --lines 70 --functions 65 --branches 60 --include='lib/policy-engine.js' --include='lib/tracking-normalizer.js' --include='lib/eligibility-revalidation.js' --include='lib/encrypted-backup.js' --include='lib/zip-safety.js' --include='lib/update-security.js' --include='lib/i18n.js' node tests/coverage-suite.js",
+    "test:dev10": "node --check renderer/step2-copy.js && node --check renderer/step3-queue.js && node --check renderer/privacy-data-management.js && node --check renderer/update-progress.js && node --check lib/operation-coordinator.js && node --check lib/update-install-guard.js && node --check lib/step3-queue-service.js && node --check lib/privacy-deletion.js && node --check lib/deletion-receipt.js && node tests/ui-debloat-contract-test.js && node tests/product-review-contract-test.js && node tests/step3-queue-service-test.js && node tests/operation-update-guard-test.js && node tests/privacy-deletion-test.js && node tests/package-content-test.js && npm run test:release-metadata && node tests/dev10-step3-execution-test.js && node tests/dev10-browser-lifecycle-contract-test.js",
+    "lint:dev10": "eslint renderer lib/operation-coordinator.js lib/update-install-guard.js lib/step3-queue-service.js lib/privacy-deletion.js lib/deletion-receipt.js tests/product-review-contract-test.js tests/step3-queue-service-test.js tests/operation-update-guard-test.js tests/privacy-deletion-test.js tests/ui-debloat-contract-test.js tests/package-content-test.js tests/release-metadata-contract-test.js scripts/package-size-report.js scripts/finalize-artifacts.js scripts/validate-release-metadata.js tests/dev10-step3-execution-test.js tests/dev10-browser-lifecycle-contract-test.js"
   },
   "dependencies": {
     "fast-xml-parser": "^5.10.1",

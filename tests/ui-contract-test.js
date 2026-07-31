@@ -28,7 +28,7 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-dev.9');
+assert.strictEqual(pkg.version, '0.4.0-dev.10');
 assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
 assert.ok(!preload.includes('document.createElement'), 'Preload must remain a narrow IPC bridge');
 assert.ok(html.includes('1-888-550-6333'), 'Missing Canada Post customer-service number');

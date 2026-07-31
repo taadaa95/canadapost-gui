@@ -10,6 +10,7 @@ const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page:
 let setupWizardShown = false;
 let activeMessages = {};
 const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
+let reconciliationFocusAttemptId = null;
 const step3QueueController = window.Step3Queue.createController();
 
 function tr(key, fallback = '') { return activeMessages[key] || fallback || key; }
@@ -215,6 +216,7 @@ let builtinBrowserLayoutFrame = 0;
 let builtinBrowserRepositionFrame = 0;
 let builtinBrowserResizeObserver = null;
 let builtinBrowserDisplayState = { visible: false, reason: 'not-created' };
+let builtinBrowserRunActive = false;
 
 function useBuiltinBrowser() {
   return $('builtinBrowser') ? $('builtinBrowser').checked : false;
@@ -327,33 +329,56 @@ function builtinBrowserBounds() {
   };
 }
 
+function idleBrowserPlaceholderText() {
+  const summary = step3QueueController.snapshot();
+  if (!summary.total) return tr('step3.browser.noCandidates', 'No late-delivery candidates are currently available.');
+  if (!summary.executable) return tr('step3.browser.noExecutable', 'No executable claims are available. Review blocked attempts in History.');
+  return tr('step3.browser.idle', 'Canada Post will open here after an executable claim passes preflight.');
+}
+
 function applyBuiltinBrowserDisplayState(result = {}) {
   builtinBrowserDisplayState = { ...builtinBrowserDisplayState, ...result };
-  if (result.visible) {
+  if (result.visible && builtinBrowserRunActive) {
     setBrowserSlotPlaceholder(false);
-    if (!$('builtinBrowserActivity')?.classList.contains('active')) setBuiltinBrowserStatus('Browser ready', 'good');
+    if (!$('builtinBrowserActivity')?.classList.contains('active')) setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
     return;
   }
-  if (result.reason === 'browser-preparing' || result.reason === 'not-created') {
-    setBrowserSlotPlaceholder(true, 'Built-in browser area. The browser is preparing for Step 3.');
-    setBuiltinBrowserStatus('Browser preparing', 'warn');
+  if (result.reason === 'browser-preparing' && builtinBrowserRunActive) {
+    setBrowserSlotPlaceholder(true, tr('step3.browser.preparing', 'Preparing the secure Canada Post browser…'));
+    setBuiltinBrowserStatus(tr('step3.browser.preparingStatus', 'Preparing browser'), 'warn');
     return;
   }
   if (result.reason === 'slot-offscreen' || result.reason === 'step3-inactive') {
-    setBrowserSlotPlaceholder(true, 'Built-in browser area. Canada Post is hidden while this slot is offscreen.');
-    setBuiltinBrowserStatus('Browser hidden because slot is offscreen', 'warn');
+    setBrowserSlotPlaceholder(true, tr('step3.browser.hidden', 'Canada Post is hidden while the browser area is offscreen.'));
+    setBuiltinBrowserStatus(tr('step3.browser.hiddenStatus', 'Browser hidden'), 'warn');
     return;
   }
-  if (result.ok === false) {
-    setBrowserSlotPlaceholder(true, 'The built-in browser could not be displayed. Stop Step 3 and review diagnostics.');
-    setBuiltinBrowserStatus('Browser display error', 'bad');
+  if (result.ok === false && builtinBrowserRunActive) {
+    setBrowserSlotPlaceholder(true, tr('step3.browser.displayError', 'The built-in browser could not be displayed. Stop Step 3 and review diagnostics.'));
+    setBuiltinBrowserStatus(tr('step3.browser.displayErrorStatus', 'Browser display error'), 'bad');
     return;
   }
-  setBrowserSlotPlaceholder(true, 'Built-in browser area. Canada Post appears here when Step 3 starts.');
+  setBrowserSlotPlaceholder(true, idleBrowserPlaceholderText());
+  setBuiltinBrowserStatus(tr('step3.browser.idleStatus', 'Browser idle'), '');
+}
+
+async function deactivateBuiltinBrowser(reason = 'run-inactive', placeholderText = '') {
+  builtinBrowserRunActive = false;
+  if (window.cpApp?.hideBuiltinBrowser) await window.cpApp.hideBuiltinBrowser().catch(() => {});
+  applyBuiltinBrowserDisplayState({ ok: true, visible: false, reason });
+  if (placeholderText) setBrowserSlotPlaceholder(true, placeholderText);
+  setBuiltinBrowserActivity(false, tr('step3.browser.idleStatus', 'Browser idle'));
 }
 
 async function synchronizeBuiltinBrowserVisibility(options = {}) {
   syncBuiltinBrowserClass();
+  if (options.activate === true) builtinBrowserRunActive = true;
+  if (!builtinBrowserRunActive) {
+    if (window.cpApp?.hideBuiltinBrowser) await window.cpApp.hideBuiltinBrowser().catch(() => {});
+    const result = { ok: true, visible: false, reason: 'run-inactive' };
+    applyBuiltinBrowserDisplayState(result);
+    return result;
+  }
   const slot = $('builtinBrowserSlot');
   if (options.scrollIntoView && activeTabId === 'step3' && slot) {
     slot.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
@@ -1907,9 +1932,14 @@ function renderReconciliation(items = []) {
     root.appendChild(empty);
     return;
   }
-  for (const item of items) {
+  const orderedItems = reconciliationFocusAttemptId
+    ? [...items].sort((left, right) => (Number(right.id) === Number(reconciliationFocusAttemptId)) - (Number(left.id) === Number(reconciliationFocusAttemptId)))
+    : items;
+  for (const item of orderedItems) {
     const row = document.createElement('div');
-    row.className = 'reconciliation-row';
+    const focused = Number(item.id) === Number(reconciliationFocusAttemptId);
+    row.className = `reconciliation-row${focused ? ' focused' : ''}`;
+    row.dataset.attemptId = String(item.id || '');
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
     row.appendChild(historyCell(item.status));
@@ -2474,13 +2504,18 @@ function selectedClassificationRecords() {
 }
 
 function updateClaimQueueCount() {
-  const { selected, total } = step3QueueController.snapshot();
+  const { selected, total, executable, blocked } = step3QueueController.snapshot();
   const pill = $('claimQueueCount');
   if (pill) {
-    pill.textContent = tr('step3.selectedCount', '{selected} of {total} selected')
-      .replace('{selected}', String(selected)).replace('{total}', String(total));
-    pill.className = `pill ${selected > 0 ? 'good' : 'bad'}`;
+    pill.textContent = trf(
+      'step3.selectedExecutableCount',
+      { selected, executable, blocked, total },
+      '{selected} selected · {executable} executable · {blocked} blocked · {total} total'
+    );
+    pill.className = `pill ${selected > 0 ? 'good' : (executable > 0 ? 'warn' : 'bad')}`;
   }
+  const runButton = $('runSubmitOnly');
+  if (runButton) runButton.disabled = executable < 1 || state.isolatedTestMode === true;
 }
 
 function queueCell(text, className = '') {
@@ -2507,6 +2542,34 @@ function filteredClaimQueue(items = []) {
     dateFrom: $('claimQueueDateFrom')?.value,
     dateTo: $('claimQueueDateTo')?.value
   });
+}
+
+function executionStateLabel(item) {
+  const labels = {
+    executable: tr('step3.execution.executable', 'Executable'),
+    submitted: tr('step3.execution.submitted', 'Already submitted'),
+    already_submitted: tr('step3.execution.alreadySubmitted', 'Existing claim'),
+    unresolved_attempt: tr('step3.execution.unresolved', 'Unresolved attempt'),
+    terminal_failure: tr('step3.execution.terminal', 'Terminal outcome'),
+    reconciliation_required: tr('step3.execution.reconciliation', 'Reconciliation required'),
+    otherwise_blocked: tr('step3.execution.blocked', 'Blocked')
+  };
+  return labels[item.executionState] || labels.executable;
+}
+
+async function reviewBlockedAttempt(item) {
+  if (!item?.trackingNumber) return;
+  reconciliationFocusAttemptId = Number(item.attemptId || 0) || null;
+  activateTab('historyTab');
+  if ($('historySearch')) $('historySearch').value = item.trackingNumber;
+  historyViewState.search = item.trackingNumber;
+  historyViewState.page = 1;
+  historyViewState.offset = 0;
+  await refreshHistory().catch(error => console.error(error));
+  const target = reconciliationFocusAttemptId
+    ? document.querySelector(`#reconciliationList [data-attempt-id="${reconciliationFocusAttemptId}"]`)
+    : null;
+  (target || $('reconciliationList') || $('historyList'))?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
 }
 
 function renderClaimQueue(items = [], preserveState = false) {
@@ -2549,13 +2612,18 @@ function renderClaimQueue(items = [], preserveState = false) {
   list.appendChild(header);
 
   for (const item of visibleItems) {
-    const row = document.createElement('label');
-    row.className = 'claim-queue-row';
+    const executable = step3QueueController.isExecutable(item);
+    const row = document.createElement('div');
+    row.className = `claim-queue-row${executable ? '' : ' blocked'}`;
+    row.dataset.executionState = item.executionState || 'executable';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.checked = step3QueueController.isSelected(item.recordId);
+    checkbox.checked = executable && step3QueueController.isSelected(item.recordId);
+    checkbox.disabled = !executable;
     checkbox.dataset.recordId = String(item.recordId);
-    checkbox.setAttribute('aria-label', tr('step3.queue.includeAria', 'Include candidate {tracking}').replace('{tracking}', item.trackingNumber || ''));
+    checkbox.setAttribute('aria-label', executable
+      ? tr('step3.queue.includeAria', 'Include candidate {tracking}').replace('{tracking}', item.trackingNumber || '')
+      : tr('step3.queue.blockedAria', 'Candidate {tracking} is blocked').replace('{tracking}', item.trackingNumber || ''));
     checkbox.addEventListener('change', () => { step3QueueController.set(item.recordId, checkbox.checked); updateClaimQueueCount(); });
     row.appendChild(checkbox);
     row.appendChild(queueCell(item.trackingNumber));
@@ -2563,10 +2631,29 @@ function renderClaimQueue(items = [], preserveState = false) {
     row.appendChild(queueCell(item.serviceCode));
     row.appendChild(queueCell([item.firstAttemptDate, item.deliveryDate].filter(Boolean).join(' / ')));
     row.appendChild(queueCell([item.deadline, deadlineLabel(item)].filter(Boolean).join(' · ')));
-    row.appendChild(queueCell([item.policyVersion, item.eligibilityReason].filter(Boolean).join(' · ')));
+
+    const statusCell = document.createElement('div');
+    statusCell.className = 'claim-queue-status';
+    const status = document.createElement('span');
+    status.className = `pill ${executable ? 'good' : 'bad'}`;
+    status.textContent = executionStateLabel(item);
+    const reason = document.createElement('span');
+    reason.className = 'claim-queue-block-reason';
+    reason.textContent = [item.policyVersion, item.eligibilityReason, item.blockedReason].filter(Boolean).join(' · ');
+    statusCell.append(status, reason);
+    if (!executable && (item.reconciliationRequired || ['unresolved_attempt', 'reconciliation_required'].includes(item.executionState))) {
+      const review = document.createElement('button');
+      review.type = 'button';
+      review.className = 'secondary compact-button';
+      review.textContent = tr('step3.queue.reviewAttempt', 'Review attempt');
+      review.addEventListener('click', event => { event.preventDefault(); reviewBlockedAttempt(item); });
+      statusCell.appendChild(review);
+    }
+    row.appendChild(statusCell);
     list.appendChild(row);
   }
   updateClaimQueueCount();
+  if (!builtinBrowserRunActive) applyBuiltinBrowserDisplayState({ ok: true, visible: false, reason: 'run-inactive' });
   requestBuiltinBrowserLayout();
 }
 
@@ -2856,50 +2943,15 @@ async function startSubmitOnly() {
   }
 
   resetRunUi('step3');
-  setStatus('Running', 'warn', 'step3');
-  setBuiltinBrowserStatus('Browser preparing', 'warn');
-  setBuiltinBrowserActivity(true, 'Starting built-in browser workflow…');
+  await deactivateBuiltinBrowser('validating-selection', tr('step3.browser.validating', 'Validating the selected executable claims…'));
+  setStatus('Validating', 'warn', 'step3');
+  setBuiltinBrowserStatus(tr('step3.browser.idleStatus', 'Browser idle'), '');
   setAction(dryRun
     ? trf('step3.dryRunStarting', { count: selected.length })
     : (canaryMode ? tr('step3.confirm.modeCanary') : trf('step3.liveRunStarting', { count: selected.length })), 'step3');
-  const initialDisplay = await synchronizeBuiltinBrowserVisibility({
-    reason: 'step3-run-start',
-    scrollIntoView: true,
-    force: true
-  });
-  if (initialDisplay?.ok === false) {
-    setBuiltinBrowserStatus('Browser display error', 'bad');
-    finishBuiltinBrowserActivity('Browser display error', 'error');
-    setStatus('Failed', 'bad', 'step3');
-    setAction(initialDisplay.error || 'The built-in browser slot could not be measured.', 'step3');
-    return;
-  }
-  if (window.cpApp?.prepareBuiltinBrowser) {
-    const browserReady = await window.cpApp.prepareBuiltinBrowser().catch(error => ({ ok: false, error: error.message }));
-    if (!browserReady?.ok) {
-      setStatus('Failed', 'bad', 'step3');
-      setAction(browserReady?.error || 'The built-in browser target could not be prepared.');
-      log(browserReady?.error || 'The built-in browser target could not be prepared.', 'log-submit-error', 'step3');
-      finishBuiltinBrowserActivity('Browser startup failed', 'error');
-      return;
-    }
-    const displayReady = await synchronizeBuiltinBrowserVisibility({
-      reason: 'renderer-handshake-complete',
-      scrollIntoView: true,
-      force: true,
-      requireVisible: true
-    });
-    if (!displayReady?.visible) {
-      setStatus('Failed', 'bad', 'step3');
-      setAction(displayReady?.error || 'The built-in browser target is ready but its native view cannot be displayed.');
-      log(displayReady?.error || 'The built-in browser target is ready but its native view cannot be displayed.', 'log-submit-error', 'step3');
-      finishBuiltinBrowserActivity('Browser display error', 'error');
-      setBuiltinBrowserStatus('Browser display error', 'bad');
-      return;
-    }
-    setBuiltinBrowserStatus('Browser ready', 'good');
-  }
 
+  // The main process validates attempt state and creates an immutable snapshot
+  // before it creates, attaches, or navigates the native browser.
   const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode }));
   if (!res.ok) {
     if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
@@ -2918,6 +2970,11 @@ async function startSubmitOnly() {
       message: res.error || 'Could not start claim submission'
     });
     log(res.error || 'Could not start claim submission.');
+    const blockedText = ['STEP3_UNRESOLVED_ATTEMPT', 'STEP3_TERMINAL_OUTCOME', 'STEP3_NO_EXECUTABLE_CLAIMS'].includes(res.code)
+      ? tr('step3.browser.noExecutableSelected', 'No executable claims are selected. Review blocked attempts in History.')
+      : idleBrowserPlaceholderText();
+    await deactivateBuiltinBrowser('submission-not-started', blockedText);
+    await refreshClaimQueue().catch(() => {});
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
@@ -2927,7 +2984,7 @@ async function startSubmitOnly() {
   log(dryRun
     ? `Dry run started for ${res.selectedClaimCount || selected.length} selected claim(s). The runner will stop on the sender/contact page.`
     : (canaryMode ? 'Canary live run started. Only the first selected claim will be processed.' : `Live claim submission started for ${res.selectedClaimCount || selected.length} selected claim(s).`));
-  await resizeBuiltinBrowserToSlot('submission-worker-started');
+  if (builtinBrowserRunActive) await resizeBuiltinBrowserToSlot('submission-worker-started');
 }
 
 async function refreshConfig() {
@@ -2989,7 +3046,7 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.9';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.10';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
@@ -3283,24 +3340,29 @@ window.cpApp.onUpdateProgress?.(payload => {
 
 window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
   if (active) {
-    setBuiltinBrowserStatus('Loading Canada Post', 'warn');
-    setBuiltinBrowserActivity(true, text || 'Loading Canada Post…', kind || '');
+    builtinBrowserRunActive = true;
+    setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+    setBuiltinBrowserActivity(true, text || tr('step3.browser.opening', 'Opening Canada Post'), kind || '');
   } else {
-    finishBuiltinBrowserActivity(text || 'Browser ready', kind || '');
-    if (kind === 'error') setBuiltinBrowserStatus('Browser display error', 'bad');
-    else if (builtinBrowserDisplayState.visible) setBuiltinBrowserStatus('Browser ready', 'good');
+    const loaded = /Canada Post page (?:ready|loaded)/i.test(String(text || ''));
+    finishBuiltinBrowserActivity(text || (loaded ? tr('step3.browser.loaded', 'Canada Post loaded') : tr('step3.browser.idleStatus', 'Browser idle')), kind || '');
+    if (kind === 'error') setBuiltinBrowserStatus(tr('step3.browser.navigationFailed', 'Browser navigation failed'), 'bad');
+    else if (loaded && builtinBrowserDisplayState.visible) setBuiltinBrowserStatus(tr('step3.browser.loaded', 'Canada Post loaded'), 'good');
+    else if (builtinBrowserRunActive) setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
   }
 });
 
 window.cpApp.onBuiltinBrowserDisplayState?.((payload) => applyBuiltinBrowserDisplayState(payload));
 
 window.cpApp.onBuiltinBrowserVisibilityRequest?.((payload) => {
+  builtinBrowserRunActive = true;
   synchronizeBuiltinBrowserVisibility({
     requestId: payload?.requestId,
     reason: payload?.reason || 'main-process-request',
     requireVisible: Boolean(payload?.requireVisible),
     scrollIntoView: Boolean(payload?.scrollIntoView),
-    force: true
+    force: true,
+    activate: true
   }).catch(error => {
     applyBuiltinBrowserDisplayState({ ok: false, visible: false, reason: 'display-error', error: error.message });
   });
@@ -3373,6 +3435,9 @@ window.cpApp.onRun((payload) => {
     setAction(payload.message, step);
     log(payload.message, '', step);
   }
+  if (step === 'step3' && ['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped'].includes(payload.status)) {
+    deactivateBuiltinBrowser(`run-${payload.status}`).catch(() => {});
+  }
   updateCounters();
   if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
     refreshHistory().catch(() => {});
@@ -3389,7 +3454,10 @@ window.cpApp.onStage(({ stage, status, code }) => {
     log(`${stage} process started.`, '', step);
   }
   if (status === 'finished') {
-    if (stage === 'submit') finishBuiltinBrowserActivity(code === 0 ? 'Browser workflow complete' : 'Browser workflow finished with warnings', code === 0 ? '' : 'error');
+    if (stage === 'submit') {
+      finishBuiltinBrowserActivity(code === 0 ? 'Browser workflow complete' : 'Browser workflow finished with warnings', code === 0 ? '' : 'error');
+      deactivateBuiltinBrowser('worker-finished').catch(() => {});
+    }
     if (stage === 'health') setSiteHealthRunning(false);
     log(`${stage} process finished with code ${code}.`, '', step);
   }
