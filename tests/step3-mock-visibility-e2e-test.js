@@ -156,6 +156,7 @@ const { createMockPortal } = require('../mock-portal/server');
     }, origin);
 
     await window.waitForFunction(() => window.__step3Events.some(event => event?.type === 'submit_complete'), null, { timeout: 90000 });
+    await window.waitForFunction(() => window.__step3Runs.some(run => run?.status === 'complete'), null, { timeout: 30000 });
     const result = await window.evaluate(() => ({
       complete: window.__step3Events.find(event => event?.type === 'submit_complete'),
       claim: window.__step3Events.find(event => event?.type === 'claim_dry_run'),
