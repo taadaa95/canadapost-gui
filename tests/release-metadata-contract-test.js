@@ -143,3 +143,4 @@ fixture('linux', [primary('linux')], context => {
 });
 
 process.stdout.write('Release metadata platform and publication-readiness contracts passed.\n');
+require('./sbom-test');
