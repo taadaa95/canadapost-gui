@@ -33,6 +33,8 @@ const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browse
 const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
 const { createFocusedRegistrar } = require('./main/ipc');
 const { validateWorkerEvent } = require('./lib/ipc-contracts');
+const supportBundle = require('./lib/support-bundle');
+const portalCompatibility = require('./lib/portal-compatibility');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
@@ -1424,6 +1426,7 @@ function runPreflight(rawOptions = {}) {
   const reconciliationCount = claimDb.listReconciliation(DB_PATH, 10000).length;
   const workerReady = name => preflightWorkerLaunch(name).ok;
   const trackingEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
+  const currentPortalCompatibility = portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health'));
   const report = buildPreflightReport({
     scope: options.scope,
     storageWritable: applicationStorageWritable(),
@@ -1442,6 +1445,8 @@ function runPreflight(rawOptions = {}) {
     claimAddressAvailable: Boolean(String(submitted.claimStreetNumber || config.claimStreetNumber || '').trim() && String(submitted.claimStreetName || config.claimStreetName || '').trim()),
     claimCount: Number(preview.executableCount ?? preview.count ?? 0),
     builtinBrowserRequired: true,
+    liveSubmissionRequested: submitted.dryRun === false,
+    portalCompatibility: currentPortalCompatibility,
     reconciliationCount
   });
   return { ok: true, report, claimPreview: preview };
@@ -1650,6 +1655,7 @@ registerIpcHandler('config:load', () => {
     liveSubmissionEnabled: !USER_DATA_PROFILE.active,
     updateActionsEnabled: !USER_DATA_PROFILE.active,
     updateRecovery,
+    portalCompatibility: portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health')),
     setupReadiness: (() => {
       const saved = storage.publicConfig();
       const browserAvailable = typeof WebContentsView === 'function'
@@ -2079,12 +2085,27 @@ registerIpcHandler('privacy:delete', (_event, payload = {}) => {
   }
 });
 
-registerIpcHandler('diagnostics:create', async () => {
+function supportBundlePreview(payload = {}) {
+  return supportBundle.preview({
+    components: payload.components,
+    supportReferenceId: payload.supportReferenceId,
+    applicationVersion: APP_VERSION,
+    databaseSchemaVersion: claimDb.SCHEMA_VERSION,
+    trackingParserVersion: TRACKING_PARSER_VERSION
+  });
+}
+
+registerIpcHandler('diagnostics:preview', (_event, payload = {}) => ({ ok: true, preview: supportBundlePreview(payload) }));
+
+registerIpcHandler('diagnostics:create', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'External diagnostic exports are disabled while isolated test data is active.' };
+  if (payload.acknowledged !== true) return { ok: false, error: 'Review and acknowledge the support bundle warning before creating an archive.', code: 'SUPPORT_BUNDLE_ACK_REQUIRED' };
+  const preview = supportBundlePreview(payload);
+  if (!/^CPCR-\d{8}-[A-F0-9]{10}$/.test(preview.supportReferenceId)) return { ok: false, error: 'The support reference ID is invalid.', code: 'SUPPORT_REFERENCE_INVALID' };
   ensureDirs();
   const result = await dialog.showSaveDialog(win, {
-    title: 'Create sanitized diagnostic report',
-    defaultPath: path.join(app.getPath('documents'), `canadapost-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`),
+    title: 'Create sanitized support bundle',
+    defaultPath: path.join(app.getPath('documents'), `canadapost-support-${preview.supportReferenceId}.zip`),
     filters: [{ name: 'ZIP archives', extensions: ['zip'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
@@ -2103,9 +2124,11 @@ registerIpcHandler('diagnostics:create', async () => {
       logDir: LOG_DIR,
       dbPath: DB_PATH,
       dependencyStatus: dependencyStatus(),
-      sensitiveValues: diagnosticSensitiveValues(config)
+      sensitiveValues: diagnosticSensitiveValues(config),
+      components: preview.selectedComponents,
+      supportManifest: preview
     });
-    return { ok: true, path: result.filePath };
+    return { ok: true, path: result.filePath, supportReferenceId: preview.supportReferenceId };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -2163,9 +2186,10 @@ registerIpcHandler('siteHealth:run', async (_event, options = {}) => {
     try {
       const result = await healthProcess;
       const health = result.lastEventsByType?.health_complete || result.lastEvent || {};
+      const compatibility = portalCompatibility.evaluateHealthResult(health);
       claimDb.finishRun(DB_PATH, runId, health.ok ? 'complete' : 'failed', {
         total: 1, success: health.ok ? 1 : 0, warning: health.status === 'warning' ? 1 : 0, failure: health.ok ? 0 : 1
-      }, health);
+      }, { ...health, portalCompatibility: compatibility });
       emit('run', {
         status: health.ok ? (health.status === 'warning' ? 'complete_with_warnings' : 'complete') : 'failed',
         message: health.message || (health.ok ? 'Workflow health check passed.' : 'Workflow health check failed.'),
@@ -2356,6 +2380,10 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
 
 registerIpcHandler('run:start', async (_event, options = {}) => {
   ensureDirs();
+
+  if (!options.dryRun) {
+    return { ok: false, error: 'Combined live runs are disabled. Complete Steps 1 and 2, review the promoted queue, then use the separately acknowledged Step 3 live action.', code: 'LIVE_REVIEW_REQUIRED' };
+  }
 
   if (activeChild) {
     return { ok: false, error: 'A run is already active.' };
@@ -2739,6 +2767,10 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   }
   const initialPreflight = runPreflight({ scope: 'step3', submitOptions: options });
   if (!initialPreflight.report.ready) return blockedStep3Preflight(initialPreflight);
+  if (!options.dryRun) {
+    const compatibilityGate = portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health'));
+    if (!compatibilityGate.ok) return { ok: false, error: compatibilityGate.reason, code: compatibilityGate.code };
+  }
   const authoritativeTracking = claimDb.latestTrackingRun(DB_PATH);
   const trackingRunGate = validateTrackingRunForSubmission(authoritativeTracking);
   if (!trackingRunGate.ok) {

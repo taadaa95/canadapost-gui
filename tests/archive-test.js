@@ -79,7 +79,9 @@ const archiveTools = require('../lib/archive-tools');
       logDir,
       dbPath: sourceDb,
       dependencyStatus: { phpAvailable: true },
-      sensitiveValues: ['supersecret', 'user@example.com']
+      sensitiveValues: ['supersecret', 'user@example.com'],
+      components: ['system', 'settings', 'history', 'logs', 'step3Diagnostics'],
+      supportManifest: { format: 'canadapost-claim-runner-support-bundle', version: 1, supportReferenceId: 'CPCR-TEST' }
     });
     const diagnosticEntries = unzipSync(new Uint8Array(fs.readFileSync(diagnostics)));
     const log = strFromU8(diagnosticEntries['logs/latest.log']);
@@ -95,6 +97,20 @@ const archiveTools = require('../lib/archive-tools');
     assert.ok(!step3Timeline.includes('supersecret'));
     assert.ok(!step3Timeline.includes('user@example.com'));
     assert.ok(!step3Timeline.includes('1234567890123456'));
+
+    const defaultBundle = path.join(root, 'support-default.zip');
+    archiveTools.createDiagnosticPackage({
+      destination: defaultBundle,
+      appVersion: '0.4.0-beta.1', config: {}, credentialStatus: {}, logDir,
+      dbPath: sourceDb, dependencyStatus: {}, sensitiveValues: ['supersecret'],
+      supportManifest: { format: 'canadapost-claim-runner-support-bundle', version: 1 }
+    });
+    const defaultEntries = unzipSync(new Uint8Array(fs.readFileSync(defaultBundle)));
+    assert.ok(defaultEntries['system/database-integrity.json']);
+    assert.ok(defaultEntries['settings/sanitized-settings.json']);
+    assert.ok(!defaultEntries['logs/latest.log'], 'logs must require explicit opt in');
+    assert.ok(!defaultEntries['history/recent-attempts.json'], 'history must require explicit opt in');
+    assert.ok(!Object.keys(defaultEntries).some(name => /screenshot|\.png$/i.test(name)), 'screenshots must never enter support bundles');
 
     const exportPath = path.join(root, 'history.csv');
     archiveTools.exportHistoryCsv(sourceDb, exportPath, {});

@@ -3,6 +3,7 @@
 const assert = require('assert');
 const { chromium } = require('playwright');
 const { createMockPortal, SCENARIOS } = require('../mock-portal/server');
+const portalCompatibility = require('../lib/portal-compatibility');
 
 const TEST_TIMEOUT_MS = 120000;
 const CLEANUP_TIMEOUT_MS = 10000;
@@ -33,8 +34,8 @@ const watchdog = setTimeout(() => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   try {
-    assert.ok(SCENARIOS.length >= 19);
-    for (const scenario of SCENARIOS.filter(value => !['network-failure', 'browser-crash', 'worker-crash'].includes(value))) {
+    for (const required of ['changed-selector', 'missing-stage', 'redirect', 'verification-required', 'text-verification', 'duplicate', 'rejection', 'timeout', 'uncertain-confirmation']) assert.ok(SCENARIOS.includes(required));
+    for (const scenario of SCENARIOS.filter(value => !['network-failure', 'browser-crash', 'worker-crash', 'timeout'].includes(value))) {
       const response = await page.goto(`${origin}/login?scenario=${scenario}`, { waitUntil: 'domcontentloaded', timeout: 6000 }).catch(() => null);
       if (scenario === 'server-error') assert.strictEqual(response.status(), 503);
       else assert.ok(response, `scenario ${scenario} should provide a deterministic page`);
@@ -51,10 +52,20 @@ const watchdog = setTimeout(() => {
     await page.getByLabel('Street Number').fill('1');
     await page.getByLabel('Street Name').selectOption({ label: 'Example Street' });
     assert.strictEqual(await page.getByLabel('Street Number').inputValue(), '1');
+    const fingerprint = portalCompatibility.evaluateHealthResult({
+      ok: true, status: 'healthy', code: 'HEALTHY', navigationVisited: ['support', 'late', 'ticket'],
+      checks: { domain: true, authenticated: true, claimNavigation: true, latePackageControl: true, ticketLauncher: true }
+    });
+    assert.strictEqual(fingerprint.compatible, true, 'the synthetic expected stages and controls must produce a compatible fingerprint');
 
     const changed = await page.goto(`${origin}/cpc/en/support/kb/claims/late-packages.page?scenario=changed-selector`);
     assert.strictEqual(changed.status(), 200);
     assert.strictEqual(await page.locator('#ticket_open').count(), 0);
+    const missing = await page.goto(`${origin}/cpc/en/support/kb/claims/late-packages.page?scenario=missing-stage`);
+    assert.strictEqual(missing.status(), 200);
+    assert.match(await page.locator('#ticket_open').getAttribute('href'), /stage=reference/);
+    const timeoutResponse = await page.goto(`${origin}/login?scenario=timeout`, { timeout: 100 }).catch(() => null);
+    assert.strictEqual(timeoutResponse, null);
   } finally {
     const cleanup = await Promise.allSettled([
       withTimeout(browser.close(), 'Chromium shutdown'),

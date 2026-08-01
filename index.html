@@ -409,7 +409,7 @@
             <button id="exportHistory" class="secondary" type="button">Export CSV</button>
             <button id="createBackup" class="secondary" type="button">Create Backup</button>
             <button id="restoreBackup" class="warning" type="button">Restore Backup</button>
-            <button id="createDiagnostics" class="secondary" type="button">Diagnostic ZIP</button>
+            <button id="createDiagnostics" class="secondary" type="button">Support bundle</button>
           </div>
           <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto minmax(0,1fr);">
             <button id="runSiteHealth" class="success" type="button">Run Canada Post Workflow Health Check</button>
@@ -598,6 +598,24 @@
       <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
       <div id="setupSafetyNotice" class="live-submit-warning">Start with dry run. Live submission remains separately acknowledged and blocked until a reviewed queue passes preflight. CAPTCHA and text verification stay manual in the visible built-in browser.</div>
       <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button">Continue later</button><button id="setupOpenSettings" class="secondary" type="button">Review Settings</button><button id="setupFinish" class="success" type="button">Finish Setup</button></div>
+    </div>
+  </div>
+
+  <div id="supportBundleModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supportBundleTitle">
+      <div class="modal-head"><h2 id="supportBundleTitle">Preview sanitized support bundle</h2></div>
+      <p><span id="supportReferenceLabel">Support reference</span>: <strong id="supportReferenceId"></strong></p>
+      <p id="supportBundleMetadata"></p>
+      <div class="preflight-list">
+        <label><input type="checkbox" data-support-component="system" /> <span id="supportSystemLabel">System and database integrity</span></label>
+        <label><input type="checkbox" data-support-component="settings" /> <span id="supportSettingsLabel">Sanitized configuration status</span></label>
+        <label><input type="checkbox" data-support-component="history" /> <span id="supportHistoryLabel">Masked recent attempt summaries (opt in)</span></label>
+        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel">Sanitized recent logs (opt in)</span></label>
+        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label">Sanitized Step 3 diagnostics without screenshots (opt in)</span></label>
+      </div>
+      <div id="supportBundleExclusions" class="live-submit-warning"></div>
+      <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel">I reviewed these components and will inspect the archive before sharing it.</span></label>
+      <div class="live-submit-modal-actions"><button id="cancelSupportBundle" class="secondary" type="button">Cancel</button><button id="confirmSupportBundle" class="success" type="button" disabled>Create support bundle</button></div>
     </div>
   </div>
 

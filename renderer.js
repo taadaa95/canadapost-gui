@@ -55,7 +55,12 @@ async function applyLocale(locale) {
     privacyDateFromLabel: 'privacy.dateFrom', privacyDateToLabel: 'privacy.dateTo',
     privacyAllRecordsLabel: 'privacy.allRecords', privacyDestructiveConfirmLabel: 'privacy.destructiveConfirm',
     privacyTypedPhraseLabel: 'privacy.typedPhraseLabel', privacySecondConfirmLabel: 'privacy.secondConfirm',
-    privacyExternalCopiesNotice: 'privacy.externalCopies'
+    privacyExternalCopiesNotice: 'privacy.externalCopies',
+    supportBundleTitle: 'support.title', supportReferenceLabel: 'support.reference',
+    supportSystemLabel: 'support.component.system', supportSettingsLabel: 'support.component.settings',
+    supportHistoryLabel: 'support.component.history', supportLogsLabel: 'support.component.logs',
+    supportStep3Label: 'support.component.step3', supportAcknowledgeLabel: 'support.acknowledge',
+    cancelSupportBundle: 'action.cancel', confirmSupportBundle: 'support.create'
   };
   for (const [id, key] of Object.entries(textTargets)) if ($(id)) $(id).textContent = tr(key, $(id).textContent);
   if ($('clearHistoryFilters')) $('clearHistoryFilters').setAttribute('aria-label', tr('history.clearFiltersLabel', 'Clear History filters'));
@@ -2329,10 +2334,38 @@ async function clearBrowserSession() {
 }
 
 async function createDiagnosticZip() {
-  const result = await window.cpApp.createDiagnostics();
-  if (result.ok) window.alert(`Sanitized diagnostic ZIP created:
-${result.path}`);
-  else if (!result.canceled) window.alert(result.error || 'Could not create diagnostic ZIP.');
+  const result = await window.cpApp.previewSupportBundle({});
+  if (!result?.ok) return window.alert(result?.error || 'Could not preview the support bundle.');
+  const preview = result.preview;
+  $('supportReferenceId').textContent = preview.supportReferenceId;
+  $('supportBundleMetadata').textContent = `${preview.applicationVersion} / ${preview.platform}-${preview.architecture} / database schema ${preview.databaseSchemaVersion} / parser ${preview.trackingParserVersion}`;
+  $('supportBundleExclusions').textContent = `Always excluded: ${preview.exclusions.join(', ')}.`;
+  for (const [name, detail] of Object.entries(preview.components)) {
+    const input = document.querySelector(`[data-support-component="${name}"]`);
+    if (input) input.checked = detail.selected;
+  }
+  $('supportBundleAcknowledge').checked = false;
+  $('confirmSupportBundle').disabled = true;
+  $('supportBundleModal').classList.remove('hidden');
+  $('supportBundleModal').setAttribute('aria-hidden', 'false');
+}
+
+function closeSupportBundle() {
+  $('supportBundleModal')?.classList.add('hidden');
+  $('supportBundleModal')?.setAttribute('aria-hidden', 'true');
+}
+
+async function confirmSupportBundle() {
+  const components = [...document.querySelectorAll('[data-support-component]:checked')].map(input => input.dataset.supportComponent);
+  const result = await window.cpApp.createDiagnostics({
+    components,
+    supportReferenceId: $('supportReferenceId')?.textContent || '',
+    acknowledged: $('supportBundleAcknowledge')?.checked === true
+  });
+  if (result.ok) {
+    closeSupportBundle();
+    window.alert(`Sanitized support bundle ${result.supportReferenceId} created:\n${result.path}`);
+  } else if (!result.canceled) window.alert(result.error || 'Could not create support bundle.');
 }
 
 async function exportClaimHistory() {
@@ -2500,7 +2533,7 @@ function buildRunOptions(importHistory = false) {
   return {
     ...collectUserSettingsOptions(),
     fresh: $('freshRun')?.checked || false,
-    browserMode: 'external',
+    browserMode: 'builtin',
     afterSubmitMs: 20000,
     maxClaims: null,
     dryRun: Boolean($('dryRun')?.checked),
@@ -3040,6 +3073,11 @@ async function refreshConfig() {
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
   state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
+  if ($('siteHealthResult') && cfg.portalCompatibility) {
+    $('siteHealthResult').textContent = cfg.portalCompatibility.ok
+      ? 'Portal compatibility fingerprint is current for live batches.'
+      : (cfg.portalCompatibility.reason || 'Portal compatibility has not been confirmed for live batches.');
+  }
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
   await applyLocale(cfg.locale || 'en-CA');
@@ -3209,6 +3247,9 @@ $('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.a
 $('resumeSetup')?.addEventListener('click', async () => showSetupWizard(await window.cpApp.loadConfig()));
 $('setupFinish')?.addEventListener('click', finishSetupWizard);
 $('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
+$('cancelSupportBundle')?.addEventListener('click', closeSupportBundle);
+$('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
+$('supportBundleAcknowledge')?.addEventListener('change', () => { $('confirmSupportBundle').disabled = !$('supportBundleAcknowledge').checked; });
 $('runSiteHealth')?.addEventListener('click', runSiteHealthCheck);
 $('addManualShipment')?.addEventListener('click', addManualShipment);
 $('checkForUpdates')?.addEventListener('click', async () => {

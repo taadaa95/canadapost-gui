@@ -20,6 +20,17 @@ const ready = buildPreflightReport({
 assert.strictEqual(ready.ready, true);
 assert.strictEqual(ready.blockingCount, 0);
 
+const liveWithoutPortalCheck = buildPreflightReport({
+  scope: 'step3', storageWritable: true, databaseIntegrity: { ok: true },
+  webUsernameAvailable: true, webPasswordAvailable: true, claimAddressAvailable: true,
+  claimCount: 1, builtinBrowserRequired: true, step3WorkersAvailable: true,
+  reconciliationCount: 0, liveSubmissionRequested: true,
+  portalCompatibility: { ok: false, reason: 'Health check required.' }
+});
+assert.strictEqual(liveWithoutPortalCheck.ready, false);
+assert.strictEqual(liveWithoutPortalCheck.checks.find(item => item.id === 'portal-compatibility').ok, false);
+assert.strictEqual(ready.checks.some(item => item.id === 'portal-compatibility'), false, 'dry diagnostics must not require the live portal gate');
+
 const blocked = buildPreflightReport({
   scope: 'step3',
   storageWritable: true,

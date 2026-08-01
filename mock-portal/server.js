@@ -9,7 +9,8 @@ const SCENARIOS = Object.freeze([
   'duplicate', 'validation-error', 'ineligible', 'session-expired', 'redirect',
   'disallowed-origin', 'unexpected-new-tab', 'slow-page', 'network-failure',
   'server-error', 'changed-selector', 'ambiguous-submit', 'delayed-submit',
-  'browser-crash', 'worker-crash'
+  'browser-crash', 'worker-crash', 'missing-stage', 'rejection', 'timeout',
+  'uncertain-confirmation'
 ]);
 
 function escapeHtml(value) {
@@ -49,6 +50,7 @@ function loginHtml(scenario) {
 
 function supportHtml(scenario) {
   if (scenario === 'changed-selector') return page('Late package support', '<p>The expected ticket launcher is intentionally absent.</p>');
+  if (scenario === 'missing-stage') return page('Late package support', '<a id="ticket_open" href="/claim?scenario=missing-stage&stage=reference">Open a ticket with a missing receiver stage</a>');
   const target = `/claim?scenario=${encodeURIComponent(scenario)}&stage=receiver`;
   if (scenario === 'unexpected-new-tab') {
     return page('Late package support', `<a id="ticket_open" target="_blank" href="${target}">Open a ticket</a>`);
@@ -77,6 +79,8 @@ function claimHtml(url, scenario) {
     'validation-error': 'We could not process this request because required information is invalid.',
     ineligible: 'This package is not eligible for a late-delivery refund.',
     'ambiguous-submit': 'Thank you. Your request is being processed.',
+    'uncertain-confirmation': 'Thank you. Your request may have been received; confirmation is not available.',
+    rejection: 'Your request was rejected and was not submitted.',
     'worker-crash': 'Synthetic worker crash checkpoint reached.',
     'browser-crash': 'Synthetic browser crash checkpoint reached.'
   };
@@ -105,6 +109,11 @@ function createMockPortal({ host = '127.0.0.1', port = 0, defaultScenario = 'suc
     if (scenario === 'network-failure') return request.socket.destroy();
     if (scenario === 'server-error') return send(response, 503, page('Service unavailable', '<p role="alert">Synthetic server error.</p>'));
     if (scenario === 'slow-page') return setTimeout(() => send(response, 200, supportHtml(scenario)), 1500);
+    if (scenario === 'timeout') {
+      const timer = setTimeout(() => send(response, 504, page('Timed out', '<p>Synthetic timeout completed.</p>')), 35000);
+      if (typeof timer.unref === 'function') timer.unref();
+      return;
+    }
     if (scenario === 'redirect') return send(response, 302, '', { location: `/cpc/en/support/kb/claims/late-packages.page?scenario=success` });
 
     if (url.pathname === '/' || url.pathname === '/login') {

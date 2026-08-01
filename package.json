@@ -18,7 +18,7 @@
     "test:database-migrations": "node --unhandled-rejections=strict tests/database-migration-recovery-test.js",
     "test:updates": "node tests/github-release-updater-test.js",
     "test:release-metadata": "node tests/release-metadata-contract-test.js",
-    "test:architecture": "node tests/ipc-module-registry-test.js && node tests/ipc-contracts-test.js && node tests/renderer-shared-context-test.js && node tests/onboarding-test.js && node tests/step3-module-boundaries-test.js && node tests/architecture-decomposition-test.js",
+    "test:architecture": "node tests/ipc-module-registry-test.js && node tests/ipc-contracts-test.js && node tests/renderer-shared-context-test.js && node tests/onboarding-test.js && node tests/portal-compatibility-test.js && node tests/support-bundle-test.js && node tests/step3-module-boundaries-test.js && node tests/architecture-decomposition-test.js",
     "secret-scan": "node scripts/secret-scan.js .",
     "release:audit": "node scripts/audit-release.js",
     "release:safe": "node scripts/build-safe-release.js",
