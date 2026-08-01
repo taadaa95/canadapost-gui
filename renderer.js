@@ -5,7 +5,7 @@ const MAX_VISIBLE_LOG_LINES = 2000;
 const LOG_BOTTOM_THRESHOLD_PX = 56;
 
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
-const DEFAULT_THEME = 'dark';
+const DEFAULT_THEME = 'system';
 const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page: 1, offset: 0 });
 let setupWizardShown = false;
 let activeMessages = {};
@@ -37,7 +37,8 @@ async function applyLocale(locale) {
     if (button.querySelector('span')) button.querySelector('span').textContent = match[2];
   }
   const textTargets = {
-    appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title',
+    appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title', setupIntro: 'setup.intro',
+    setupSafetyNotice: 'setup.safety', setupLater: 'action.continueLater', resumeSetup: 'action.resumeSetup',
     setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
     restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession',
     clearHistoryFilters: 'history.clearFilters', historyClassificationsTitle: 'history.classifications', claimQueueTitle: 'step3.candidateQueue',
@@ -63,8 +64,12 @@ async function applyLocale(locale) {
 }
 
 function applyTheme(theme) {
-  const selectedTheme = theme || DEFAULT_THEME;
-  document.documentElement.setAttribute('data-theme', selectedTheme);
+  const selectedTheme = window.Onboarding.normalizeTheme(theme || DEFAULT_THEME);
+  const resolvedTheme = selectedTheme === 'system'
+    ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    : selectedTheme;
+  document.documentElement.setAttribute('data-theme', resolvedTheme);
+  document.documentElement.setAttribute('data-theme-preference', selectedTheme);
   rendererEvents.emit('theme:changed', { theme: selectedTheme });
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, selectedTheme);
@@ -91,6 +96,9 @@ function initThemePicker() {
   applyTheme(picker.value);
 
   picker.addEventListener('change', () => applyTheme(picker.value));
+  window.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', () => {
+    if (picker.value === 'system') applyTheme('system');
+  });
 }
 
 let activeTabId = 'settingsTab';
@@ -3103,31 +3111,38 @@ async function refreshConfig() {
     }
   }
   if (!cfg.setupCompleted && !setupWizardShown) showSetupWizard(cfg);
+  $('resumeSetup')?.classList.toggle('hidden', Boolean(cfg.setupCompleted));
 }
 
 function showSetupWizard(config) {
   setupWizardShown = true;
   const readiness = config.setupReadiness || {};
-  const labels = {
-    dataDirectory: 'Application data directory', secureStorage: 'Secure local credential storage',
-    accountFields: 'Canada Post account identifier', apiFields: 'Tracking API credentials',
-    customerNumber: 'Customer number', senderInformation: 'Sender information',
-    contactInformation: 'Main contact information', browserAvailable: 'Built-in Electron browser',
-    databaseHealth: 'Database health', policyAvailable: 'Versioned policy data'
-  };
-  const requiredForDryRun = ['dataDirectory', 'secureStorage', 'accountFields', 'apiFields', 'customerNumber', 'senderInformation', 'contactInformation', 'browserAvailable', 'databaseHealth', 'policyAvailable'];
-  const rows = requiredForDryRun.map(key => {
-    const ready = readiness[key] === true;
-    return `<div class="preflight-item ${ready ? 'pass' : 'warning'}"><div class="preflight-icon" aria-hidden="true">${ready ? '✓' : '!'}</div><div><strong>${labels[key]}</strong><span>${ready ? tr('status.ready', 'Ready') : tr('status.setupRequired', 'Setup required')}</span></div></div>`;
+  const labels = Object.fromEntries(window.Onboarding.STEPS.map(step => [step.id, [
+    tr(`setup.step.${step.id}.title`, step.id), tr(`setup.step.${step.id}.detail`, '')
+  ]]));
+  const summary = window.Onboarding.readinessSummary(readiness);
+  const rows = summary.steps.map(step => {
+    const [title, detail] = labels[step.id];
+    const ready = step.ready === true;
+    const advisory = step.ready === null;
+    const status = advisory ? tr('status.manualGate', 'Manual gate') : (ready ? tr('status.ready', 'Ready') : tr('status.setupRequired', 'Setup required'));
+    return `<div class="preflight-item ${ready ? 'pass' : 'warning'}"><div class="preflight-icon" aria-hidden="true">${ready ? '✓' : '!'}</div><div><strong>${title}</strong><span>${detail} ${status}.</span></div></div>`;
   });
-  rows.push('<div class="preflight-item warning"><div class="preflight-icon" aria-hidden="true">!</div><div><strong>Network and account validation</strong><span>Not tested automatically; run only through an explicit user action.</span></div></div>');
   $('setupReadinessList').innerHTML = rows.join('');
+  $('setupFinish').disabled = !summary.ready;
+  $('setupFinish').title = summary.ready ? '' : `${summary.blockingCount} setup area(s) still require attention.`;
   $('setupWizard').classList.remove('hidden');
   $('setupWizard').setAttribute('aria-hidden', 'false');
   setTimeout(() => $('setupOpenSettings')?.focus(), 0);
 }
 
 async function finishSetupWizard() {
+  const cfg = await window.cpApp.loadConfig();
+  const summary = window.Onboarding.readinessSummary(cfg.setupReadiness || {});
+  if (!summary.ready) {
+    showSetupWizard(cfg);
+    return;
+  }
   await window.cpApp.saveConfig({ setupCompleted: true });
   $('setupWizard')?.classList.add('hidden');
   $('setupWizard')?.setAttribute('aria-hidden', 'true');
@@ -3190,6 +3205,8 @@ $('cancelBackupPassword')?.addEventListener('click', () => closeBackupPasswordMo
 $('confirmBackupPassword')?.addEventListener('click', submitBackupPassword);
 $('backupPassword')?.addEventListener('keydown', event => { if (event.key === 'Enter') submitBackupPassword(); if (event.key === 'Escape') closeBackupPasswordModal(''); });
 $('setupOpenSettings')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); activateTab('settingsTab'); $('webUsername')?.focus(); });
+$('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); });
+$('resumeSetup')?.addEventListener('click', async () => showSetupWizard(await window.cpApp.loadConfig()));
 $('setupFinish')?.addEventListener('click', finishSetupWizard);
 $('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
 $('runSiteHealth')?.addEventListener('click', runSiteHealthCheck);

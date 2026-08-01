@@ -24,36 +24,10 @@
         <select id="localeSelect"><option value="en-CA">English (Canada)</option><option value="fr-CA">Français (Canada)</option></select>
         <label for="themeSelect">Theme</label>
         <select id="themeSelect">
+          <option value="system">System</option>
           <option value="dark">Dark</option>
           <option value="light">Light</option>
-          <option value="tokyo-night">Tokyo Night</option>
-          <option value="tokyo-storm">Tokyo Night Storm</option>
-          <option value="catppuccin-mocha">Catppuccin Mocha</option>
-          <option value="catppuccin-macchiato">Catppuccin Macchiato</option>
-          <option value="catppuccin-frappe">Catppuccin Frappé</option>
-          <option value="catppuccin-latte">Catppuccin Latte</option>
-          <option value="nord">Nord</option>
-          <option value="gruvbox-dark">Gruvbox Dark</option>
-          <option value="gruvbox-light">Gruvbox Light</option>
-          <option value="dracula">Dracula</option>
-          <option value="solarized-dark">Solarized Dark</option>
-          <option value="solarized-light">Solarized Light</option>
-          <option value="rose-pine">Rosé Pine</option>
-          <option value="rose-pine-moon">Rosé Pine Moon</option>
-          <option value="rose-pine-dawn">Rosé Pine Dawn</option>
-          <option value="kanagawa">Kanagawa</option>
-          <option value="everforest-dark">Everforest Dark</option>
-          <option value="monokai">Monokai</option>
-          <option value="one-dark">One Dark</option>
-          <option value="cyberpunk">Cyberpunk</option>
           <option value="high-contrast">High Contrast</option>
-          <option value="amoled">AMOLED Black</option>
-          <option value="terminal-green">Terminal Green</option>
-          <option value="terminal-amber">Terminal Amber</option>
-          <option value="github-dark">GitHub Dark</option>
-          <option value="night-owl">Night Owl</option>
-          <option value="deep-ocean">Deep Ocean</option>
-          <option value="paper-light">Paper Light</option>
         </select>
       </div>
     </div>
@@ -82,7 +56,7 @@
       <section id="settingsTab" class="tab-panel settings-panel active" role="tabpanel" aria-labelledby="tabSettings">
         <div class="step-title-row">
           <h2>Settings</h2>
-          <span id="settingsStatus" class="pill">Not saved</span>
+          <div><button id="resumeSetup" class="secondary hidden" type="button">Resume setup</button> <span id="settingsStatus" class="pill">Not saved</span></div>
         </div>
 
         <div class="settings-grid">
@@ -620,14 +594,15 @@
   <div id="setupWizard" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="setupWizardTitle">
       <div class="modal-head"><h2 id="setupWizardTitle">Welcome — readiness setup</h2></div>
-      <p>Canada Post Claim Runner keeps credentials and browser sessions on this device. It will not test your account or submit anything during setup.</p>
+      <p id="setupIntro">Canada Post Claim Runner keeps credentials, operational records, and browser sessions on this device. Setup never tests an account or submits a claim automatically.</p>
       <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
-      <div class="live-submit-warning">Live submission remains disabled until a reviewed queue passes preflight. CAPTCHA and text verification stay manual.</div>
-      <div class="live-submit-modal-actions"><button id="setupOpenSettings" class="secondary" type="button">Review Settings</button><button id="setupFinish" class="success" type="button">Finish Setup</button></div>
+      <div id="setupSafetyNotice" class="live-submit-warning">Start with dry run. Live submission remains separately acknowledged and blocked until a reviewed queue passes preflight. CAPTCHA and text verification stay manual in the visible built-in browser.</div>
+      <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button">Continue later</button><button id="setupOpenSettings" class="secondary" type="button">Review Settings</button><button id="setupFinish" class="success" type="button">Finish Setup</button></div>
     </div>
   </div>
 
   <script src="renderer/shared-context.js"></script>
+  <script src="renderer/onboarding.js"></script>
   <script src="renderer/step2-copy.js"></script>
   <script src="renderer/step3-queue.js"></script>
   <script src="renderer/privacy-data-management.js"></script>
