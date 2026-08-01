@@ -1,3 +1,7 @@
+# Historical implementation record
+
+This file preserves Dev 1–10 checkpoint history. It is not an operating guide and its artifact names, branches, versions, package sizes, and completion statements are superseded by `BETA_OPERATING_GUIDE.md` and issue #4.
+
 # Autonomous productization progress
 
 Last updated: 2026-07-28 (America/Toronto)

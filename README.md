@@ -1,5 +1,7 @@
 # Canada Post Claim Runner
 
+Current beta: **0.4.0-beta.1**. `BETA_OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports and release notes are historical.
+
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 
 ## Important operating rule
@@ -12,7 +14,6 @@ The other outcomes are `ON_TIME`, `REVIEW_REQUIRED`, and `TRACKING_ERROR`. A mis
 
 ```bash
 npm ci
-npm run prepare:browser
 npm start
 ```
 
@@ -90,7 +91,7 @@ The suites cover:
 
 ## Release process
 
-Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a manifest/checksum, extracts the archive and scans it again. `RELEASE_CHANNEL=beta npm run release:package` builds from a clean Git materialization, bundles the pinned Playwright browser, generates release metadata and audits packaged content. CI builds Linux AppImage and Windows NSIS artifacts; unsigned development artifacts are visibly identified.
+Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a manifest/checksum, extracts the archive and scans it again. `RELEASE_CHANNEL=beta npm run release:package` builds from a clean Git materialization, generates release metadata and audits packaged content. Production Step 3 uses Electron's built-in browser and the package must not contain a second Playwright browser runtime. CI builds Linux AppImage and Windows NSIS artifacts; unsigned beta artifacts are visibly identified.
 
 See `docs/RELEASE_PROCESS.md`, `MANUAL_RELEASE_GATES.md`, `RELEASE_NOTES.md` and `SECURITY.md`.
 
@@ -102,7 +103,7 @@ Dry run is intentionally conservative. It fills the receiver, tracking, referenc
 
 
 
-## Step 3 operator controls (v0.4.0 development)
+## Step 3 operator controls (v0.4.0-beta.1)
 
 The v0.4.0 productization branch adds a safety layer before browser automation begins:
 

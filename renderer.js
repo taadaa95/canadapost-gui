@@ -3067,7 +3067,7 @@ async function refreshConfig() {
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
-  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-dev.10';
+  if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-beta.1';
   if ($('buildTrustStatus')) {
     $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';

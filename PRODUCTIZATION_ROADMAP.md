@@ -1,6 +1,6 @@
 # Productization roadmap
 
-Status at 2026-07-26: Phases 0 and the feasible repository portions of Phases 1–2 are implemented. The build is a **public-beta candidate**, subject to the external gates in `MANUAL_RELEASE_GATES.md`.
+Status at 2026-08-01: issue [#4](https://github.com/taadaa95/canadapost-gui/issues/4) is the authoritative Dev 11 completion checklist. The work below records earlier completed foundations and must not be read as the current task list. Version 0.4.0-beta.1 remains subject to the external gates in `MANUAL_RELEASE_GATES.md`.
 
 The v0.4.0 work is intentionally split into gated phases so changes to claim safety, runtime dependencies, packaging, and commercial features can be tested independently.
 

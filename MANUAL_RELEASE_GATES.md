@@ -3,13 +3,13 @@
 The following are **not completed** by this autonomous repository session:
 
 1. Obtain and protect a real Windows code-signing certificate and release/update signing keys; configure publishing credentials; sign and independently verify final artifacts.
-2. Perform physical clean-install, launch, uninstall, upgrade, backup/restore, browser-runtime and accessibility tests on supported Windows and Linux systems. CI is not a substitute.
+2. Perform physical clean-install, launch, uninstall, upgrade, backup/restore, built-in-browser and accessibility tests on supported Windows and Linux systems. CI is not a substitute.
 3. Have legal/privacy counsel approve the privacy, retention, licence, disclaimer, support and lifecycle drafts.
 4. Have an authorized Canada Post account owner perform any credential test, supervised dry run, CAPTCHA/text verification, account reconciliation and one-claim live canary. This session performed none of those actions.
 5. Verify current Canada Post policy/customer contract and holiday/guarantee notices immediately before release; extend the policy/calendar beyond 2026 before classifying later shipments.
 6. Conduct a real customer pilot using `docs/PILOT_READINESS.md`, including support coverage, deletion exercise and post-pilot review.
 7. Treat the existing 284-row `tracking.csv` as invalid: both target columns are present but Shipment Date and Service Code are blank in every row. Do not patch, backfill, rename, reuse, or feed it to Step 2/Step 3.
-8. On a physical target Linux system, launch the newly built AppImage and perform a fresh Step 1 import with an authorized test account under human supervision. Confirm that it recognizes Manifest and ManifestItems, reports parser `est-import-v4`, and no `ENOTDIR` occurs. This repository session verified only packaged loopback fixtures and did not launch the GUI or access an account.
+8. On a physical target Linux system, launch the newly built AppImage and perform a fresh Step 1 import with an authorized test account under human supervision. Confirm that it recognizes Manifest and ManifestItems, reports parser `est-import-v5`, and no `ENOTDIR` occurs. This repository session verified only packaged loopback fixtures and did not launch the GUI or access an account.
 9. Verify the new CSV has a valid ISO Shipment Date on every promoted row plus `Shipment Date Source Field`, `Shipment Date Provenance`, `Service Code Source Field`, `Service Code Provenance`, and `Import Schema Version`. Service Code may be empty only with explicit-unavailable provenance because Step 2 can resolve it from the Tracking API. If half or more dates are missing/invalid, confirm Step 1 fails with `EST_EXPORT_SHIPMENT_DATE_SCHEMA_FAILURE` and the prior valid CSV is byte-unchanged.
 10. On that authorized packaged run, repeat the intended EST range and verify whether it is genuinely empty. Confirm the UI shows either an imported count or the exact completed-no-orders message and that an empty result leaves the previous valid `tracking.csv` intact. Repository inspection cannot safely prove the private account's date-specific contents.
 11. Only after the fresh Step 1 quality gate passes, complete the current Tracking API diagnostic and supervised five-row procedure. The earlier diagnostic, defective CSV, and incomplete bulk run are non-authoritative and must not be reused by Step 3:
@@ -37,7 +37,7 @@ Before distributing this build, an authorized operator must test only a protecte
 1. Exit the installed application and preserve the database together with any `-wal` and `-shm` files.
 2. Copy those files to an isolated test application-data directory; do not move, rename, or edit the originals.
 3. Start the rebuilt AppImage against that isolated copy on the target Linux system.
-4. Confirm a new timestamped file appears in `database-backups`, the workflow opens, schema version 7 is reported by support diagnostics, and claims, queues, classification history, tracking results, reviews, and audit history remain present.
+4. Confirm a new timestamped file appears in `database-backups`, the workflow opens, schema version 8 is reported by support diagnostics, and claims, queues, classification history, tracking results, reviews, and audit history remain present.
 5. Exit and start the same build a second time. Confirm it is a no-op and does not create another migration backup.
 6. If the recovery dialog appears, use **Copy diagnostic**, record the backup location, exit, and retain every source/backup file. Do not retry against the operator's original database.
 
@@ -55,10 +55,10 @@ chmod -R go-rwx "$TESTDATA"
 env \
   CANADA_POST_CLAIM_RUNNER_USER_DATA_DIR="$TESTDATA" \
   CANADA_POST_CLAIM_RUNNER_ISOLATED_TEST_CONFIRM=ISOLATED_MIGRATION_TEST \
-  "dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_64-beta.AppImage" \
+  "dist/packages/Canada.Post.Claim.Runner-0.4.0-beta.1-linux-x86_64-beta.AppImage" \
   --appimage-extract-and-run
 ```
 
-Verify the title includes `[ISOLATED TEST DATA]` and the persistent banner says **ISOLATED TEST DATA — changes do not affect the normal application profile** and shows the canonical `$TESTDATA` path. Confirm schema version 7, the expected claims/queues/classification/tracking/review/audit records, and exactly one new verified file in `$TESTDATA/database-backups`. Live claim submission, the built-in claim browser, update actions, external publishing/export, and restore must remain disabled.
+Verify the title includes `[ISOLATED TEST DATA]` and the persistent banner says **ISOLATED TEST DATA — changes do not affect the normal application profile** and shows the canonical `$TESTDATA` path. Confirm schema version 8, the expected claims/queues/classification/tracking/review/audit records, and exactly one new verified file in `$TESTDATA/database-backups`. Live claim submission, the built-in claim browser, update actions, external publishing/export, and restore must remain disabled.
 
 Fully exit the isolated instance and run the same `env` command a second time with the unchanged `$TESTDATA`. Confirm startup is a migration no-op and `$TESTDATA/database-backups` receives no second pre-migration backup. Do not copy any migrated file back to the normal profile. Retain both the untouched normal profile and the isolated copy until the release decision is complete.

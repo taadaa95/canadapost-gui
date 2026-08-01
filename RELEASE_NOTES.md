@@ -1,3 +1,7 @@
+# Historical release notes
+
+Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `BETA_OPERATING_GUIDE.md` for 0.4.0-beta.1.
+
 # Canada Post Claim Runner 0.4.0-dev.10
 
 ## Step 3 executable queue and idle-browser correction — 2026-07-31
