@@ -4,7 +4,7 @@
 
 The application processes shipment identifiers, sender/receiver and contact information, tracking events, classification evidence, claim outcomes, financial recovery entries, screenshots/page text selected by the workflow, local credentials, and an authenticated browser session. Operational data remains on the user's device unless the user explicitly exports or shares it. Crash reporting is disabled by default and has no upload endpoint.
 
-Credentials, tokens, cookies, browser sessions, browser profiles, raw Tracking API bodies, screenshots and device encryption keys are excluded from support bundles and release artifacts. Credentials and device keys are also excluded from application backups. Encrypted backups may contain customer and shipment data, evidence and non-secret settings. Opt-in support components and crash-report redaction are best effort; the user must review files before sharing.
+Credentials, tokens, cookies, browser sessions, browser profiles, raw Tracking API bodies, screenshots, filenames, free-form log/history/trace text, and device encryption keys are excluded from support bundles and release artifacts. Credentials and device keys are also excluded from application backups. Encrypted backups may contain customer and shipment data, evidence and non-secret settings. Opt-in support components contain bounded metadata and masked identifiers; the user must still review files before sharing.
 
 Default evidence retention is 90 days and is configurable. Application logs and detailed Step 3 diagnostic runs are pruned locally. Clearing the browser profile preserves claim history.
 

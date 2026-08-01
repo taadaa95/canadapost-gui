@@ -23,7 +23,8 @@ const archiveTools = require('../lib/archive-tools');
 
     const attemptId = claimDb.beginClaimAttempt(sourceDb, { trackingNumber: '1234567890123456' });
     claimDb.completeClaimAttempt(sourceDb, attemptId, {
-      status: 'submitted', confirmationNumber: 'CONF-1', screenshotPath: screenshot, textPath: pageText
+      status: 'submitted', confirmationNumber: 'CONF-1', screenshotPath: screenshot, textPath: pageText,
+      message: 'Recipient Jane Example lives at 77 Private Avenue.'
     });
 
     const backupPath = path.join(root, 'backup.zip');
@@ -64,11 +65,19 @@ const archiveTools = require('../lib/archive-tools');
     const logDir = path.join(root, 'logs');
     fs.mkdirSync(logDir);
     fs.writeFileSync(path.join(logDir, 'latest.log'), 'password=supersecret user@example.com H0H 0H0 1234567890123456\n');
+    fs.writeFileSync(path.join(logDir, 'Jane Example 77 Private Avenue.log'), 'arbitrary private address text\n');
+    const outsideLog = path.join(root, 'outside-private.log');
+    fs.writeFileSync(outsideLog, 'outside symlink secret');
+    fs.symlinkSync(outsideLog, path.join(logDir, 'linked.log'));
+    const oversizedLog = path.join(logDir, 'oversized.log');
+    fs.writeFileSync(oversizedLog, 'oversized private prefix');
+    fs.truncateSync(oversizedLog, 6 * 1024 * 1024);
     const step3Run = path.join(logDir, 'step3-runs', 'step3-test-run');
     fs.mkdirSync(path.join(step3Run, 'page-states'), { recursive: true });
     fs.writeFileSync(path.join(step3Run, 'timeline.jsonl'), '{"message":"supersecret user@example.com 1234567890123456"}\n');
     fs.writeFileSync(path.join(step3Run, 'summary.json'), '{"outcome":"complete"}\n');
     fs.writeFileSync(path.join(step3Run, 'page-states', '001-test.json'), '{"visibleText":"H0H 0H0 1234567890123456"}\n');
+    for (let index = 0; index < 120; index += 1) fs.writeFileSync(path.join(step3Run, 'page-states', `${index + 2}-bounded.txt`), 'bounded metadata source');
     fs.writeFileSync(path.join(step3Run, 'private-screenshot.png'), Buffer.from([137, 80, 78, 71]));
     const diagnostics = path.join(root, 'diagnostics.zip');
     archiveTools.createDiagnosticPackage({
@@ -84,19 +93,18 @@ const archiveTools = require('../lib/archive-tools');
       supportManifest: { format: 'canadapost-claim-runner-support-bundle', version: 1, supportReferenceId: 'CPCR-TEST' }
     });
     const diagnosticEntries = unzipSync(new Uint8Array(fs.readFileSync(diagnostics)));
-    const log = strFromU8(diagnosticEntries['logs/latest.log']);
-    assert.ok(!log.includes('supersecret'));
-    assert.ok(!log.includes('user@example.com'));
-    assert.ok(!log.includes('1234567890123456'));
-    assert.ok(log.includes('[REDACTED]'));
-    assert.ok(diagnosticEntries['step3-diagnostics/timeline.jsonl']);
-    assert.ok(diagnosticEntries['step3-diagnostics/summary.json']);
-    assert.ok(diagnosticEntries['step3-diagnostics/page-states/001-test.json']);
+    assert.ok(diagnosticEntries['logs/inventory.json']);
+    assert.ok(diagnosticEntries['step3-diagnostics/inventory.json']);
     assert.ok(!diagnosticEntries['step3-diagnostics/private-screenshot.png']);
-    const step3Timeline = strFromU8(diagnosticEntries['step3-diagnostics/timeline.jsonl']);
-    assert.ok(!step3Timeline.includes('supersecret'));
-    assert.ok(!step3Timeline.includes('user@example.com'));
-    assert.ok(!step3Timeline.includes('1234567890123456'));
+    const diagnosticText = Object.values(diagnosticEntries).map(value => strFromU8(value)).join('\n');
+    const diagnosticInventory = JSON.parse(strFromU8(diagnosticEntries['step3-diagnostics/inventory.json']));
+    assert(diagnosticInventory.files.length <= 100, 'malicious diagnostic trees must produce a bounded inventory');
+    for (const secret of ['supersecret', 'user@example.com', '1234567890123456', 'Jane Example', '77 Private Avenue', 'outside symlink secret', 'oversized private prefix']) {
+      assert.ok(!diagnosticText.includes(secret), `support bundle leaked free-form value: ${secret}`);
+    }
+    const recentAttempts = JSON.parse(strFromU8(diagnosticEntries['history/recent-attempts.json']));
+    assert.strictEqual(recentAttempts[0].messagePresent, true);
+    assert.strictEqual(Object.hasOwn(recentAttempts[0], 'message'), false, 'free-form history text must not enter support bundles');
 
     const defaultBundle = path.join(root, 'support-default.zip');
     archiveTools.createDiagnosticPackage({
@@ -108,7 +116,7 @@ const archiveTools = require('../lib/archive-tools');
     const defaultEntries = unzipSync(new Uint8Array(fs.readFileSync(defaultBundle)));
     assert.ok(defaultEntries['system/database-integrity.json']);
     assert.ok(defaultEntries['settings/sanitized-settings.json']);
-    assert.ok(!defaultEntries['logs/latest.log'], 'logs must require explicit opt in');
+    assert.ok(!defaultEntries['logs/inventory.json'], 'logs must require explicit opt in');
     assert.ok(!defaultEntries['history/recent-attempts.json'], 'history must require explicit opt in');
     assert.ok(!Object.keys(defaultEntries).some(name => /screenshot|\.png$/i.test(name)), 'screenshots must never enter support bundles');
 

@@ -52,7 +52,7 @@ Screenshots and page text remain separate files under the private data directory
 
 New backups use a versioned scrypt/AES-256-GCM authenticated format and can contain customer and shipment information, claim history, and evidence. Passwords are never persisted. Restore enforces authentication, checksums, archive resource/path limits, database integrity and rollback copies. Legacy plaintext ZIP restore remains available with an explicit warning. Passwords, API credentials, device keys, browser profiles, cookies, and sessions are excluded.
 
-Diagnostic ZIPs redact configured sensitive values, credentials, email addresses, phone numbers, postal codes, and recognized tracking-number formats. Review a diagnostic archive before sharing it because no redaction system can guarantee detection of every free-form personal detail.
+Shareable diagnostic ZIPs exclude free-form log, history-message, and Step 3 trace text. They retain only bounded metadata and masked identifiers for opted-in components. Review every archive before sharing.
 
 ## Browser automation
 
@@ -84,7 +84,7 @@ The logger does not intentionally record:
 
 Configured secrets and personal fields are added to the redaction set before form automation starts. Tracking numbers are masked, URLs lose query strings and fragments, and common email, phone, postal-code, address, credential, and session patterns are redacted. Page-state control records include only whether a value is present and its length, not the value.
 
-The latest Step 3 run is re-sanitized when included in a Diagnostic ZIP. Automated redaction cannot guarantee removal of every possible free-form personal detail, so users must review an archive before sharing it. Local detailed runs can contain more operational context than the shareable archive and should remain private.
+The latest Step 3 run contributes a metadata-only file inventory when included in a Diagnostic ZIP; filenames and file contents are excluded. Local detailed runs can contain operational context that the shareable archive intentionally omits and should remain private.
 
 ## Live submission authorization (v0.4.0-beta.1)
 
