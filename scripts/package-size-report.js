@@ -43,7 +43,7 @@ if (fs.existsSync(unpacked)) {
   process.stdout.write('Major unpacked size contributors:\n');
   contributors.forEach(item => process.stdout.write(`  ${item.name}: ${item.bytes} bytes\n`));
 }
-const commit = String(process.env.GITHUB_SHA || spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout || '').trim();
+const commit = String(process.env.RELEASE_SOURCE_COMMIT || process.env.GITHUB_SHA || spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout || '').trim();
 const report = {
   format: 'canadapost-claim-runner-package-size-report',
   version: 1,

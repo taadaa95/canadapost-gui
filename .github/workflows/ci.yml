@@ -97,18 +97,25 @@ jobs:
 
   package-linux:
     name: Linux package and content audit
+    if: (github.event_name == 'pull_request' && github.head_ref == 'feature/dev11-beta-release-hardening') || (github.event_name != 'pull_request' && github.ref_name == 'feature/dev11-beta-release-hardening')
     needs: [test, gitleaks]
     runs-on: ubuntu-latest
     env:
       RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: linux
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SOURCE_COMMIT }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run release:guard
       - name: Install Electron runtime
         timeout-minutes: 10
         run: npx install-electron --no
@@ -119,6 +126,7 @@ jobs:
       - run: npm run sbom
       - run: npm run release:finalize
       - run: npm run release:validate
+      - run: npm run release:provenance
       - uses: actions/upload-artifact@v4
         with:
           name: linux-beta-unsigned
@@ -127,24 +135,34 @@ jobs:
             dist/release-metadata/package-manifest-linux.unsigned.json
             dist/release-metadata/SHA256SUMS-linux.txt
             dist/release-metadata/package-size-linux.json
+            dist/release-metadata/sbom.cyclonedx.json
+            dist/release-metadata/dependency-licenses.json
+            dist/release-metadata/release-provenance-linux.json
           if-no-files-found: error
           retention-days: 7
 
   package-windows:
     name: Windows package
+    if: (github.event_name == 'pull_request' && github.head_ref == 'feature/dev11-beta-release-hardening') || (github.event_name != 'pull_request' && github.ref_name == 'feature/dev11-beta-release-hardening')
     needs: [test, gitleaks]
     runs-on: windows-latest
     env:
       RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: windows
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SOURCE_COMMIT }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run release:guard
       - name: Install Electron runtime
         timeout-minutes: 10
         run: npx install-electron --no
@@ -154,6 +172,7 @@ jobs:
       - run: npm run sbom
       - run: npm run release:finalize
       - run: npm run release:validate
+      - run: npm run release:provenance
       - uses: actions/upload-artifact@v4
         with:
           name: windows-beta-unsigned
@@ -162,5 +181,8 @@ jobs:
             dist/release-metadata/package-manifest-windows.unsigned.json
             dist/release-metadata/SHA256SUMS-windows.txt
             dist/release-metadata/package-size-windows.json
+            dist/release-metadata/sbom.cyclonedx.json
+            dist/release-metadata/dependency-licenses.json
+            dist/release-metadata/release-provenance-windows.json
           if-no-files-found: error
           retention-days: 7

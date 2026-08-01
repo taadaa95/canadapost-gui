@@ -34,6 +34,11 @@ assert.match(
   /name: Step 3 mock visibility E2E \(Linux\)[\s\S]{0,180}runner\.os == 'Linux'[\s\S]{0,180}xvfb-run -a npm run test:step3-mock-visibility/,
   'Linux Electron visibility E2E must run under Xvfb'
 );
+assert.strictEqual((workflow.match(/npm run release:guard/g) || []).length, 2, 'both platform package jobs must enforce the canonical clean source guard');
+assert.strictEqual((workflow.match(/npm run release:provenance/g) || []).length, 2, 'both platform package jobs must bind metadata to one reviewed commit');
+assert.match(workflow, /release-provenance-linux\.json/);
+assert.match(workflow, /release-provenance-windows\.json/);
+assert.match(workflow, /RELEASE_SOURCE_COMMIT:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 assert.match(
   workflow,
   /name: Step 3 mock visibility E2E \(Windows\)[\s\S]{0,180}runner\.os == 'Windows'[\s\S]{0,180}npm run test:step3-mock-visibility/,

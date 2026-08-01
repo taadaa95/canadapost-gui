@@ -7,12 +7,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { zipSync, unzipSync } = require('fflate');
 const pkg = require('../package.json');
-const { assertCleanGit, trackedFiles, auditFileList, sourceManifest, sha256File } = require('../lib/release-safety');
+const { assertReleaseGitState, trackedFiles, auditFileList, sourceManifest, sha256File } = require('../lib/release-safety');
 const { scanPaths } = require('../lib/secret-scanner');
 
 const root = path.resolve(__dirname, '..');
 const outputDir = path.join(root, 'dist', 'safe-release');
-assertCleanGit(root);
+const releaseIdentity = assertReleaseGitState(root);
 const files = trackedFiles(root);
 const audit = auditFileList(files);
 if (!audit.ok) throw new Error(`Release allowlist rejected files: ${[...audit.prohibited, ...audit.unexpected].join(', ')}`);
@@ -28,7 +28,7 @@ try {
   }
   const manifest = {
     format: 'canadapost-claim-runner-source-package', version: 1, appVersion: pkg.version,
-    createdAt: new Date().toISOString(), files: sourceManifest(stage, files)
+    createdAt: new Date().toISOString(), sourceBranch: releaseIdentity.branch, sourceCommit: releaseIdentity.commit, files: sourceManifest(stage, files)
   };
   fs.writeFileSync(path.join(stage, 'PACKAGE-MANIFEST.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   const packageFiles = [...files, 'PACKAGE-MANIFEST.json'];

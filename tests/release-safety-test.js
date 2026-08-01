@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isAllowed, isProhibited, auditFileList, sourceManifest } = require('../lib/release-safety');
+const { isAllowed, isProhibited, auditFileList, sourceManifest, validateReleaseIdentity } = require('../lib/release-safety');
 const { scanText, scanPaths } = require('../lib/secret-scanner');
 
 assert(isAllowed('main.js'));
@@ -18,6 +18,10 @@ assert(!isAllowed('surprise.bin'));
 assert.deepStrictEqual(auditFileList(['main.js', 'lib/policy-engine.js']).ok, true);
 assert.deepStrictEqual(auditFileList(['main.js', 'data/claims.csv']).ok, false);
 assert.deepStrictEqual(auditFileList(['main.js', 'unexpected.txt']).ok, false);
+const releaseIdentity = { branch: 'feature/dev11-beta-release-hardening', commit: 'a'.repeat(40) };
+assert.deepStrictEqual(validateReleaseIdentity(releaseIdentity), { ...releaseIdentity, expectedBranch: 'feature/dev11-beta-release-hardening' });
+assert.throws(() => validateReleaseIdentity({ ...releaseIdentity, branch: 'main' }), /must be built from/);
+assert.throws(() => validateReleaseIdentity({ ...releaseIdentity, commit: 'b'.repeat(40) }, { expectedCommit: 'a'.repeat(40) }), /does not match reviewed commit/);
 
 assert.equal(scanText('password = YOUR_PASSWORD', 'user.ini.example').length, 0);
 const credentialLine = ['pass', 'word = "', 'A9v!r2Q#t7Lm4Zp', '"'].join('');
