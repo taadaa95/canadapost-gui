@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -121,8 +121,6 @@ function assertCanadaPostPage(page, label = 'Canada Post page') {
 
 const BUILTIN_BROWSER_MODE = String(process.env.BROWSER_MODE || '').toLowerCase() === 'builtin';
 const DRY_RUN_MODE = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
-const BACKGROUND_BROWSER_MODE = false;
-const IS_LINUX = process.platform === 'linux';
 const ELECTRON_CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
 const ELECTRON_TARGET_ID = String(process.env.ELECTRON_TARGET_ID || '');
 const ELECTRON_TARGET_NONCE = String(process.env.ELECTRON_TARGET_NONCE || '');
@@ -174,81 +172,12 @@ async function requireBuiltinBrowserVisibility(kind, message) {
   throw automationError('BROWSER_VISIBILITY_REQUIRED', 'Manual verification is required, but browser display readiness was not confirmed.');
 }
 
-function backgroundBrowserArgs() {
-  const args = [
-    '--window-size=1280,900',
-    '--window-position=-32000,-32000',
-    '--disable-features=CalculateNativeWinOcclusion'
-  ];
-
-  // Do not force XWayland by default. Canada Post's login risk checks can be
-  // sensitive to browser/fingerprint changes, and forcing a different platform
-  // backend may trigger extra text verification. Keep the browser as normal as
-  // possible and use a persistent profile instead.
-  if (IS_LINUX && String(process.env.FORCE_XWAYLAND || '').toLowerCase() === 'true') {
-    args.push('--ozone-platform=x11');
-  }
-
-  return args;
-}
-
-async function launchClaimContext(dataDir) {
-  const userDataDir = path.resolve(dataDir, 'browser-profile');
-  fs.mkdirSync(userDataDir, { recursive: true });
-
-  const launchOptions = {
-    headless: false,
-    args: BACKGROUND_BROWSER_MODE ? backgroundBrowserArgs() : ['--window-size=1280,900'],
-  };
-
-  try {
-    return await chromium.launchPersistentContext(userDataDir, launchOptions);
-  } catch (error) {
-    emit('log', { message: `Persistent browser profile failed, using temporary profile: ${error.message}` });
-    const fallbackUserDataDir = path.resolve(dataDir, `browser-profile-temp-${Date.now()}`);
-    fs.mkdirSync(fallbackUserDataDir, { recursive: true });
-    return chromium.launchPersistentContext(fallbackUserDataDir, launchOptions);
-  }
-}
-
-async function setBrowserWindowBounds(page, bounds) {
-  if (!page || !page.context) return false;
-  let client = null;
-  try {
-    client = await page.context().newCDPSession(page);
-    const targetWindow = await client.send('Browser.getWindowForTarget').catch(() => null);
-    if (!targetWindow || targetWindow.windowId === undefined) return false;
-    await client.send('Browser.setWindowBounds', { windowId: targetWindow.windowId, bounds });
-    return true;
-  } catch (_) {
-    return false;
-  } finally {
-    if (client) await client.detach().catch(() => {});
-  }
-}
-
-async function hideBrowserWindow(page) {
-  if (!BACKGROUND_BROWSER_MODE || !page) return;
-
-  // Try several non-destructive hiding strategies. Different desktop/window
-  // managers honor different Chrome DevTools window commands.
-  await page.waitForTimeout(150).catch(() => {});
-  const minimized = await setBrowserWindowBounds(page, { windowState: 'minimized' }).catch(() => false);
-  const offscreen = await setBrowserWindowBounds(page, { left: -32000, top: -32000, width: 1280, height: 900 }).catch(() => false);
-
-  if (!minimized && !offscreen) {
-    emit('log', { message: 'Background browser mode could not hide the browser on this desktop environment. It will still restore normally for CAPTCHA handling.' });
-  }
-}
-
 async function revealBrowserWindow(page) {
   if (!page) return;
-  if (BACKGROUND_BROWSER_MODE) {
-    await setBrowserWindowBounds(page, { windowState: 'normal' }).catch(() => {});
-    await setBrowserWindowBounds(page, { left: 80, top: 80, width: 1280, height: 900 }).catch(() => {});
-  }
   await page.bringToFront().catch(() => {});
 }
+
+async function hideBrowserWindow() {}
 
 const guardedPages = new WeakSet();
 const dryRunGuardPages = new WeakSet();
@@ -257,23 +186,6 @@ async function installCanadaPostNavigationGuard(page) {
   if (!page || guardedPages.has(page)) return;
   guardedPages.add(page);
   diagnostics?.attachPage(page, 'canada-post');
-
-  // Electron's built-in BrowserView is guarded by the main process. External
-  // Playwright pages need their own main-frame navigation interception.
-  if (!BUILTIN_BROWSER_MODE) {
-    await page.route('**/*', async route => {
-      const request = route.request();
-      const url = request.url();
-      const isMainFrameNavigation = request.isNavigationRequest() && request.frame() === page.mainFrame();
-      if (isMainFrameNavigation && url !== 'about:blank' && !isCanadaPostUrl(url)) {
-        emit('log', { message: `Blocked main-frame navigation outside Canada Post: ${url}` });
-        diag('warn', 'security', 'navigation-blocked', { url: sanitizeUrl(url), source: 'playwright-route' }, { critical: true });
-        await route.abort('blockedbyclient').catch(() => {});
-        return;
-      }
-      await route.continue().catch(() => {});
-    });
-  }
 
   page.on('framenavigated', frame => {
     if (frame !== page.mainFrame()) return;
@@ -293,6 +205,8 @@ async function installCanadaPostNavigationGuard(page) {
 }
 
 async function openClaimBrowser(dataDir) {
+  void dataDir;
+  if (!BUILTIN_BROWSER_MODE) throw automationError('BUILTIN_BROWSER_REQUIRED', 'Step 3 requires Electron\'s built-in browser. External browser modes are unsupported.');
   if (BUILTIN_BROWSER_MODE) {
     if (!ELECTRON_CDP_URL) throw automationError('CDP_ENDPOINT_UNAVAILABLE', 'The current Electron debugging endpoint was not provided by the main process.');
     if (!ELECTRON_TARGET_ID || !ELECTRON_TARGET_NONCE) throw automationError('TARGET_NOT_PUBLISHED', 'The main process did not publish the exact Step 3 browser target identity.');
@@ -356,11 +270,7 @@ async function openClaimBrowser(dataDir) {
     return { page, close: async () => {} };
   }
 
-  const context = await launchClaimContext(dataDir);
-  context.on('page', page => installCanadaPostNavigationGuard(page).catch(() => {}));
-  const page = await context.newPage();
-  await installCanadaPostNavigationGuard(page);
-  return { page, close: async () => context.close().catch(() => {}) };
+  throw automationError('BUILTIN_BROWSER_REQUIRED', 'Step 3 requires Electron\'s built-in browser.');
 }
 
 function envValue(name, fallback = '') {
@@ -984,7 +894,7 @@ async function openTicketPopup(page) {
   }
 
   const beforeUrl = page.url();
-  const popupPromise = page.waitForEvent('popup', { timeout: BUILTIN_BROWSER_MODE ? 350 : 45000 }).catch(() => null);
+  const popupPromise = page.waitForEvent('popup', { timeout: 350 }).catch(() => null);
   await activateClaimNavigationControl(page, navigation.locator, 'Open a ticket control');
   const claimPage = await popupPromise;
   if (claimPage) {
@@ -2453,10 +2363,6 @@ async function processClaim(page, claim, index, total, options = {}) {
       lastUrl,
       pageTitle: await claimPage.title().catch(() => '')
     };
-  } finally {
-    if (!BUILTIN_BROWSER_MODE && claimPage !== page) {
-      await claimPage.close().catch(() => {});
-    }
   }
 }
 
@@ -2497,11 +2403,12 @@ async function main() {
   const dryRun = DRY_RUN_MODE;
   const runId = Number.parseInt(process.env.RUN_ID || '0', 10) || null;
   const csvPath = process.env.CLAIMS_CSV || path.resolve(dataDir, 'claims.csv');
+  if (!BUILTIN_BROWSER_MODE) throw automationError('BUILTIN_BROWSER_REQUIRED', 'Step 3 requires Electron\'s built-in browser. External browser modes are unsupported.');
   diagnostics = initializeDiagnostics({
     dataDir,
     runId,
     dryRun,
-    browserMode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external'
+    browserMode: 'builtin'
   });
   if (diagnostics) {
     process.stdout.write(JSON.stringify({
@@ -2513,7 +2420,7 @@ async function main() {
     diagnostics.state('loading-claims');
     diagnostics.record('info', 'run', 'configuration', {
       dryRun,
-      browserMode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external',
+      browserMode: 'builtin',
       claimsCsv: csvPath,
       databaseConfigured: Boolean(dbPath),
       stopFileConfigured: Boolean(process.env.STOP_FILE),
@@ -2581,17 +2488,12 @@ async function main() {
   emit('submit_start', { total: claimsToRun.length, claimsCsv: csvPath, version: DUPLICATE_CLAIM_FIX_VERSION, dryRun });
   emit('log', { message: `Duplicate-claim detector active: ${DUPLICATE_CLAIM_FIX_VERSION}` });
   if (dryRun) emit('log', { message: 'DRY RUN ENABLED: the runner will stop on the sender/contact page before final review or submission controls.' });
-  if (BUILTIN_BROWSER_MODE) {
-    emit('log', { message: 'Using built-in Electron browser panel for Step 3.' });
-    emit('log', { message: 'Using the app browser session for Canada Post login, verification, and claim submission.' });
-  } else {
-    emit('log', { message: 'Using external visible Chromium browser for Step 3.' });
-    emit('log', { message: 'Using saved Playwright browser profile. This reduces repeated Canada Post text verification prompts.' });
-  }
+  emit('log', { message: 'Using built-in Electron browser panel for Step 3.' });
+  emit('log', { message: 'Using the app browser session for Canada Post login, verification, and claim submission.' });
 
   diagnostics?.state('opening-browser');
   const browserSession = diagnostics
-    ? await diagnostics.operation('browser.open', { mode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external' }, () => openClaimBrowser(dataDir))
+    ? await diagnostics.operation('browser.open', { mode: 'builtin' }, () => openClaimBrowser(dataDir))
     : await openClaimBrowser(dataDir);
   const page = browserSession.page;
   diagnostics?.attachPage(page, 'claim-runner');

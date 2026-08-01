@@ -14,8 +14,8 @@ asarUnpack:
   - wsdl/**
   - node_modules/fast-xml-parser/**
   - node_modules/strnum/**
-  - node_modules/playwright/**
   - node_modules/playwright-core/**
+  - "!node_modules/playwright-core/.local-browsers/**"
 files:
   - bootstrap.js
   - main.js
@@ -47,6 +47,8 @@ files:
   - "!**/config.local.json"
   - "!**/*.sqlite*"
   - "!**/*browser-profile*"
+  - "!**/node_modules/playwright/**"
+  - "!**/node_modules/playwright-core/.local-browsers/**"
 artifactName: "Canada.Post.Claim.Runner-${version}-${os}-${arch}-${env.RELEASE_CHANNEL}.${ext}"
 directories:
   output: dist/packages

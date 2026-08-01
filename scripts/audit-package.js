@@ -9,22 +9,21 @@ const { isProhibited } = require('../lib/release-safety');
 const { scanPaths } = require('../lib/secret-scanner');
 const { WORKERS } = require('../lib/runtime-workers');
 const packageAllowlist = require('../config/package-content-allowlist.json');
+const { auditPackagePaths, collectRelativePaths } = require('../lib/package-content-policy');
 
 const target = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dist', 'packages', 'linux-unpacked'));
 if (!fs.existsSync(target)) throw new Error('Pass an unpacked Electron application directory to audit.');
 const resources = path.join(target, 'resources');
 const archive = path.join(resources, 'app.asar');
 if (!fs.existsSync(archive)) throw new Error('Packaged app.asar is missing.');
-const browserRoot = path.join(resources, 'app.asar.unpacked', 'node_modules', 'playwright-core', '.local-browsers');
-if (!fs.existsSync(browserRoot)) throw new Error('Packaged Playwright browser runtime is missing.');
-function containsBrowserExecutable(directory) {
-  return fs.readdirSync(directory, { withFileTypes: true }).some(entry => {
-    const candidate = path.join(directory, entry.name);
-    return entry.isDirectory() ? containsBrowserExecutable(candidate) : /^(?:chrome|chrome-headless-shell)(?:\.exe)?$/i.test(entry.name);
-  });
-}
-if (!containsBrowserExecutable(browserRoot)) throw new Error('Packaged Playwright browser executable is missing.');
 const unpackedRoot = path.join(resources, 'app.asar.unpacked');
+const prohibitedContent = auditPackagePaths(collectRelativePaths(resources));
+if (prohibitedContent.length) {
+  throw new Error(`Packaged application contains prohibited production content: ${prohibitedContent.map(item => `${item.path} (${item.reason})`).join(', ')}`);
+}
+if (!fs.statSync(path.join(unpackedRoot, 'node_modules', 'playwright-core', 'package.json'), { throwIfNoEntry: false })?.isFile()) {
+  throw new Error('Packaged playwright-core CDP client is missing.');
+}
 const missingWorkers = Object.entries(WORKERS)
   .filter(([, relative]) => !fs.statSync(path.join(unpackedRoot, relative), { throwIfNoEntry: false })?.isFile())
   .map(([name]) => name);

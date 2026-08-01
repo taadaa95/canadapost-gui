@@ -16,8 +16,8 @@ try {
   for (const relative of files) {
     const destination = path.join(stage, relative); fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.copyFileSync(path.join(root, relative), destination);
   }
-  const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: '0', RELEASE_CHANNEL: process.env.RELEASE_CHANNEL || 'beta' };
-  for (const [command, args] of [['npm', ['ci']], ['npm', ['run', 'install-browsers']], ['npm', ['test']], ['npm', ['run', 'lint']], ['npm', ['run', 'typecheck']], ['npm', ['run', 'sbom']], ['npx', ['electron-builder', '--linux', 'AppImage', '--x64']], ['npm', ['run', 'package:audit', '--', 'dist/packages/linux-unpacked']], ['npm', ['run', 'release:finalize']]]) {
+  const env = { ...process.env, RELEASE_CHANNEL: process.env.RELEASE_CHANNEL || 'beta' };
+  for (const [command, args] of [['npm', ['ci']], ['npm', ['test']], ['npm', ['run', 'lint']], ['npm', ['run', 'typecheck']], ['npm', ['run', 'sbom']], ['npx', ['electron-builder', '--linux', 'AppImage', '--x64']], ['npm', ['run', 'package:audit', '--', 'dist/packages/linux-unpacked']], ['npm', ['run', 'release:finalize']]]) {
     const result = spawnSync(command, args, { cwd: stage, env, stdio: 'inherit' }); if (result.status !== 0) process.exit(result.status || 1);
   }
   const sourceOutput = path.join(stage, 'dist', 'packages');

@@ -9,6 +9,7 @@ on:
         feature/github-release-updater,
         feature/dev9-ui-debloat,
         feature/dev10-step3-executable-queue,
+        feature/dev11-beta-release-hardening,
       ]
   pull_request:
   workflow_dispatch:
@@ -99,7 +100,6 @@ jobs:
     needs: [test, gitleaks]
     runs-on: ubuntu-latest
     env:
-      PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: linux
     steps:
@@ -112,7 +112,6 @@ jobs:
       - name: Install Electron runtime
         timeout-minutes: 10
         run: npx install-electron --no
-      - run: npx playwright install --with-deps chromium
       - run: npm run package:linux
       - run: npm run package:audit -- dist/packages/linux-unpacked
       - run: npm run package:size -- dist/packages
@@ -127,6 +126,7 @@ jobs:
             dist/packages/*
             dist/release-metadata/package-manifest-linux.unsigned.json
             dist/release-metadata/SHA256SUMS-linux.txt
+            dist/release-metadata/package-size-linux.json
           if-no-files-found: error
           retention-days: 7
 
@@ -135,7 +135,6 @@ jobs:
     needs: [test, gitleaks]
     runs-on: windows-latest
     env:
-      PLAYWRIGHT_BROWSERS_PATH: "0"
       RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: windows
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -149,7 +148,6 @@ jobs:
       - name: Install Electron runtime
         timeout-minutes: 10
         run: npx install-electron --no
-      - run: npx playwright install chromium
       - run: npm run package:windows
       - run: npm run package:audit -- dist/packages/win-unpacked
       - run: npm run package:size -- dist/packages
@@ -163,5 +161,6 @@ jobs:
             dist/packages/*
             dist/release-metadata/package-manifest-windows.unsigned.json
             dist/release-metadata/SHA256SUMS-windows.txt
+            dist/release-metadata/package-size-windows.json
           if-no-files-found: error
           retention-days: 7

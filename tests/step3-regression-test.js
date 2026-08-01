@@ -54,7 +54,9 @@ function main() {
   assert.match(submitSource, /waitForClaimFormReady/);
   assert.match(submitSource, /findReceiverCountryControl/);
   assert.doesNotMatch(submitSource, /getByLabel\(\/Receiver'\?s country\/i\)\.first\(\)\.selectOption/);
-  assert.match(submitSource, /BUILTIN_BROWSER_MODE \? 350 : 45000/);
+  assert.match(submitSource, /BUILTIN_BROWSER_REQUIRED/);
+  assert.doesNotMatch(submitSource, /launchPersistentContext|launchClaimContext|browser-profile-temp/);
+  assert.match(submitSource, /require\('playwright-core'\)/);
   assert.match(mainSource, /BETWEEN_CLAIMS_MS: String\(options\.betweenClaimsMs \|\| 750\)/);
   assert.match(rendererSource, /step3\.dryRunStarting/);
   assert.match(englishLocale, /stopping before final review\/submission/);

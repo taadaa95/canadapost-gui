@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const packageDirectory = path.resolve(process.argv[2] || path.join(root, 'dist', 'packages'));
@@ -25,6 +26,7 @@ const artifacts = fs.readdirSync(packageDirectory, { withFileTypes: true })
   .map(entry => ({ name: entry.name, bytes: fs.statSync(path.join(packageDirectory, entry.name)).size }));
 if (!artifacts.length) throw new Error(`No ${extension} artifact was found for the package-size budget.`);
 const budget = Number(allowlist.artifactSizeBudgets[budgetKey]);
+const baselineBytes = Number(allowlist.baselineArtifactBytes?.[`${budgetKey}-dev10`] || 0);
 for (const artifact of artifacts) {
   process.stdout.write(`Artifact ${artifact.name}: ${artifact.bytes} bytes (budget ${budget} bytes).\n`);
   if (artifact.bytes > budget) throw new Error(`${artifact.name} exceeds the ${budgetKey} package-size budget by ${artifact.bytes - budget} bytes.`);
@@ -32,11 +34,34 @@ for (const artifact of artifacts) {
 
 const unpackedName = extension === '.exe' ? 'win-unpacked' : 'linux-unpacked';
 const unpacked = path.join(packageDirectory, unpackedName);
+let contributors = [];
 if (fs.existsSync(unpacked)) {
-  const contributors = fs.readdirSync(unpacked, { withFileTypes: true }).map(entry => {
+  contributors = fs.readdirSync(unpacked, { withFileTypes: true }).map(entry => {
     const target = path.join(unpacked, entry.name);
     return { name: entry.name, bytes: entry.isDirectory() ? directoryBytes(target) : fs.statSync(target).size };
   }).sort((left, right) => right.bytes - left.bytes).slice(0, 10);
   process.stdout.write('Major unpacked size contributors:\n');
   contributors.forEach(item => process.stdout.write(`  ${item.name}: ${item.bytes} bytes\n`));
 }
+const commit = String(process.env.GITHUB_SHA || spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout || '').trim();
+const report = {
+  format: 'canadapost-claim-runner-package-size-report',
+  version: 1,
+  generatedAt: new Date().toISOString(),
+  commit,
+  platform: budgetKey,
+  budgetBytes: budget,
+  baselineBytes: baselineBytes || null,
+  artifacts: artifacts.map(artifact => ({
+    ...artifact,
+    withinBudget: artifact.bytes <= budget,
+    reductionFromDev10Bytes: baselineBytes ? baselineBytes - artifact.bytes : null,
+    reductionFromDev10Percent: baselineBytes ? Number((((baselineBytes - artifact.bytes) / baselineBytes) * 100).toFixed(2)) : null
+  })),
+  majorUnpackedContributors: contributors
+};
+const reportDirectory = path.join(root, 'dist', 'release-metadata');
+fs.mkdirSync(reportDirectory, { recursive: true });
+const reportPath = path.join(reportDirectory, `package-size-${extension === '.exe' ? 'windows' : 'linux'}.json`);
+fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+process.stdout.write(`Package-size report: ${reportPath}\n`);

@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const allowlist = require('../config/package-content-allowlist.json');
+const { auditPackagePaths, prohibitedPackagePath } = require('../lib/package-content-policy');
 
 const root = path.resolve(__dirname, '..');
 const builder = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8');
@@ -13,4 +14,19 @@ for (const script of allowlist.runtimeScripts) assert.ok(builder.includes(`scrip
 for (const excluded of allowlist.excludedProductionRoots) assert.ok(!allowlist.allowedRoots.includes(excluded), `${excluded} must not be an allowed production root`);
 assert.ok(allowlist.artifactSizeBudgets['linux-x64-appimage'] > 0);
 assert.ok(allowlist.artifactSizeBudgets['windows-x64-nsis'] > 0);
+assert.ok(allowlist.artifactSizeBudgets['linux-x64-appimage'] <= 200000000);
+assert.doesNotMatch(builder, /^\s*-\s+node_modules\/playwright\/\*\*/m, 'full Playwright must not be unpacked into production');
+assert.match(builder, /!node_modules\/playwright-core\/\.local-browsers/);
+for (const forbidden of [
+  'app.asar.unpacked/node_modules/playwright/index.js',
+  'app.asar.unpacked/node_modules/playwright-core/.local-browsers/chromium/chrome',
+  'app.asar.unpacked/browser-profile/Cookies',
+  'app.asar/tests/mock.json',
+  'app.asar/fixtures/portal.html',
+  'app.asar/data/claims.csv',
+  'app.asar/logs/runtime.log',
+  'app.asar/main.js.map',
+  'app.asar/config.local.json'
+]) assert.ok(prohibitedPackagePath(forbidden), `expected ${forbidden} to be rejected`);
+assert.deepStrictEqual(auditPackagePaths(['app.asar/main.js', 'app.asar.unpacked/node_modules/playwright-core/package.json']), []);
 process.stdout.write('Package content allowlist and size budgets passed.\n');

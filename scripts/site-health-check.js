@@ -1,6 +1,6 @@
 'use strict';
 
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const {
   isCanadaPostUrl,
   classifyAuthenticatedSnapshot,

@@ -50,12 +50,6 @@ const BUILTIN_BROWSER_CDP_URL = `http://127.0.0.1:${BUILTIN_BROWSER_CDP_PORT}`;
 const BUILTIN_BROWSER_MARKER_URL = 'about:blank#canadapost-claim-runner-step3-target';
 const CANADAPOST_LOGIN_URL = portalUrl('https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en', '/login');
 
-function bundledPlaywrightBrowserPath() {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'playwright-core', '.local-browsers')
-    : path.join(ROOT, 'node_modules', 'playwright-core', '.local-browsers');
-}
-
 function workerRuntimeContext() {
   return {
     appPath: app.getAppPath(),
@@ -1198,10 +1192,7 @@ function eventForRenderer(stage, event) {
 
 function spawnJsonProcess(workerName, options, stage, logPath, hooks = {}) {
   const resolution = options.resolution || resolveWorkerLaunch(workerName);
-  const launchOptions = {
-    ...options,
-    env: { ...options.env, PLAYWRIGHT_BROWSERS_PATH: bundledPlaywrightBrowserPath() }
-  };
+  const launchOptions = { ...options, env: { ...options.env } };
   const protectedOperation = stage === 'tracking'
     ? (options.env?.TRACKING_STRUCTURE_EXPORT === '1' ? 'step2_structure_export' : (options.env?.TRACKING_DIAGNOSTIC_MODE === '1' ? 'step2_diagnostic' : 'step2_bulk_run'))
     : (stage === 'submit' ? (options.env?.DRY_RUN === 'true' ? 'step3_dry_run' : 'step3_live_run')
@@ -1325,7 +1316,7 @@ function dependencyStatus() {
     nodeVersion: process.versions.node,
     cacertAvailable: fs.existsSync(path.join(resourceRoot, 'cacert.pem')),
     wsdlAvailable: fs.existsSync(path.join(resourceRoot, 'wsdl', 'track.wsdl')),
-    playwrightAvailable: fs.existsSync(path.join(resourceRoot, 'node_modules', 'playwright')),
+    playwrightCoreAvailable: fs.existsSync(path.join(resourceRoot, 'node_modules', 'playwright-core')),
     databaseIntegrity: (() => {
       try { return claimDb.integrityCheck(DB_PATH); } catch (error) { return { ok: false, result: error.message }; }
     })()
@@ -1652,8 +1643,8 @@ ipcMain.handle('config:load', () => {
     updateRecovery,
     setupReadiness: (() => {
       const saved = storage.publicConfig();
-      let browserAvailable = false;
-      try { browserAvailable = fs.existsSync(bundledPlaywrightBrowserPath()); } catch (_) {}
+      const browserAvailable = typeof WebContentsView === 'function'
+        && fs.existsSync(path.join(workerResourceRoot(), 'node_modules', 'playwright-core'));
       return {
         dataDirectory: applicationStorageWritable(),
         secureStorage: storage.credentialBackend() !== 'unavailable',

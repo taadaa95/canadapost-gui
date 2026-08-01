@@ -82,6 +82,7 @@ async function main() {
   assert.match(submitSource, /CANADAPOST_SECRETS_STDIN|readRuntimeSecrets/);
   assert.match(submitSource, /ELECTRON_TARGET_ID/);
   assert.match(submitSource, /waitForExactPageTarget/);
+  assert.doesNotMatch(submitSource, /launchPersistentContext|external visible Chromium|saved Playwright browser profile/);
   assert.match(submitSource, /Raw HTML can/);
   assert.doesNotMatch(submitSource.match(/async function collectVisibleText[\s\S]*?\n}/)?.[0] || '', /page\.content\(/);
   assert.match(submitSource, /Never retry the financially significant action/);

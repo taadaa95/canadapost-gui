@@ -3107,7 +3107,7 @@ function showSetupWizard(config) {
     dataDirectory: 'Application data directory', secureStorage: 'Secure local credential storage',
     accountFields: 'Canada Post account identifier', apiFields: 'Tracking API credentials',
     customerNumber: 'Customer number', senderInformation: 'Sender information',
-    contactInformation: 'Main contact information', browserAvailable: 'Bundled browser runtime',
+    contactInformation: 'Main contact information', browserAvailable: 'Built-in Electron browser',
     databaseHealth: 'Database health', policyAvailable: 'Versioned policy data'
   };
   const requiredForDryRun = ['dataDirectory', 'secureStorage', 'accountFields', 'apiFields', 'customerNumber', 'senderInformation', 'contactInformation', 'browserAvailable', 'databaseHealth', 'policyAvailable'];

@@ -26,7 +26,10 @@
   ],
   "excludedProductionRoots": ["tests", "mock-portal", "docs", "coverage"],
   "artifactSizeBudgets": {
-    "linux-x64-appimage": 430000000,
-    "windows-x64-nsis": 450000000
+    "linux-x64-appimage": 200000000,
+    "windows-x64-nsis": 220000000
+  },
+  "baselineArtifactBytes": {
+    "linux-x64-appimage-dev10": 387230260
   }
 }
