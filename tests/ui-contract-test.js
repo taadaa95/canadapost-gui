@@ -88,7 +88,18 @@ assert.ok(englishLocale['settings.website.passwordSavedPlaceholder'].includes('S
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
 assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
-assert.ok(/\.settings-section \.field\s*\{[^}]*border:\s*0/s.test(styles), 'Settings field wrappers must not draw boxes around labels');
+assert.doesNotMatch(styles, /\.field,\s*\.checkbox-field,/, 'Standard field wrappers must not share the boxed checkbox-panel treatment');
+assert.ok(/\.field:not\(\.checkbox-field\) label\s*\{[^}]*padding:\s*0 2px/s.test(styles), 'Standard field labels must remain plain text above their controls');
+assert.ok(/input, select, textarea\s*\{[^}]*border:\s*1px solid var\(--line\)/s.test(styles), 'Interactive form controls must retain their borders');
+assert.ok(/\.settings-section > button,[\s\S]*?\.settings-footer-actions > button\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*180px;[^}]*justify-self:\s*start/s.test(styles), 'Settings actions must size to their content instead of stretching across their cards');
+const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step2|Step3|History|Results)"[^>]*>([\s\S]*?)<\/button>/g)];
+assert.strictEqual(stepTabs.length, 6, 'All six workflow tabs must use the shared tab structure');
+for (const [, tabMarkup] of stepTabs) {
+  assert.match(tabMarkup, /class="step-tab-title"/, 'Workflow tab title must use the title layout hook');
+  assert.match(tabMarkup, /class="step-tab-detail"/, 'Workflow tab subtitle must use the detail layout hook');
+  assert.doesNotMatch(tabMarkup, /<br\s*\/?\s*>/i, 'Workflow tab layout must not depend on an extra flex line-break element');
+}
+assert.ok(/\.step-tab,[\s\S]*?\.step-tab\.active\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*gap:\s*4px\s*!important/s.test(styles), 'Workflow tab text must remain vertically centred with explicit title/subtitle spacing');
 console.log('UI contract tests passed.');
 
 assert.ok(renderer.includes("$('openStep3Diagnostics')?.addEventListener"), 'Missing Step 3 diagnostics open action');
