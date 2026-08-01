@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { classifyEligibility, serializeClassification, policy } = require('../lib/policy-engine');
+const { classifyEligibility, serializeClassification, policy, POLICY_COVERAGE, policyGuidanceFor } = require('../lib/policy-engine');
 const { CLASSIFICATIONS } = require('../lib/claim-domain');
 const { createQueueSnapshot, verifyQueueSnapshot, revalidateQueueItem } = require('../lib/eligibility-revalidation');
 
@@ -85,15 +85,38 @@ for (const [overrides, expected] of requiredCases) {
 
 const serviceWarning = classifyEligibility(shipment({ serviceCode: 'DOM.RP' }), fixed);
 assert.equal(serviceWarning.classification, 'LATE_CANDIDATE');
-assert(serviceWarning.warningCodes.includes('SERVICE_NOT_GUARANTEED_WARNING'));
+assert(serviceWarning.warningCodes.includes('SERVICE_GUARANTEE_UNVERIFIED_ADVISORY'));
 const windowWarning = classifyEligibility(shipment(), { asOf: '2026-08-01', classificationTimestamp: '2026-08-01T12:00:00Z' });
 assert.equal(windowWarning.classification, 'LATE_CANDIDATE');
-assert(windowWarning.warningCodes.includes('CLAIM_WINDOW_PASSED_WARNING'));
+assert(windowWarning.warningCodes.includes('CLAIM_WINDOW_UNVERIFIED_WARNING'));
+assert(!windowWarning.warningCodes.includes('CLAIM_WINDOW_PASSED_WARNING'));
+assert.equal(windowWarning.claimSubmissionDeadlineState, 'unverified_advisory');
+assert.equal(windowWarning.policyGuidanceState, 'unverified_advisory');
+
+const coverageBoundaries = [
+  ['2025-01-05', 'policy_review_required'],
+  [POLICY_COVERAGE.from, 'unverified_advisory'],
+  [POLICY_COVERAGE.through, 'unverified_advisory'],
+  ['2026-07-27', 'policy_review_required']
+];
+for (const [date, state] of coverageBoundaries) {
+  const guidance = policyGuidanceFor(date);
+  assert.equal(guidance.state, state, `Unexpected guidance at policy boundary ${date}`);
+  const boundaryResult = classifyEligibility(shipment({
+    expectedDeliveryDate: date,
+    originalExpectedDeliveryDate: date,
+    actualDeliveryDate: '2026-08-01'
+  }), { asOf: '2026-08-01', classificationTimestamp: '2026-08-01T12:00:00Z' });
+  assert.equal(boundaryResult.classification, 'LATE_CANDIDATE');
+  assert.equal(boundaryResult.policyGuidanceState, state);
+  assert(!boundaryResult.warningCodes.includes('CLAIM_WINDOW_PASSED_WARNING'));
+}
 
 const deterministicA = classifyEligibility(shipment(), fixed);
 const deterministicB = classifyEligibility(shipment(), fixed);
 assert.equal(serializeClassification(deterministicA), serializeClassification(deterministicB));
 assert.equal(deterministicA.evidenceHash, deterministicB.evidenceHash);
+assert.equal(deterministicA.evidenceHash, windowWarning.evidenceHash, 'time-sensitive advisory status must stay outside core evidence identity');
 
 const snapshotClaim = shipment();
 const snapshot = createQueueSnapshot([snapshotClaim], { asOf: '2026-06-10', createdAt: fixed.classificationTimestamp });

@@ -132,6 +132,8 @@ function outputRow(input, classification, normalization) {
     'Destination Province': input.destinationProvince,
     'Business Days Late': classification.businessDaysLate ?? '',
     'Claim Submission Deadline': classification.claimSubmissionDeadline,
+    'Claim Deadline Guidance': classification.claimSubmissionDeadlineState,
+    'Policy Guidance State': classification.policyGuidanceState,
     'Business Days Remaining': classification.businessDaysRemaining ?? '',
     'Peak Period': classification.peakPeriodStatus.active ? classification.peakPeriodStatus.id : 'No',
     'Policy Version': classification.policyVersion,

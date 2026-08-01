@@ -104,6 +104,7 @@
   "deadline.expired": "Expirée",
   "deadline.unavailable": "Date limite non disponible",
   "deadline.policyReviewRequired": "Les données de la politique doivent être examinées",
+  "deadline.unverifiedAdvisory": "Estimation indicative non vérifiée — vérifiez la politique actuelle de Postes Canada",
   "step3.supportGuidance": "Vous avez des doutes au sujet d’une réclamation? Communiquez avec Postes Canada au 1-888-550-6333 pour vérifier les détails de l’envoi ou de la réclamation avant de la soumettre.",
   "step3.supportAriaLabel": "Coordonnées du soutien aux réclamations de Postes Canada",
   "update.blocked.title": "Installation de la mise à jour bloquée",

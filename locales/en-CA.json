@@ -104,6 +104,7 @@
   "deadline.expired": "Expired",
   "deadline.unavailable": "Deadline unavailable",
   "deadline.policyReviewRequired": "Policy data requires review",
+  "deadline.unverifiedAdvisory": "Unverified advisory estimate — check current Canada Post policy",
   "step3.supportGuidance": "Unsure about a claim? Contact Canada Post at 1-888-550-6333 to verify the shipment or claim details before submitting.",
   "step3.supportAriaLabel": "Canada Post claim support contact",
   "update.blocked.title": "Update installation blocked",

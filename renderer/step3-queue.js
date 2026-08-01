@@ -50,6 +50,7 @@
         if (service !== 'all' && item.serviceCode !== service) return false;
         if (urgency === 'urgent' && item.deadlineState !== 'urgent') return false;
         if (urgency === 'expired' && item.deadlineState !== 'expired') return false;
+        if (urgency === 'advisory' && item.deadlineState !== 'unverified_advisory') return false;
         if (urgency === 'unavailable' && !['unavailable', 'policy_review_required'].includes(item.deadlineState)) return false;
         if (dateFrom && (!item.deadline || item.deadline < dateFrom)) return false;
         if (dateTo && (!item.deadline || item.deadline > dateTo)) return false;

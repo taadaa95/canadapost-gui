@@ -1,6 +1,8 @@
 # Policy sources and implementation decisions
 
-Eligibility sources were retrieved 2026-07-26; Developer Portal sources were retrieved 2026-07-28. This file summarizes public Canada Post material; it does not reproduce the source text and is not legal advice. Rules are implemented in `config/policy-rules.json` and `config/holiday-calendar.json`. If the evidence, shipment date, service mapping, calendar, or published policy is outside verified coverage, the application returns manual review rather than guessing.
+> Current beta status (2026-08-01): the reproduced eligibility material below is stale and retained only as historical advisory context. It is not authoritative eligibility guidance. Every derived claim-window date, guarantee indication, service rule, exclusion, urgency, or expiry signal is labeled unverified advisory or policy-review-required. It cannot block a valid `LATE_CANDIDATE` or definitively mark a claim expired. Canada Post must confirm the current policy.
+
+Eligibility sources were retrieved 2026-07-26; Developer Portal sources were retrieved 2026-07-28. This file summarizes repository-recorded Canada Post material; it does not reproduce the source text and is not legal advice. Historical advisory inputs remain in `config/policy-rules.json` and `config/holiday-calendar.json`. Core late-delivery classification is independent of them.
 
 ## Source register
 

@@ -2547,6 +2547,7 @@ function queueCell(text, className = '') {
 }
 
 function deadlineLabel(item) {
+  if (item.deadlineState === 'unverified_advisory') return tr('deadline.unverifiedAdvisory', 'Unverified advisory estimate — check current Canada Post policy');
   if (item.deadlineState === 'policy_review_required') return tr('deadline.policyReviewRequired', 'Policy data requires review');
   if (item.deadlineState === 'unavailable') return tr('deadline.unavailable', 'Deadline unavailable');
   if (item.deadlineState === 'expired') return tr('deadline.expired', 'Expired');

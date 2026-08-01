@@ -17,6 +17,8 @@ assert.match(operatorSources, /successful-delivery date against the original Del
 assert.match(operatorSources, /Canada Post makes the final eligibility decision/i);
 assert.match(operatorSources, /No late-delivery candidates are available/i);
 assert.match(operatorSources, /Submit selected candidates/i);
+assert.doesNotMatch(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), /<option value="expired">/i, 'stale policy must not offer a definitive expired queue filter');
+assert.match(operatorSources, /Unverified advisory estimate|Estimation indicative non vérifiée/i);
 
 const classification = classifyEligibility({
   trackingNumber: 'SYNTHETIC-CONTRACT',
