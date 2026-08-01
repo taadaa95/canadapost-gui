@@ -4,6 +4,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const updateSecurity = require('../lib/update-security');
 
 const root = path.resolve(__dirname, '..');
 const PLATFORM_POLICIES = Object.freeze({
@@ -63,23 +64,25 @@ function selectPrimaryBinary({ packageDir, version, platform, channel }) {
 function metadataPaths(metadataDir, platform) {
   const normalizedPlatform = releasePlatform(platform);
   return {
-    manifest: path.join(metadataDir, `package-manifest-${normalizedPlatform}.json`),
+    unsignedManifest: path.join(metadataDir, `package-manifest-${normalizedPlatform}.unsigned.json`),
     checksums: path.join(metadataDir, `SHA256SUMS-${normalizedPlatform}.txt`),
-    genericManifest: path.join(metadataDir, 'package-manifest.json'),
+    genericUnsignedManifest: path.join(metadataDir, 'package-manifest.unsigned.json'),
     genericChecksums: path.join(metadataDir, 'SHA256SUMS.txt')
   };
 }
 
-function canonicalMetadata({ artifact, version, platform, channel, generatedAt = new Date().toISOString() }) {
+function canonicalMetadata({ artifact, version, platform, channel, generatedAt = new Date().toISOString(), minimumSupportedVersion = '' }) {
   const normalizedPlatform = releasePlatform(platform);
   const manifest = {
-    format: 'canadapost-claim-runner-artifact-manifest',
-    version: 1,
+    format: updateSecurity.UPDATE_MANIFEST_FORMAT,
+    manifestVersion: updateSecurity.UPDATE_MANIFEST_VERSION,
     applicationVersion: String(version),
     channel: releaseChannel(channel),
     platform: normalizedPlatform,
-    generatedAt,
-    artifacts: [artifact]
+    architecture: 'x64',
+    publishedAt: generatedAt,
+    ...(minimumSupportedVersion ? { minimumSupportedVersion: String(minimumSupportedVersion) } : {}),
+    artifact
   };
   return {
     manifest,
@@ -94,10 +97,9 @@ function finalizeArtifacts({ packageDir, metadataDir, version, platform, channel
   const metadata = canonicalMetadata({ artifact: selected.artifact, version, platform: normalizedPlatform, channel, generatedAt });
   const files = metadataPaths(metadataDir, normalizedPlatform);
   fs.mkdirSync(metadataDir, { recursive: true });
-  fs.writeFileSync(files.manifest, metadata.manifestText);
+  fs.writeFileSync(files.unsignedManifest, metadata.manifestText);
   fs.writeFileSync(files.checksums, metadata.checksumsText);
-  // Preserve generic filenames for local release tooling and backwards compatibility.
-  fs.writeFileSync(files.genericManifest, metadata.manifestText);
+  fs.writeFileSync(files.genericUnsignedManifest, metadata.manifestText);
   fs.writeFileSync(files.genericChecksums, metadata.checksumsText);
   return { ...selected, ...metadata, files };
 }
@@ -113,9 +115,9 @@ function validateReleaseMetadata({ packageDir, metadataDir, version, platform, c
   const expectedFile = expectedBinaryName({ version, platform: normalizedPlatform, channel });
   const selected = selectPrimaryBinary({ packageDir, version, platform: normalizedPlatform, channel });
   const files = metadataPaths(metadataDir, normalizedPlatform);
-  const manifestText = readRequired(files.manifest);
+  const manifestText = readRequired(files.unsignedManifest);
   const checksumsText = readRequired(files.checksums);
-  const genericManifestText = readRequired(files.genericManifest);
+  const genericManifestText = readRequired(files.genericUnsignedManifest);
   const genericChecksumsText = readRequired(files.genericChecksums);
   const publicMetadataText = [manifestText, checksumsText, genericManifestText, genericChecksumsText].join('\n');
   if (/\.blockmap|\.ya?ml/i.test(publicMetadataText)) throw new Error('Public release metadata contains a prohibited blockmap or YAML reference.');
@@ -128,19 +130,21 @@ function validateReleaseMetadata({ packageDir, metadataDir, version, platform, c
   } catch (error) {
     throw new Error(`Release manifest is not valid JSON: ${error.message}`);
   }
-  if (manifest.format !== 'canadapost-claim-runner-artifact-manifest' || manifest.version !== 1) throw new Error('Release manifest format or version is invalid.');
-  if (manifest.applicationVersion !== String(version)) throw new Error(`Release manifest applicationVersion must be ${version}.`);
-  if (manifest.channel !== releaseChannel(channel)) throw new Error(`Release manifest channel must be ${releaseChannel(channel)}.`);
-  if (manifest.platform !== normalizedPlatform) throw new Error(`Release manifest platform must be ${normalizedPlatform}.`);
-  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== 1) throw new Error('Release manifest must contain exactly one artifact.');
-  const artifact = manifest.artifacts[0];
+  const validated = updateSecurity.validateUnsignedManifest(manifest, {
+    expectedVersion: String(version),
+    channel: releaseChannel(channel),
+    platform: normalizedPlatform,
+    architecture: 'x64'
+  });
+  if (manifest.signature) throw new Error('Release finalization output must remain an explicitly unsigned manifest candidate.');
+  const artifact = validated.artifact;
   if (path.extname(String(artifact.file || '')) !== policy.extension) throw new Error(`Release manifest artifact extension must be exactly ${policy.extension}.`);
   if (artifact.file !== expectedFile) throw new Error(`Release manifest artifact filename must be ${expectedFile}.`);
   if (artifact.bytes !== selected.artifact.bytes) throw new Error('Release manifest byte size does not match the primary binary.');
   if (artifact.sha256 !== selected.artifact.sha256) throw new Error('Release manifest SHA-256 does not match the primary binary.');
   const expectedChecksums = `${selected.artifact.sha256}  ${expectedFile}\n`;
   if (checksumsText !== expectedChecksums) throw new Error('SHA256SUMS must contain exactly one canonical checksum line for the primary binary.');
-  return { artifact: selected.artifact, ignoredOutputs: selected.ignoredOutputs, manifest, files };
+  return { artifact: selected.artifact, ignoredOutputs: selected.ignoredOutputs, manifest: validated, files };
 }
 
 function reportIgnoredOutputs(ignoredOutputs) {
@@ -155,7 +159,7 @@ function main() {
   const channel = releaseChannel();
   const result = finalizeArtifacts({ packageDir, metadataDir, version, platform, channel });
   reportIgnoredOutputs(result.ignoredOutputs);
-  process.stdout.write(`Finalized exactly one ${platform} public release binary with SHA-256 metadata.\n`);
+  process.stdout.write(`Finalized exactly one unsigned ${platform} beta binary with a canonical manifest candidate and SHA-256 metadata.\n`);
 }
 
 if (require.main === module) main();

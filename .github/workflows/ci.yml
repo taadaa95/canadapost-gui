@@ -125,7 +125,7 @@ jobs:
           name: linux-beta-unsigned
           path: |
             dist/packages/*
-            dist/release-metadata/package-manifest-linux.json
+            dist/release-metadata/package-manifest-linux.unsigned.json
             dist/release-metadata/SHA256SUMS-linux.txt
           if-no-files-found: error
           retention-days: 7
@@ -161,7 +161,7 @@ jobs:
           name: windows-beta-unsigned
           path: |
             dist/packages/*
-            dist/release-metadata/package-manifest-windows.json
+            dist/release-metadata/package-manifest-windows.unsigned.json
             dist/release-metadata/SHA256SUMS-windows.txt
           if-no-files-found: error
           retention-days: 7

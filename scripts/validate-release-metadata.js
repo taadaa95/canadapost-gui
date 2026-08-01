@@ -12,4 +12,4 @@ const channel = releaseChannel();
 const version = require('../package.json').version;
 const result = validateReleaseMetadata({ packageDir, metadataDir, version, platform, channel });
 reportIgnoredOutputs(result.ignoredOutputs);
-process.stdout.write(`Publication-readiness validation passed for ${result.artifact.file} (${result.artifact.bytes} bytes, SHA-256 ${result.artifact.sha256}).\n`);
+process.stdout.write(`Unsigned artifact and canonical manifest-candidate validation passed for ${result.artifact.file} (${result.artifact.bytes} bytes, SHA-256 ${result.artifact.sha256}).\n`);

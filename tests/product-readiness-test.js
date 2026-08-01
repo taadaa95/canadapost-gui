@@ -33,18 +33,20 @@ const updateSecurity = require('../lib/update-security');
     const artifact = path.join(root, 'artifact.bin');
     fs.writeFileSync(artifact, 'synthetic artifact');
     const checksum = crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex');
-    const metadata = {
-      version: '0.4.0', channel: 'beta', publishedAt: '2026-07-26T00:00:00.000Z',
-      artifact: { url: 'https://updates.example.test/app.bin', sha256: checksum }
-    };
-    metadata.signature = crypto.sign(null, updateSecurity.signedPayload(metadata), keys.privateKey).toString('base64');
-    assert.strictEqual(updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0-dev.4' }).ok, true);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { channel: 'beta', currentVersion: '0.4.0-dev.4' }), /No trusted update public key/);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { publicKey: keys.publicKey, channel: 'stable', currentVersion: '0.4.0-dev.4' }), /cannot install beta/);
+    const metadata = updateSecurity.signManifest({
+      format: updateSecurity.UPDATE_MANIFEST_FORMAT,
+      manifestVersion: updateSecurity.UPDATE_MANIFEST_VERSION,
+      applicationVersion: '0.4.1-beta.1', channel: 'beta', publishedAt: '2026-07-26T00:00:00.000Z',
+      platform: 'linux', architecture: 'x64',
+      artifact: { file: 'synthetic.AppImage', bytes: fs.statSync(artifact).size, sha256: checksum }
+    }, keys.privateKey);
+    const verifyOptions = { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0-beta.1', platform: 'linux', architecture: 'x64' };
+    assert.strictEqual(updateSecurity.verifyUpdateMetadata(metadata, verifyOptions).ok, true);
+    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { ...verifyOptions, publicKey: '' }), /No trusted production update public key/);
+    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { ...verifyOptions, channel: 'stable' }), /cannot install beta/);
     assert.strictEqual(updateSecurity.verifyArtifactChecksum(artifact, checksum), true);
-    const downgrade = { ...metadata, version: '0.3.0' };
-    downgrade.signature = crypto.sign(null, updateSecurity.signedPayload(downgrade), keys.privateKey).toString('base64');
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(downgrade, { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0' }), /downgrade/);
+    const downgrade = updateSecurity.signManifest({ ...updateSecurity.unsignedManifest(metadata), applicationVersion: '0.3.0' }, keys.privateKey);
+    assert.throws(() => updateSecurity.verifyUpdateMetadata(downgrade, { ...verifyOptions, currentVersion: '0.4.0' }), /downgrade/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

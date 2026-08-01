@@ -60,16 +60,18 @@ function assertSingleBinaryContract(platform) {
     const finalized = finalize(context);
     const validated = validate(context);
     const files = metadataPaths(context.metadataDir, platform);
-    const manifest = JSON.parse(fs.readFileSync(files.manifest, 'utf8'));
+    const manifest = JSON.parse(fs.readFileSync(files.unsignedManifest, 'utf8'));
     const checksums = fs.readFileSync(files.checksums, 'utf8');
-    assert.strictEqual(manifest.artifacts.length, 1);
-    assert.deepStrictEqual(manifest.artifacts[0], finalized.artifact);
+    assert.deepStrictEqual(manifest.artifact, finalized.artifact);
+    assert.strictEqual(manifest.platform, platform);
+    assert.strictEqual(manifest.architecture, 'x64');
+    assert.strictEqual(manifest.publishedAt, GENERATED_AT);
     assert.deepStrictEqual(validated.artifact, finalized.artifact);
-    assert.strictEqual(manifest.artifacts[0].bytes, fs.statSync(path.join(context.packageDir, finalized.artifact.file)).size);
-    assert.strictEqual(manifest.artifacts[0].sha256, sha256File(path.join(context.packageDir, finalized.artifact.file)));
+    assert.strictEqual(manifest.artifact.bytes, fs.statSync(path.join(context.packageDir, finalized.artifact.file)).size);
+    assert.strictEqual(manifest.artifact.sha256, sha256File(path.join(context.packageDir, finalized.artifact.file)));
     assert.strictEqual(checksums.trimEnd().split(/\r?\n/).length, 1);
     assert.strictEqual(checksums, `${finalized.artifact.sha256}  ${finalized.artifact.file}\n`);
-    assert.strictEqual(fs.readFileSync(files.manifest, 'utf8'), fs.readFileSync(files.genericManifest, 'utf8'));
+    assert.strictEqual(fs.readFileSync(files.unsignedManifest, 'utf8'), fs.readFileSync(files.genericUnsignedManifest, 'utf8'));
     assert.strictEqual(fs.readFileSync(files.checksums, 'utf8'), fs.readFileSync(files.genericChecksums, 'utf8'));
   });
 }
@@ -113,22 +115,22 @@ assertFinalizeFailure('windows', [{ name: 'Canada.Post.Claim.Runner-0.4.0-dev.9-
 fixture('windows', [primary('windows')], context => {
   finalize(context);
   const files = metadataPaths(context.metadataDir, 'windows');
-  const manifest = JSON.parse(fs.readFileSync(files.manifest, 'utf8'));
-  manifest.artifacts[0].file = `${manifest.artifacts[0].file}.blockmap`;
+  const manifest = JSON.parse(fs.readFileSync(files.unsignedManifest, 'utf8'));
+  manifest.artifact.file = `${manifest.artifact.file}.blockmap`;
   const corrupted = `${JSON.stringify(manifest, null, 2)}\n`;
-  fs.writeFileSync(files.manifest, corrupted);
-  fs.writeFileSync(files.genericManifest, corrupted);
+  fs.writeFileSync(files.unsignedManifest, corrupted);
+  fs.writeFileSync(files.genericUnsignedManifest, corrupted);
   assert.throws(() => validate(context), /prohibited blockmap/i);
 });
 
 fixture('windows', [primary('windows')], context => {
   finalize(context);
   const files = metadataPaths(context.metadataDir, 'windows');
-  const manifest = JSON.parse(fs.readFileSync(files.manifest, 'utf8'));
-  manifest.artifacts[0].file = 'unsupported.zip';
+  const manifest = JSON.parse(fs.readFileSync(files.unsignedManifest, 'utf8'));
+  manifest.artifact.file = 'unsupported.zip';
   const corrupted = `${JSON.stringify(manifest, null, 2)}\n`;
-  fs.writeFileSync(files.manifest, corrupted);
-  fs.writeFileSync(files.genericManifest, corrupted);
+  fs.writeFileSync(files.unsignedManifest, corrupted);
+  fs.writeFileSync(files.genericUnsignedManifest, corrupted);
   assert.throws(() => validate(context), /extension must be exactly \.exe/i);
 });
 

@@ -17,7 +17,7 @@ This application processes account credentials, shipment identifiers, addresses,
 
 ## Tracking API transport
 
-Current Tracking requests are serialized at concurrency one through a cancellation-aware limiter. The configurable delay has a 250 ms hard floor, defaults to 500 ms plus 0–100 ms jitter, honors valid `Retry-After`, and bounds transient gateway retries. Rate/backoff telemetry contains status, delay and retry source only. It never carries the request URL, PIN, client credentials, token or authorization header.
+Current Tracking requests are serialized at concurrency one through a cancellation-aware limiter. The configurable interval has a 3,100 ms hard floor and default plus 0–100 ms positive jitter, honors valid `Retry-After`, and bounds transient gateway retries. Rate/backoff telemetry contains status, delay and retry source only. It never carries the request URL, PIN, client credentials, token or authorization header.
 
 Classification output is run-scoped and fail-closed. CSV promotion has rollback buffers and SQLite promotion is a single transaction linked to its run. Incomplete or discarded runs cannot feed Step 3; immutable completed classification history is retained.
 
@@ -86,7 +86,7 @@ Configured secrets and personal fields are added to the redaction set before for
 
 The latest Step 3 run is re-sanitized when included in a Diagnostic ZIP. Automated redaction cannot guarantee removal of every possible free-form personal detail, so users must review an archive before sharing it. Local detailed runs can contain more operational context than the shareable archive and should remain private.
 
-## Live submission authorization (v0.4.0 development)
+## Live submission authorization (v0.4.0-beta.1)
 
 The renderer cannot start a live Step 3 worker with only a button click. The main process validates all submission options, requires a non-empty selected queue, snapshots that queue into a private run-specific CSV, enforces built-in-browser mode, and rejects live mode unless the renderer supplies an explicit acknowledgement produced by the live-submission confirmation dialog. This is a defense-in-depth control, not a substitute for reviewing the queue.
 

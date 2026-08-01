@@ -13,6 +13,6 @@ npm run release:safe
 RELEASE_CHANNEL=beta npm run release:package
 ```
 
-`release:package` creates a fresh temporary Git materialization, installs locked dependencies and the Playwright Chromium runtime there, reruns tests, and builds the Linux AppImage. CI builds the Windows NSIS target on Windows. Developer unpacked builds use `npm run package:dir` and are visibly unsigned development artifacts.
+`release:package` creates a fresh temporary Git materialization, installs locked dependencies, reruns tests, and builds the Linux AppImage. CI builds the Windows NSIS target on Windows. Production packages use Electron's built-in browser and must not contain Playwright browser binaries. Developer unpacked builds use `npm run package:dir` and are visibly unsigned development artifacts.
 
-Generated metadata includes a CycloneDX 1.6 JSON SBOM, dependency licence inventory, package manifest, and SHA-256 checksums. Production signing and publishing are separate manual gates; private keys and publishing credentials must never be stored in the repository.
+Generated metadata includes a CycloneDX 1.6 JSON SBOM, dependency licence inventory, an explicitly `.unsigned.json` canonical update-manifest candidate, and SHA-256 checksums. Windows code signing, offline Ed25519 manifest signing, signed-manifest verification, and publishing are separate manual gates; private keys and publishing credentials must never be stored in the repository or CI artifacts. See `docs/GITHUB_UPDATES.md` for the exact signing handoff.

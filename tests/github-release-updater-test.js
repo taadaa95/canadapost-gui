@@ -2,14 +2,37 @@
 
 const assert = require('assert');
 const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const updater = require('../lib/github-release-updater');
+const security = require('../lib/update-security');
 
 function release(tag, options = {}) {
-  return { tag_name: tag, name: tag, draft: false, prerelease: false, assets: [], ...options };
+  return { tag_name: tag, name: tag, draft: false, prerelease: false, published_at: '2026-08-01T12:00:00.000Z', assets: [], ...options };
+}
+
+function signedManifest(keys, overrides = {}) {
+  return security.signManifest({
+    format: security.UPDATE_MANIFEST_FORMAT,
+    manifestVersion: security.UPDATE_MANIFEST_VERSION,
+    applicationVersion: '0.4.1-beta.1',
+    channel: 'beta',
+    publishedAt: '2026-08-01T12:00:00.000Z',
+    minimumSupportedVersion: '0.4.0-beta.1',
+    platform: 'linux',
+    architecture: 'x64',
+    artifact: {
+      file: 'Canada.Post.Claim.Runner-0.4.1-beta.1-linux-x86_64-beta.AppImage',
+      bytes: 26,
+      sha256: crypto.createHash('sha256').update('synthetic updater artifact').digest('hex')
+    },
+    ...overrides
+  }, keys.privateKey);
 }
 
 assert.strictEqual(updater.version('v0.4.1'), '0.4.1');
-assert.strictEqual(updater.channelFor('0.4.0-dev.4'), 'beta');
+assert.strictEqual(updater.channelFor('0.4.0-beta.1'), 'beta');
 assert.strictEqual(updater.channelFor('0.4.0'), 'stable');
 assert.throws(() => updater.version('latest'), /invalid/i);
 assert.throws(() => updater.githubUrl('http://github.com/file'), /approved/i);
@@ -25,63 +48,86 @@ assert.strictEqual(stable.version, '0.4.1');
 const beta = updater.selectRelease([
   release('v0.4.2-beta.1', { prerelease: true }),
   release('v0.4.1')
-], '0.4.0-dev.4', 'beta');
+], '0.4.0-beta.1', 'beta');
 assert.strictEqual(beta.version, '0.4.2-beta.1');
 
-const manifest = updater.validateManifest({
-  format: 'canadapost-claim-runner-artifact-manifest',
-  version: 1,
-  applicationVersion: '0.4.1',
-  channel: 'stable',
-  artifacts: [
-    { file: 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64-stable.AppImage', bytes: 123, sha256: 'a'.repeat(64) },
-    { file: 'Canada.Post.Claim.Runner-0.4.1-win-x64-stable.exe', bytes: 456, sha256: 'b'.repeat(64) }
-  ]
-}, '0.4.1', 'stable');
-assert.strictEqual(updater.selectArtifact(manifest, 'linux', 'x64').file.endsWith('.AppImage'), true);
-assert.strictEqual(updater.selectArtifact(manifest, 'win32', 'x64').file.endsWith('.exe'), true);
-assert.throws(() => updater.selectArtifact(manifest, 'linux', 'arm64'), /not supported/i);
+const keys = crypto.generateKeyPairSync('ed25519');
+const wrongKeys = crypto.generateKeyPairSync('ed25519');
+const manifest = signedManifest(keys);
+const verified = updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', {
+  publicKey: keys.publicKey,
+  currentVersion: '0.4.0-beta.1',
+  expectedPublishedAt: manifest.publishedAt,
+  platform: 'linux',
+  arch: 'x64'
+});
+assert.strictEqual(updater.selectArtifact(verified, 'linux', 'x64').file.endsWith('.AppImage'), true);
+assert.throws(() => updater.selectArtifact(verified, 'linux', 'arm64'), /not supported/i);
+assert.throws(() => updater.validateManifest({ ...manifest, signature: '' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /missing or malformed/i);
+assert.throws(() => updater.validateManifest({ ...manifest, signature: 'not-base64' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /missing or malformed/i);
+assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: wrongKeys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /signature verification/i);
+assert.throws(() => updater.validateManifest({ ...manifest, publishedAt: '2026-08-01T13:00:00.000Z' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /signature verification/i);
+assert.throws(() => updater.validateManifest(manifest, '0.4.2-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /release tag/i);
+assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'stable', { publicKey: keys.publicKey, currentVersion: '0.4.0', platform: 'linux', arch: 'x64' }), /Stable channel/i);
+assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'windows', arch: 'x64' }), /platform/i);
+assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'arm64' }), /architecture/i);
+const wrongArtifactVersion = signedManifest(keys, { artifact: { ...manifest.artifact, file: 'Canada.Post.Claim.Runner-0.4.9-beta.1-linux-x86_64-beta.AppImage' } });
+assert.throws(() => updater.selectArtifact(updater.validateManifest(wrongArtifactVersion, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), 'linux', 'x64'), /filename/i);
+
+const downgrade = signedManifest(keys, { applicationVersion: '0.3.9-beta.1', minimumSupportedVersion: '' });
+assert.throws(() => updater.validateManifest(downgrade, '0.3.9-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /downgrade/i);
 
 const snapshot = updater.progressSnapshot(25, 100, 1000, 2000);
-assert.strictEqual(snapshot.received, 25);
-assert.strictEqual(snapshot.total, 100);
-assert.strictEqual(snapshot.ratio, 0.25);
-assert.strictEqual(snapshot.bytesPerSecond, 25);
-assert.strictEqual(snapshot.etaSeconds, 3);
+assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, ratio: snapshot.ratio, bytesPerSecond: snapshot.bytesPerSecond, etaSeconds: snapshot.etaSeconds }, {
+  received: 25, total: 100, ratio: 0.25, bytesPerSecond: 25, etaSeconds: 3
+});
 
 (async () => {
-  const bytes = Buffer.from('synthetic updater artifact');
-  const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-  const source = {
-    owner: 'taadaa95',
-    repository: 'canadapost-claim-runner-releases',
-    manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
-  };
-  const file = 'Canada.Post.Claim.Runner-0.4.1-beta.1-linux-x86_64-beta.AppImage';
-  const payload = {
-    format: 'canadapost-claim-runner-artifact-manifest', version: 1,
-    applicationVersion: '0.4.1-beta.1', channel: 'beta',
-    artifacts: [{ file, bytes: bytes.length, sha256 }]
-  };
-  const candidate = release('v0.4.1-beta.1', {
-    prerelease: true,
-    html_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/tag/v0.4.1-beta.1',
-    assets: [
-      { name: 'package-manifest-linux.json', browser_download_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/package-manifest-linux.json' },
-      { name: file, size: bytes.length, digest: `sha256:${sha256}`, browser_download_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/update.AppImage' }
-    ]
-  });
-  const fetchImpl = async url => {
-    const value = String(url);
-    if (value.includes('/releases?')) return new Response(JSON.stringify([candidate]), { status: 200 });
-    if (value.includes('package-manifest-linux.json')) return new Response(JSON.stringify(payload), { status: 200 });
-    throw new Error(`Unexpected URL: ${value}`);
-  };
-  const result = await updater.resolveUpdate({ source, currentVersion: '0.4.0-dev.4', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl });
-  assert.strictEqual(result.available, true);
-  assert.strictEqual(result.version, '0.4.1-beta.1');
-  assert.strictEqual(result.artifact.sha256, sha256);
-  process.stdout.write('GitHub release updater tests passed.\n');
+  const artifactBytes = Buffer.from('synthetic updater artifact');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-updater-trust-'));
+  try {
+    const artifactPath = path.join(root, manifest.artifact.file);
+    fs.writeFileSync(artifactPath, artifactBytes);
+    assert.strictEqual(security.verifyArtifact(artifactPath, manifest.artifact), true);
+    fs.appendFileSync(artifactPath, '!');
+    assert.throws(() => security.verifyArtifact(artifactPath, manifest.artifact), /size verification/i);
+    fs.writeFileSync(artifactPath, Buffer.alloc(manifest.artifact.bytes, 1));
+    assert.throws(() => security.verifyArtifact(artifactPath, manifest.artifact), /checksum verification/i);
+
+    const source = {
+      owner: 'taadaa95',
+      repository: 'canadapost-claim-runner-releases',
+      manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
+    };
+    const candidate = release('v0.4.1-beta.1', {
+      prerelease: true,
+      html_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/tag/v0.4.1-beta.1',
+      assets: [
+        { name: 'package-manifest-linux.json', browser_download_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/package-manifest-linux.json' },
+        { name: manifest.artifact.file, size: manifest.artifact.bytes, digest: `sha256:${manifest.artifact.sha256}`, browser_download_url: `https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/${manifest.artifact.file}` }
+      ]
+    });
+    const fetchImpl = async url => {
+      const value = String(url);
+      if (value.includes('/releases?')) return new Response(JSON.stringify([candidate]), { status: 200 });
+      if (value.includes('package-manifest-linux.json')) return new Response(JSON.stringify(manifest), { status: 200 });
+      throw new Error(`Unexpected URL: ${value}`);
+    };
+    const result = await updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl });
+    assert.strictEqual(result.available, true);
+    assert.strictEqual(result.version, '0.4.1-beta.1');
+    assert.strictEqual(result.artifact.sha256, manifest.artifact.sha256);
+
+    await assert.rejects(() => updater.resolveUpdate({ source, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl }), /No trusted production update public key/i);
+    await assert.rejects(() => updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl: async url => {
+      const value = String(url);
+      if (value.includes('/releases?')) return new Response(JSON.stringify([{ ...candidate, assets: candidate.assets.map(item => item.name === manifest.artifact.file ? { ...item, size: item.size + 1 } : item) }]), { status: 200 });
+      return new Response(JSON.stringify(manifest), { status: 200 });
+    } }), /asset size/i);
+    process.stdout.write('Signed GitHub release updater trust-chain tests passed.\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 })().catch(error => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exitCode = 1;
