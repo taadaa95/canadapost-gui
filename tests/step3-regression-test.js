@@ -60,7 +60,8 @@ function main() {
   assert.match(mainSource, /BETWEEN_CLAIMS_MS: String\(options\.betweenClaimsMs \|\| 750\)/);
   assert.match(rendererSource, /step3\.dryRunStarting/);
   assert.match(englishLocale, /stopping before final review\/submission/);
-  assert.match(htmlSource, /Dry run — fill fields only; stop before final review or submission/);
+  assert.match(htmlSource, /data-i18n="step3\.dryRun"/);
+  assert.match(englishLocale, /"step3\.dryRun": "Dry run — fill fields only; stop before final review or submission"/);
 
   console.log('Step 3 dry-run and multi-claim regression tests passed.');
 }

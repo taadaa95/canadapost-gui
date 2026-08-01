@@ -6,9 +6,11 @@ const os = require('os');
 const path = require('path');
 const { _electron: electron } = require('playwright');
 const { createMockPortal } = require('../mock-portal/server');
+const { loadLocale } = require('../lib/i18n');
 
 (async () => {
   const root = path.resolve(__dirname, '..');
+  const frenchMessages = loadLocale('fr-CA', root).messages;
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-electron-e2e-'));
   const portal = createMockPortal();
   const origin = await portal.start();
@@ -41,6 +43,78 @@ const { createMockPortal } = require('../mock-portal/server');
     assert.strictEqual(forgedCompletion.ok, false, 'renderer input must not bypass authoritative onboarding readiness gates');
     const configAfterForgedCompletion = fs.existsSync(setupConfigPath) ? JSON.parse(fs.readFileSync(setupConfigPath, 'utf8')) : {};
     assert.notStrictEqual(configAfterForgedCompletion.setupCompleted, true);
+
+    await window.locator('#localeSelect').selectOption('fr-CA');
+    await window.locator('html[lang="fr-CA"]').waitFor();
+    const localizationMismatches = await window.evaluate(messages => {
+      const mismatches = [];
+      document.querySelectorAll('[data-i18n]').forEach(element => {
+        if (element.dataset.i18nCurrent) return;
+        if (element.textContent !== messages[element.dataset.i18n]) mismatches.push(`${element.dataset.i18n}: ${element.textContent}`);
+      });
+      for (const attribute of ['placeholder', 'aria-label', 'title', 'alt']) {
+        document.querySelectorAll(`[data-i18n-${attribute}]`).forEach(element => {
+          const key = element.getAttribute(`data-i18n-${attribute}`);
+          if (element.getAttribute(attribute) !== messages[key]) mismatches.push(`${key}/${attribute}: ${element.getAttribute(attribute)}`);
+        });
+      }
+      return mismatches;
+    }, frenchMessages);
+    assert.deepStrictEqual(localizationMismatches, [], 'all declarative text, placeholders, tooltips, and accessibility labels must switch to French');
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique EST');
+    assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Exécuter l’étape 2 — Vérifier le suivi');
+    assert.strictEqual(await window.locator('#stop').textContent(), 'Arrêter après l’élément en cours');
+    assert.strictEqual(await window.locator('#runSiteHealth').textContent(), 'Exécuter la vérification de l’état du flux de travail de Postes Canada');
+    assert.strictEqual(await window.locator('#resultsList .ops-head').textContent(), 'HeureLigneSuiviRésultatDétailsPreuve');
+    await window.evaluate(() => window.renderClaimQueue([{
+      recordId: 8001, evidenceHash: '8'.repeat(64), trackingNumber: 'FRENCH0000000001', referenceNumber: 'REF-FR',
+      serviceCode: 'DOM.EP', firstAttemptDate: '2026-07-20', deliveryDate: '2026-07-21', deadline: '2026-09-01',
+      deadlineState: 'known_active', businessDaysRemaining: 24, eligibilityReason: 'Synthetic localized candidate'
+    }]));
+    assert((await window.locator('#claimQueueList .claim-queue-row.header').textContent()).includes('Suivi'));
+    assert((await window.locator('#claimQueueList .claim-queue-row.header').textContent()).includes('livraison réussie'));
+    await window.evaluate(() => window.renderHistory([{ trackingNumber: 'FRENCH0000000001', attemptedAt: '2026-07-21T12:00:00Z', status: 'submitted', confirmationNumber: 'CONFIRMATION', message: '' }]));
+    assert((await window.locator('#historyList .history-row.head').textContent()).includes('Heure de la tentative'));
+    assert((await window.locator('#historyList .history-row:not(.head)').textContent()).includes('Soumise'));
+    const dynamicFrench = await window.evaluate(() => {
+      const tracking = window.describeEvent('tracking', { type: 'tracking_start', total: 1, requestIntervalMs: 3100, jitterMaxMs: 100 });
+      window.UpdateProgress.render(document, { stage: 'checking' }, key => window.tr(key), () => {});
+      const result = {
+        tracking,
+        status: document.getElementById('step2RunStatus').textContent,
+        updater: document.getElementById('updateProgressTitle').textContent,
+        updaterStage: document.getElementById('updateProgressStage').textContent
+      };
+      window.UpdateProgress.render(document, { stage: 'hidden' }, key => window.tr(key), () => {});
+      return result;
+    });
+    assert(dynamicFrench.tracking.startsWith('Étape de suivi démarrée.'));
+    assert.strictEqual(dynamicFrench.status, 'En cours');
+    assert.strictEqual(dynamicFrench.updater, 'Mise à jour de l’application');
+    assert.strictEqual(dynamicFrench.updaterStage, 'Vérification des versions GitHub…');
+    const frenchConfirmationPromise = window.waitForEvent('dialog');
+    const discardPromise = window.evaluate(() => window.discardIncompleteTracking());
+    const frenchConfirmation = await frenchConfirmationPromise;
+    assert.match(frenchConfirmation.message(), /Abandonner l’état de préparation incomplet de l’étape 2/);
+    await frenchConfirmation.dismiss();
+    await discardPromise;
+    await window.evaluate(() => window.describeEvent('tracking', { type: 'tracking_circuit_open', attempted: 1, total: 2, remaining: 1, errors: 1, queuePreserved: true }));
+    assert.match(await window.locator('#step2CurrentAction').textContent(), /défaillance systémique de l’intégration/);
+    await window.evaluate(async () => window.showSetupWizard(await window.cpApp.loadConfig()));
+    assert.strictEqual(await window.locator('#setupWizardTitle').textContent(), 'Bienvenue — configuration de l’état de préparation');
+    assert.strictEqual(await window.locator('#setupLater').textContent(), 'Continuer plus tard');
+    await window.locator('#setupLater').click();
+    const mixedEnglish = await window.evaluate(() => {
+      const banned = ['Run Step 1', 'Force Stop', 'Step 2 Status', 'Stop After Current Item', 'Support bundle', 'Check Browser Session', 'Results & Evidence'];
+      const copy = document.body.textContent;
+      return banned.filter(text => copy.includes(text));
+    });
+    assert.deepStrictEqual(mixedEnglish, [], 'major French workflow surfaces must not retain observed English copy');
+    await window.locator('#localeSelect').selectOption('en-CA');
+    await window.locator('html[lang="en-CA"]').waitFor();
+    assert.match(await window.locator('#step2CurrentAction').textContent(), /systemic integration failure/,
+      'visible dynamic status text must be regenerated immediately after a language switch');
+
     const beforeStep3Target = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(beforeStep3Target.created, false, 'native browser must be created deliberately, not by unrelated startup');
 

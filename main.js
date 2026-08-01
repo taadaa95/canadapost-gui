@@ -504,7 +504,7 @@ function ensureBuiltinBrowserView() {
       if (!builtinBrowserView || webContents?.id !== builtinBrowserView.webContents.id) return;
       event.preventDefault();
       appendStep3ElectronDiagnostic('download-blocked', { webContentsId: webContents?.id });
-      emit('event', { stage: 'submit', event: { type: 'log', message: 'Blocked an unexpected download from the built-in browser.' } });
+      emit('event', { stage: 'submit', event: { type: 'log', messageKey: 'event.browser.downloadBlocked', message: 'Blocked an unexpected download from the built-in browser.' } });
     });
   }
 
@@ -516,14 +516,14 @@ function ensureBuiltinBrowserView() {
   builtinBrowserView.webContents.setWindowOpenHandler(({ url }) => {
     appendStep3ElectronDiagnostic('new-window-request', { url, allowed: isAllowedCanadaPostUrl(url) });
     if (isAllowedCanadaPostUrl(url)) builtinBrowserView.webContents.loadURL(url).catch(() => {});
-    else emit('event', { stage: 'submit', event: { type: 'error', message: 'Blocked built-in browser navigation outside Canada Post.' } });
+    else emit('event', { stage: 'submit', event: { type: 'error', messageKey: 'event.browser.navigationBlocked', message: 'Blocked built-in browser navigation outside Canada Post.' } });
     return { action: 'deny' };
   });
   builtinBrowserView.webContents.on('will-navigate', (event, url) => {
     if (!isAllowedBuiltinBrowserUrl(url)) {
       event.preventDefault();
       appendStep3ElectronDiagnostic('navigation-blocked', { url });
-      emit('event', { stage: 'submit', event: { type: 'error', message: 'Blocked built-in browser navigation outside Canada Post.' } });
+      emit('event', { stage: 'submit', event: { type: 'error', messageKey: 'event.browser.navigationBlocked', message: 'Blocked built-in browser navigation outside Canada Post.' } });
     }
   });
 
@@ -570,13 +570,13 @@ function ensureBuiltinBrowserView() {
     if (!isMainFrame || Number(errorCode) === -3) return;
     appendStep3ElectronDiagnostic('did-fail-load', { errorCode, errorDescription, validatedUrl: _validatedUrl, isMainFrame });
     emitBuiltinBrowserActivity(false, `Browser load warning: ${errorDescription}`, 'error');
-    emit('event', { stage: 'submit', event: { type: 'log', message: `Built-in browser load warning: ${errorCode} ${errorDescription}` } });
+    emit('event', { stage: 'submit', event: { type: 'log', messageKey: 'event.browser.loadWarning', messageValues: { code: errorCode, description: errorDescription }, message: `Built-in browser load warning: ${errorCode} ${errorDescription}` } });
   });
 
   builtinBrowserView.webContents.on('unresponsive', () => {
     appendStep3ElectronDiagnostic('unresponsive', { url: builtinBrowserView?.webContents.getURL() });
     emitBuiltinBrowserActivity(false, 'Canada Post browser is not responding', 'error');
-    emit('event', { stage: 'submit', event: { type: 'error', message: 'The built-in Canada Post browser became unresponsive.' } });
+    emit('event', { stage: 'submit', event: { type: 'error', messageKey: 'event.browser.unresponsive', message: 'The built-in Canada Post browser became unresponsive.' } });
   });
 
   builtinBrowserView.webContents.on('responsive', () => {
@@ -587,7 +587,7 @@ function ensureBuiltinBrowserView() {
   builtinBrowserView.webContents.on('render-process-gone', (_event, details = {}) => {
     appendStep3ElectronDiagnostic('render-process-gone', details);
     emitBuiltinBrowserActivity(false, 'Canada Post browser process stopped', 'error');
-    emit('event', { stage: 'submit', event: { type: 'error', message: `The built-in Canada Post browser process stopped (${details.reason || 'unknown reason'}). Any active claim will require reconciliation.` } });
+    emit('event', { stage: 'submit', event: { type: 'error', messageKey: 'event.browser.processStopped', messageValues: { reason: details.reason || 'unknown' }, message: `The built-in Canada Post browser process stopped (${details.reason || 'unknown reason'}). Any active claim will require reconciliation.` } });
   });
 
   builtinBrowserView.webContents.once('destroyed', () => {
@@ -851,6 +851,7 @@ async function handleManualBrowserVisibilityRequest(event = {}) {
     emit('event', { stage: 'submit', event: {
       type: 'manual_verification_display_failed',
       code: error.code || 'BROWSER_VISIBILITY_REQUIRED',
+      messageKey: 'event.browser.manualDisplayFailed',
       message: 'Manual verification was detected, but the built-in browser could not be displayed. Step 3 stopped safely.'
     } });
     const child = activeChild;
@@ -1534,12 +1535,13 @@ registerIpcHandler('tracking:discardIncomplete', async (_event, payload = {}) =>
   if (activeChild) return { ok: false, error: 'Stop the active process before discarding an incomplete Step 2 run.' };
   return operationCoordinator.run('authoritative_data_mutation', async () => {
     const result = claimDb.discardIncompleteTrackingRun(DB_PATH);
-    if (!result.discarded) return { ok: true, ...result, message: 'No incomplete Step 2 run was found.' };
+    if (!result.discarded) return { ok: true, ...result, messageKey: 'step2.noIncomplete', message: 'No incomplete Step 2 run was found.' };
     const fileRestore = restorePreviousTextFiles(path.join(DATA_DIR, 'tracking-runs', `run-${result.runId}`), DATA_DIR);
     return {
       ok: true,
       ...result,
       fileRestore,
+      messageKey: fileRestore.restored ? 'step2.discardedRestored' : 'step2.discarded',
       message: `Incomplete Step 2 run discarded. Its history was preserved${fileRestore.restored ? ' and the preceding completed output files were restored' : ''}; Step 3 remains blocked until a new Step 2 run completes.`
     };
   });
@@ -1753,9 +1755,9 @@ registerIpcHandler('locale:load', (_event, locale) => {
 
 registerIpcHandler('file:selectTrackingCsv', async () => {
   const result = await dialog.showOpenDialog(win, {
-    title: 'Select tracking.csv',
+    title: localizedText('dialog.selectTrackingCsv.title', {}, 'Select tracking.csv'),
     properties: ['openFile'],
-    filters: [{ name: 'CSV files', extensions: ['csv'] }]
+    filters: [{ name: localizedText('dialog.csvFiles', {}, 'CSV files'), extensions: ['csv'] }]
   });
 
   if (result.canceled || result.filePaths.length === 0) return { ok: false };
@@ -1854,9 +1856,9 @@ registerIpcHandler('history:list', (_event, options = {}) => {
 registerIpcHandler('history:export', async (_event, options = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'External exports are disabled while isolated test data is active.' };
   const result = await dialog.showSaveDialog(win, {
-    title: 'Export claim history',
+    title: localizedText('dialog.exportHistory.title', {}, 'Export claim history'),
     defaultPath: path.join(app.getPath('documents'), `canadapost-claim-history-${new Date().toISOString().slice(0, 10)}.csv`),
-    filters: [{ name: 'CSV files', extensions: ['csv'] }]
+    filters: [{ name: localizedText('dialog.csvFiles', {}, 'CSV files'), extensions: ['csv'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
   archiveTools.exportHistoryCsv(DB_PATH, result.filePath, options);
@@ -1942,9 +1944,9 @@ registerIpcHandler('backup:create', async (_event, payload = {}) => {
   const password = typeof payload.password === 'string' ? payload.password : '';
   if (password.length < 12 || password.length > 1024) return { ok: false, error: 'Use a backup password of at least 12 characters.' };
   const result = await dialog.showSaveDialog(win, {
-    title: 'Create Canada Post Claim Runner backup',
+    title: localizedText('dialog.createBackup.title', {}, 'Create Canada Post Claim Runner backup'),
     defaultPath: path.join(app.getPath('documents'), `canadapost-claim-runner-backup-${new Date().toISOString().slice(0, 10)}.cpcrbackup`),
-    filters: [{ name: 'Encrypted Claim Runner backups', extensions: ['cpcrbackup'] }]
+    filters: [{ name: localizedText('dialog.encryptedBackups', {}, 'Encrypted Claim Runner backups'), extensions: ['cpcrbackup'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
   const operationToken = operationCoordinator.begin('backup_creation');
@@ -1973,11 +1975,11 @@ registerIpcHandler('backup:restore', async (_event, payload = {}) => {
   if (activeChild) return { ok: false, error: 'Stop the active process before restoring a backup.' };
   if (!pendingRestorePath) {
     const result = await dialog.showOpenDialog(win, {
-      title: 'Restore Canada Post Claim Runner backup',
+      title: localizedText('dialog.restoreBackup.title', {}, 'Restore Canada Post Claim Runner backup'),
       properties: ['openFile'],
       filters: [
-        { name: 'Claim Runner backups', extensions: ['cpcrbackup', 'zip'] },
-        { name: 'Legacy unencrypted ZIP backups', extensions: ['zip'] }
+        { name: localizedText('dialog.claimRunnerBackups', {}, 'Claim Runner backups'), extensions: ['cpcrbackup', 'zip'] },
+        { name: localizedText('dialog.legacyBackups', {}, 'Legacy unencrypted ZIP backups'), extensions: ['zip'] }
       ]
     });
     if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
@@ -1989,10 +1991,10 @@ registerIpcHandler('backup:restore', async (_event, payload = {}) => {
     if (encrypted && (typeof payload.password !== 'string' || !payload.password)) return { ok: false, passwordRequired: true };
     if (!encrypted) {
       const warning = await dialog.showMessageBox(win, {
-        type: 'warning', buttons: ['Cancel', 'Restore legacy backup'], defaultId: 0, cancelId: 0,
-        title: 'Unencrypted legacy backup',
-        message: 'This legacy ZIP is not encrypted or authenticated.',
-        detail: 'Only restore it if you trust its source. A rollback copy will be retained.'
+        type: 'warning', buttons: [localizedText('action.cancel', {}, 'Cancel'), localizedText('dialog.legacy.restore', {}, 'Restore legacy backup')], defaultId: 0, cancelId: 0,
+        title: localizedText('dialog.legacy.title', {}, 'Unencrypted legacy backup'),
+        message: localizedText('dialog.legacy.message', {}, 'This legacy ZIP is not encrypted or authenticated.'),
+        detail: localizedText('dialog.legacy.detail', {}, 'Only restore it if you trust its source. A rollback copy will be retained.')
       });
       if (warning.response !== 1) { pendingRestorePath = ''; return { ok: false, canceled: true }; }
     }
@@ -2091,9 +2093,9 @@ registerIpcHandler('diagnostics:create', async (_event, payload = {}) => {
   if (!/^CPCR-\d{8}-[A-F0-9]{10}$/.test(preview.supportReferenceId)) return { ok: false, error: 'The support reference ID is invalid.', code: 'SUPPORT_REFERENCE_INVALID' };
   ensureDirs();
   const result = await dialog.showSaveDialog(win, {
-    title: 'Create sanitized support bundle',
+    title: localizedText('dialog.support.title', {}, 'Create sanitized support bundle'),
     defaultPath: path.join(app.getPath('documents'), `canadapost-support-${preview.supportReferenceId}.zip`),
-    filters: [{ name: 'ZIP archives', extensions: ['zip'] }]
+    filters: [{ name: localizedText('dialog.zipArchives', {}, 'ZIP archives'), extensions: ['zip'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
   try {
@@ -2269,14 +2271,14 @@ registerIpcHandler('est:importHistory', async (_event, options = {}) => {
       }
       const completed = importResult.lastEventsByType?.est_complete || {};
       if (completed.outcome === 'EMPTY') {
-        emit('run', { status: 'complete', message: 'Completed — no EST orders found for the selected date range.', logPath });
+        emit('run', { status: 'complete', messageKey: 'event.est.empty', message: 'Completed — no EST orders found for the selected date range.', logPath });
         return;
       }
       if (completed.outcome === 'IMPORTED_INCOMPLETE') {
-        emit('run', { status: 'complete', message: `EST Desktop history export completed with ${Number(completed.excluded || 0)} incomplete row(s) excluded. tracking.csv contains only quality-gated rows.`, logPath });
+        emit('run', { status: 'complete', messageKey: 'event.est.completedExcluded', messageValues: { count: Number(completed.excluded || 0) }, message: `EST Desktop history export completed with ${Number(completed.excluded || 0)} incomplete row(s) excluded. tracking.csv contains only quality-gated rows.`, logPath });
         return;
       }
-      emit('run', { status: 'complete', message: 'EST Desktop history export complete. tracking.csv was generated.', logPath });
+      emit('run', { status: 'complete', messageKey: 'event.est.generated', message: 'EST Desktop history export complete. tracking.csv was generated.', logPath });
     } catch (error) {
       emit('run', { status: 'failed', message: error.message, logPath });
     }
@@ -2356,7 +2358,7 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
         emit('run', { status: 'failed', message, logPath });
         return;
       }
-      emit('run', { status: 'complete', message: 'Shipping history import complete. tracking.csv was generated.', logPath });
+      emit('run', { status: 'complete', messageKey: 'event.history.generated', message: 'Shipping history import complete. tracking.csv was generated.', logPath });
     } catch (error) {
       emit('run', { status: 'failed', message: error.message, logPath });
     }
@@ -2483,7 +2485,7 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
 
       if (!fs.existsSync(trackingCsv)) {
         claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'tracking', error: 'tracking.csv missing' });
-        emit('run', { status: 'failed', message: `Missing ${trackingCsv} after history import.`, logPath });
+        emit('run', { status: 'failed', messageKey: 'event.workflow.trackingCsvMissing', messageValues: { path: trackingCsv }, message: `Missing ${trackingCsv} after history import.`, logPath });
         return;
       }
 
@@ -2514,6 +2516,8 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
         claimDb.finishRun(DB_PATH, fullRunId, 'complete_with_warnings', trackingRunCounts(trackingSummary), trackingSummary);
         emit('run', {
           status: 'failed',
+          messageKey: 'event.workflow.trackingErrors',
+          messageValues: { count: trackingSummary.errorCount },
           message: `Tracking completed with ${trackingSummary.errorCount} lookup error(s). Claim submission was blocked until tracking is rerun successfully.`,
           logPath
         });
@@ -2525,6 +2529,7 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
       claimDb.finishRun(DB_PATH, fullRunId, 'complete', trackingRunCounts(trackingSummary), { tracking: trackingSummary, submissionDeferredForReview: true });
       emit('run', {
         status: 'complete',
+        messageKey: 'event.workflow.reviewQueue',
         message: 'Import and tracking complete. Review the newly classified queue and create a fresh queue snapshot before starting Step 3.',
         logPath
       });
@@ -2532,14 +2537,14 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
 
       if (fs.existsSync(STOP_FILE)) {
         claimDb.finishRun(DB_PATH, fullRunId, 'stopped', trackingRunCounts(trackingSummary), trackingSummary);
-        emit('run', { status: 'stopped', message: 'Stopped after tracking stage.', logPath });
+        emit('run', { status: 'stopped', messageKey: 'event.workflow.stoppedAfterTracking', message: 'Stopped after tracking stage.', logPath });
         return;
       }
 
       const claimsPath = path.join(DATA_DIR, 'claims.csv');
       if (!fs.existsSync(claimsPath) || fs.readFileSync(claimsPath, 'utf8').trim().split(/\r?\n/).length < 2) {
         claimDb.finishRun(DB_PATH, fullRunId, 'complete', trackingRunCounts(trackingSummary), trackingSummary);
-        emit('run', { status: 'complete', message: 'Tracking complete. No late claims found.', logPath });
+        emit('run', { status: 'complete', messageKey: 'event.tracking.noLate', message: 'Tracking complete. No late claims found.', logPath });
         return;
       }
 
@@ -2561,7 +2566,7 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
           warning: Number(submitSummary.alreadySubmitted || 0) + Number(submitSummary.rejected || 0),
           failure: Number(submitSummary.failed || 1)
         }, submitSummary);
-        emit('run', { status: 'failed', message: `Submit stage failed with code ${submitResult.code}.`, logPath });
+        emit('run', { status: 'failed', messageKey: 'event.submit.stageFailed', messageValues: { code: submitResult.code }, message: `Submit stage failed with code ${submitResult.code}.`, logPath });
         return;
       }
 
@@ -2571,7 +2576,7 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
         warning: Number(submitSummary.alreadySubmitted || 0) + Number(submitSummary.rejected || 0),
         failure: Number(submitSummary.failed || 0)
       }, { tracking: trackingSummary, submission: submitSummary, dryRun: Boolean(options.dryRun) });
-      emit('run', { status: 'complete', message: options.dryRun ? 'Full dry run complete. No claims were submitted.' : 'Full run complete.', logPath });
+      emit('run', { status: 'complete', messageKey: options.dryRun ? 'event.workflow.fullDryComplete' : 'event.workflow.fullComplete', message: options.dryRun ? 'Full dry run complete. No claims were submitted.' : 'Full run complete.', logPath });
     } catch (error) {
       try { claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
       emit('run', { status: 'failed', message: error.message, logPath });
@@ -2684,19 +2689,19 @@ registerIpcHandler('tracking:run', async (_event, options = {}) => {
       if (diagnosticMode) {
         const completed = trackingResult.lastEventsByType?.tracking_diagnostic_complete || {};
         if (completed.status !== 'DIAGNOSTIC_COMPLETE' || Number(completed.checked || 0) !== 1) {
-          emit('run', { status: 'failed', message: 'One-request Tracking API diagnostic did not complete successfully. State was not modified.', logPath });
+          emit('run', { status: 'failed', messageKey: 'event.tracking.diagnosticFailed', message: 'One-request Tracking API diagnostic did not complete successfully. State was not modified.', logPath });
           return;
         }
         const latest = readConfig();
         writeConfig(trackingDiagnosticGate.markSucceeded(latest, trackingApiEnvironment, { apiVersion: TRACKING_API_VERSION, parserVersion: TRACKING_PARSER_VERSION }));
         const diagnostic = trackingResult.lastEventsByType?.tracking_diagnostic || {};
-        emit('run', { status: 'diagnostic_complete', message: structureExport ? `Sanitized response structure exported. Claim and queue state were not modified.` : 'One-request semantic API diagnostic complete. Claim and queue state were not modified.', structureReportPath: diagnostic.structureReportPath || '', logPath });
+        emit('run', { status: 'diagnostic_complete', messageKey: structureExport ? 'event.tracking.structureExported' : 'event.tracking.diagnosticComplete', message: structureExport ? 'Sanitized response structure exported. Claim and queue state were not modified.' : 'One-request semantic API diagnostic complete. Claim and queue state were not modified.', structureReportPath: diagnostic.structureReportPath || '', logPath });
         return;
       }
 
       if (fs.existsSync(STOP_FILE)) {
         claimDb.finishRun(DB_PATH, trackingRunId, 'stopped', {}, trackingResult.lastEvent || {});
-        emit('run', { status: 'stopped', message: 'Stopped during tracking stage.', logPath });
+        emit('run', { status: 'stopped', messageKey: 'event.tracking.stopped', message: 'Stopped during tracking stage.', logPath });
         return;
       }
 
@@ -2803,7 +2808,8 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
         parent: win,
         selectedCount: selectedClassificationRecords.length,
         requestedCount: requestedClassificationRecords.length,
-        canaryMode: effectiveCanaryMode
+        canaryMode: effectiveCanaryMode,
+        localize: localizedText
       });
     } catch (error) {
       return { ok: false, error: error.message, code: 'LIVE_SUBMISSION_AUTHORIZATION_FAILED' };
@@ -2956,7 +2962,7 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
     onEvent: event => {
       if (event?.type === 'diagnostics_started') {
         latestStep3DiagnosticsDir = String(event.directory || step3DiagnosticsRunDir);
-        emit('event', { stage: 'submit', event: { type: 'log', message: `Detailed Step 3 diagnostics: ${latestStep3DiagnosticsDir}` } });
+        emit('event', { stage: 'submit', event: { type: 'log', messageKey: 'event.submit.diagnosticsPath', messageValues: { path: latestStep3DiagnosticsDir }, message: `Detailed Step 3 diagnostics: ${latestStep3DiagnosticsDir}` } });
       }
       if (event?.type === 'manual_verification_required') {
         handleManualBrowserVisibilityRequest(event).catch(error => {
@@ -2998,11 +3004,11 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
       };
       claimDb.finishRun(DB_PATH, submitRunId, submitResult.ok ? 'complete' : 'failed', counts, summary);
       if (!submitResult.ok) {
-        emit('run', { status: 'failed', message: `Submit stage failed with code ${submitResult.code}.`, logPath });
+        emit('run', { status: 'failed', messageKey: 'event.submit.stageFailed', messageValues: { code: submitResult.code }, message: `Submit stage failed with code ${submitResult.code}.`, logPath });
         return;
       }
 
-      emit('run', { status: 'complete', message: options.dryRun ? 'Dry run complete. No claims were submitted.' : 'Claim submission complete.', logPath });
+      emit('run', { status: 'complete', messageKey: options.dryRun ? 'event.submit.dryRunComplete' : 'event.submit.claimComplete', message: options.dryRun ? 'Dry run complete. No claims were submitted.' : 'Claim submission complete.', logPath });
     } catch (error) {
       appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
       activeStep3DiagnosticsDir = '';
@@ -3022,7 +3028,7 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
 registerIpcHandler('run:requestStop', () => {
   ensureDirs();
   fs.writeFileSync(STOP_FILE, new Date().toISOString() + '\n');
-  emit('event', { stage: activeStage, event: { type: 'stop_requested', message: 'Stop requested. The runner will stop after the current item.' } });
+  emit('event', { stage: activeStage, event: { type: 'stop_requested', messageKey: 'event.stopRequested', message: 'Stop requested. The runner will stop after the current item.' } });
   return { ok: true };
 });
 
@@ -3034,7 +3040,7 @@ registerIpcHandler('run:forceStop', () => {
     sendStopSignalToChild(child, { force: false });
     const timer = setTimeout(() => sendStopSignalToChild(child, { force: true }), 1500);
     if (typeof timer.unref === 'function') timer.unref();
-    emit('event', { stage: activeStage, event: { type: 'force_stop', message: 'Force stop sent to the current process and its browser descendants.' } });
+    emit('event', { stage: activeStage, event: { type: 'force_stop', messageKey: 'event.forceStopSent', message: 'Force stop sent to the current process and its browser descendants.' } });
     return { ok: true };
   }
   return { ok: false, error: 'No active process.' };
@@ -3093,28 +3099,31 @@ async function handleStartupFailure(error) {
   try { diagnosticPath = startupDatabase.writeDiagnostic(LOG_DIR, diagnostic); } catch (_) {}
   const safeText = startupDatabase.diagnosticText(diagnostic);
   const details = [
-    'The workflow window was not opened because the local database could not be prepared safely.',
-    `Backup: ${diagnostic.backupLocation || 'Unavailable; the source database was left unchanged.'}`,
-    `Diagnostic: ${diagnosticPath || 'Could not write the local diagnostic file.'}`,
+    localizedText('dialog.databaseRecovery.detailIntro', {}, 'The workflow window was not opened because the local database could not be prepared safely.'),
+    localizedText('dialog.databaseRecovery.backup', { path: diagnostic.backupLocation || localizedText('dialog.databaseRecovery.backupUnavailable', {}, 'Unavailable; the source database was left unchanged.') }, 'Backup: {path}'),
+    localizedText('dialog.databaseRecovery.diagnostic', { path: diagnosticPath || localizedText('dialog.databaseRecovery.diagnosticUnavailable', {}, 'Could not write the local diagnostic file.') }, 'Diagnostic: {path}'),
     '',
-    'No database contents or credentials are included in this diagnostic.'
+    localizedText('dialog.databaseRecovery.privacy', {}, 'No database contents or credentials are included in this diagnostic.')
   ].join('\n');
   const recoveryDetails = updateRecovery.pending
-    ? `\n\nA pending update was preserved. Pre-update backup available: ${updateRecovery.backupPreserved ? 'yes' : 'no'}. Previous executable available: ${updateRecovery.previousExecutablePreserved ? 'yes' : 'no'}.`
+    ? `\n\n${localizedText('dialog.databaseRecovery.updatePreserved', {
+      backup: localizedText(updateRecovery.backupPreserved ? 'common.yes' : 'common.no'),
+      executable: localizedText(updateRecovery.previousExecutablePreserved ? 'common.yes' : 'common.no')
+    }, 'A pending update was preserved. Pre-update backup available: {backup}. Previous executable available: {executable}.')}`
     : '';
   try {
     const choice = await dialog.showMessageBox({
       type: 'error',
-      title: 'Database recovery required',
-      message: 'Canada Post Claim Runner could not start safely.',
+      title: localizedText('dialog.databaseRecovery.title', {}, 'Database recovery required'),
+      message: localizedText('dialog.databaseRecovery.message', {}, 'Canada Post Claim Runner could not start safely.'),
       detail: `${details}${recoveryDetails}`,
-      buttons: ['Open data folder', 'Copy diagnostic', 'Exit'],
+      buttons: [localizedText('dialog.databaseRecovery.openData', {}, 'Open data folder'), localizedText('dialog.databaseRecovery.copyDiagnostic', {}, 'Copy diagnostic'), localizedText('dialog.databaseRecovery.exit', {}, 'Exit')],
       defaultId: 2,
       cancelId: 2,
       noLink: true
     });
     if (choice.response === 0) await shell.openPath(USER_DATA_ROOT);
-    if (choice.response === 1) clipboard.writeText(`${safeText}\nDiagnostic file: ${diagnosticPath || 'unavailable'}`);
+    if (choice.response === 1) clipboard.writeText(`${safeText}\n${localizedText('dialog.databaseRecovery.diagnosticFile', { path: diagnosticPath || localizedText('common.unavailable', {}, 'unavailable') }, 'Diagnostic file: {path}')}`);
   } catch (_) {
     // Startup recovery is best effort; always terminate instead of remaining hidden.
   } finally {

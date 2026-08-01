@@ -21,50 +21,43 @@ function trf(key, values = {}, fallback = '') {
   ));
 }
 
+function applyLocalizedDom(root = document) {
+  root.querySelectorAll('[data-i18n]').forEach(element => {
+    element.textContent = tr(element.dataset.i18n, '');
+  });
+  for (const attribute of ['placeholder', 'aria-label', 'title', 'alt']) {
+    const dataAttribute = `data-i18n-${attribute}`;
+    root.querySelectorAll(`[${dataAttribute}]`).forEach(element => {
+      element.setAttribute(attribute, tr(element.getAttribute(dataAttribute), ''));
+    });
+  }
+  root.querySelectorAll('[data-i18n-current]').forEach(element => {
+    let values = {};
+    try { values = JSON.parse(element.dataset.i18nValues || '{}'); } catch (_) { values = {}; }
+    element.textContent = trf(element.dataset.i18nCurrent, values, element.textContent);
+  });
+}
+
+function setLocalizedText(element, key, values = {}, fallback = '') {
+  if (!element) return;
+  element.dataset.i18nCurrent = key;
+  element.dataset.i18nValues = JSON.stringify(values);
+  element.textContent = trf(key, values, fallback);
+}
+
 async function applyLocale(locale) {
   const result = await window.cpApp.loadLocale(locale);
   activeMessages = result.messages || {};
   document.documentElement.lang = result.locale || 'en-CA';
   if ($('localeSelect')) $('localeSelect').value = result.locale || 'en-CA';
-  const tabTargets = { tabSettings: 'nav.settings', tabStep1: 'nav.step1', tabStep2: 'nav.step2', tabStep3: 'nav.step3', tabHistory: 'nav.history', tabResults: 'nav.results' };
-  for (const [id, key] of Object.entries(tabTargets)) {
-    const button = $(id); const localized = tr(key, '');
-    if (!button || !localized) continue;
-    const match = localized.match(/^([^<]+)<br><span>(.*)<\/span>$/);
-    if (!match) continue;
-    const primaryText = [...button.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
-    if (primaryText) primaryText.nodeValue = match[1];
-    if (button.querySelector('span')) button.querySelector('span').textContent = match[2];
-  }
-  const textTargets = {
-    appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title', setupIntro: 'setup.intro',
-    setupSafetyNotice: 'setup.safety', setupSafetyAcknowledgeLabel: 'setup.safetyAcknowledge', setupLater: 'action.continueLater', resumeSetup: 'action.resumeSetup',
-    setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
-    restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession',
-    clearHistoryFilters: 'history.clearFilters', historyClassificationsTitle: 'history.classifications', claimQueueTitle: 'step3.candidateQueue',
-    selectAllClaims: 'step3.selectAll', clearClaimSelection: 'step3.clearSelection',
-    runSubmitOnly: 'step3.submitSelected', privacyDataTitle: 'privacy.title', manageStoredData: 'privacy.manageStoredData',
-    advancedSettingsTitle: 'settings.advanced', closePrivacyDataModal: 'action.close',
-    liveSubmitCanaryLabel: 'step3.confirm.canaryOption', trackingDiagnosticTitle: 'step2.diagnostic.title',
-    trackingDiagnosticMessage: 'step2.diagnostic.message', trackingDiagnosticRowLabel: 'step2.diagnostic.rowLabel',
-    cancelTrackingDiagnostic: 'action.cancel', confirmTrackingDiagnostic: 'action.continue',
-    step3PreflightDialogTitle: 'step3.preflight.blockedTitle', cancelStep3Preflight: 'action.cancel',
-    openSettingsFromPreflight: 'action.openSettings',
-    privacyDataIntro: 'privacy.intro', previewPrivacyData: 'privacy.preview',
-    deletePrivacyData: 'privacy.delete', privacyTrackingLabel: 'privacy.trackingLabel',
-    privacyDateFromLabel: 'privacy.dateFrom', privacyDateToLabel: 'privacy.dateTo',
-    privacyAllRecordsLabel: 'privacy.allRecords', privacyDestructiveConfirmLabel: 'privacy.destructiveConfirm',
-    privacyTypedPhraseLabel: 'privacy.typedPhraseLabel', privacySecondConfirmLabel: 'privacy.secondConfirm',
-    privacyExternalCopiesNotice: 'privacy.externalCopies',
-    supportBundleTitle: 'support.title', supportReferenceLabel: 'support.reference',
-    supportSystemLabel: 'support.component.system', supportSettingsLabel: 'support.component.settings',
-    supportHistoryLabel: 'support.component.history', supportLogsLabel: 'support.component.logs',
-    supportStep3Label: 'support.component.step3', supportAcknowledgeLabel: 'support.acknowledge',
-    cancelSupportBundle: 'action.cancel', confirmSupportBundle: 'support.create'
-  };
-  for (const [id, key] of Object.entries(textTargets)) if ($(id)) $(id).textContent = tr(key, $(id).textContent);
-  if ($('clearHistoryFilters')) $('clearHistoryFilters').setAttribute('aria-label', tr('history.clearFiltersLabel', 'Clear History filters'));
+  applyLocalizedDom(document);
   window.Step2Copy.apply(document, key => tr(key));
+  updateNotificationIndicator();
+  for (const stepId of ['step1', 'step2', 'step3']) updateJumpToLatest(stepId);
+  renderResultsList();
+  renderNeedsReview();
+  if (state.claimQueueLoaded) renderClaimQueue(state.claimQueueItems, true);
+  if (!$('setupWizard')?.classList.contains('hidden')) renderSetupWizardReadiness(await window.cpApp.loadConfig());
   rendererEvents.emit('locale:changed', { locale: result.locale || 'en-CA' });
 }
 
@@ -167,7 +160,11 @@ function updateJumpToLatest(stepId) {
   const button = $(`${stepId}JumpLatest`);
   if (!stateForLog || !button) return;
   button.hidden = stateForLog.following || stateForLog.unread === 0;
-  button.textContent = stateForLog.unread > 0 ? `Jump to latest (${stateForLog.unread > 999 ? '999+' : stateForLog.unread})` : 'Jump to latest';
+  if (stateForLog.unread > 0) {
+    setLocalizedText(button, 'log.jumpLatestCount', { count: stateForLog.unread > 999 ? '999+' : stateForLog.unread }, 'Jump to latest ({count})');
+  } else {
+    setLocalizedText(button, 'log.jumpLatest', {}, 'Jump to latest');
+  }
 }
 
 function jumpToLatest(stepId) {
@@ -259,17 +256,18 @@ function setBuiltinBrowserActivity(active, text = '', kind = '') {
     browserActivityHideTimer = 0;
   }
 
-  label.textContent = text || (active ? 'Canada Post is working…' : 'Browser idle');
+  label.textContent = text || (active ? tr('step3.browser.working', 'Canada Post is working…') : tr('step3.browser.idleStatus', 'Browser idle'));
   container.classList.toggle('active', Boolean(active));
   container.classList.toggle('error', kind === 'error');
   container.setAttribute('aria-busy', active ? 'true' : 'false');
 }
 
-function finishBuiltinBrowserActivity(text = 'Browser ready', kind = '') {
+function finishBuiltinBrowserActivity(text = '', kind = '') {
+  text ||= tr('step3.browser.ready', 'Browser ready');
   setBuiltinBrowserActivity(false, text, kind);
   browserActivityHideTimer = window.setTimeout(() => {
     if (!$('builtinBrowserActivity')?.classList.contains('active')) {
-      setBuiltinBrowserActivity(false, 'Browser idle');
+      setBuiltinBrowserActivity(false, tr('step3.browser.idleStatus', 'Browser idle'));
     }
   }, 1800);
 }
@@ -584,7 +582,17 @@ function setStatus(text, kind = '', stepId = null) {
   const step = stepId || currentProcessStep || activeTabId || 'step1';
   const el = $(statusIdForStep(step));
   if (el) {
-    el.textContent = text;
+    const keys = {
+      Idle: 'runStatus.idle', Running: 'runStatus.running', Complete: 'runStatus.complete', Warnings: 'runStatus.warnings',
+      Failed: 'runStatus.failed', Blocked: 'runStatus.blocked', Stopped: 'runStatus.stopped', Cancelled: 'runStatus.cancelled',
+      Validating: 'runStatus.validating', 'Diagnostic passed': 'runStatus.diagnosticPassed', 'Diagnostic failed': 'runStatus.diagnosticFailed',
+      'Manual verification required': 'runStatus.manualVerification', CAPTCHA: 'runStatus.captcha',
+      'Structural diagnostic running': 'runStatus.structuralDiagnosticRunning', 'Diagnostic running': 'runStatus.diagnosticRunning',
+      'Structural diagnostic blocked': 'runStatus.structuralDiagnosticBlocked', 'Diagnostic blocked': 'runStatus.diagnosticBlocked'
+    };
+    const key = keys[text];
+    if (key) setLocalizedText(el, key, {}, text);
+    else { delete el.dataset.i18nCurrent; delete el.dataset.i18nValues; el.textContent = text; }
     el.className = `pill ${kind}`.trim();
   }
 }
@@ -593,6 +601,11 @@ function setAction(text, stepId = null) {
   const step = stepId || currentProcessStep || activeTabId || 'step1';
   const el = $(actionIdForStep(step));
   if (el) el.textContent = text;
+}
+
+function setActionLocalized(key, values = {}, fallback = '', stepId = null) {
+  const step = stepId || currentProcessStep || activeTabId || 'step1';
+  setLocalizedText($(actionIdForStep(step)), key, values, fallback);
 }
 
 
@@ -615,7 +628,7 @@ function updateNotificationIndicator() {
   }
 
   if (pill) {
-    pill.textContent = totalCount === 1 ? '1 notification' : `${totalCount} notifications`;
+    setLocalizedText(pill, totalCount === 1 ? 'results.oneNotification' : 'results.notificationCount', { count: totalCount }, totalCount === 1 ? '1 notification' : '{count} notifications');
     pill.className = `pill ${totalCount > 0 ? 'warn inline-count' : 'inline-count'}`.trim();
   }
 }
@@ -755,10 +768,26 @@ function createCell(text, className = '') {
   return cell;
 }
 
+function localizedInterfaceValue(value) {
+  const text = String(value || '');
+  const keys = {
+    Submitted: 'outcome.submitted', 'Already submitted': 'outcome.alreadySubmitted', Failed: 'outcome.failed',
+    'Rejected / ineligible': 'outcome.rejected', 'CAPTCHA detected': 'outcome.captcha', 'Needs review': 'outcome.needsReview',
+    'Duplicate claim': 'outcome.duplicateClaim', 'Claim result received': 'outcome.resultReceived', 'In progress': 'status.inProgress',
+    'Manual verification required': 'runStatus.manualVerification', 'Paused for operator': 'outcome.pausedForOperator',
+    'Paused for manual solve': 'outcome.pausedForManualSolve', 'Waiting for manual solve': 'outcome.waitingForManualSolve',
+    Resuming: 'outcome.resuming', Done: 'outcome.done', 'Runner error': 'event.runnerError',
+    submitted: 'outcome.submitted', submitted_manual: 'history.filter.submittedManual', already_submitted: 'outcome.alreadySubmitted',
+    failed: 'outcome.failed', unknown: 'history.filter.unknown', not_submitted: 'history.filter.notSubmitted',
+    retry_approved: 'history.filter.retryApproved', dry_run_ready: 'history.filter.dryRunReady', dry_run_interrupted: 'history.filter.dryRunInterrupted'
+  };
+  return keys[text] ? tr(keys[text], text) : (text || '—');
+}
+
 function makeClickableRow(row, item) {
   row.classList.add('clickable');
   row.tabIndex = 0;
-  row.title = 'Open detailed result screen';
+  row.title = tr('results.openDetailsTitle', 'Open detailed result screen');
   row.addEventListener('click', () => openDetail(item.id));
   row.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -770,11 +799,11 @@ function makeClickableRow(row, item) {
 
 function resultDetailText(item) {
   if (!item) return '—';
-  if (item.issue) return item.issue;
-  if (item.kind === 'submitted') return 'Confirmed by Canada Post success page';
-  if (item.kind === 'already') return 'Duplicate claim detected by Canada Post';
-  if (item.kind === 'failed') return item.message || 'Needs manual review';
-  if (item.kind === 'captcha') return item.message || 'CAPTCHA screenshot captured; solve manually in browser';
+  if (item.issue) return localizedInterfaceValue(item.issue);
+  if (item.kind === 'submitted') return tr('results.confirmedByCanadaPost', 'Confirmed by Canada Post success page');
+  if (item.kind === 'already') return tr('results.duplicateDetected', 'Duplicate claim detected by Canada Post');
+  if (item.kind === 'failed') return item.message || tr('results.needsManualReview', 'Needs manual review');
+  if (item.kind === 'captcha') return item.message || tr('results.captchaCaptured', 'CAPTCHA screenshot captured; solve manually in browser');
   return item.message || '—';
 }
 
@@ -791,12 +820,12 @@ function renderResultsList() {
   const head = document.createElement('div');
   head.className = 'ops-head results-grid';
   head.append(
-    createCell('Time'),
-    createCell('Row'),
-    createCell('Tracking'),
-    createCell('Result'),
-    createCell('Details'),
-    createCell('Evidence')
+    createCell(tr('common.time', 'Time')),
+    createCell(tr('common.row', 'Row')),
+    createCell(tr('common.tracking', 'Tracking')),
+    createCell(tr('common.result', 'Result')),
+    createCell(tr('common.details', 'Details')),
+    createCell(tr('common.evidence', 'Evidence'))
   );
   el.appendChild(head);
 
@@ -807,7 +836,7 @@ function renderResultsList() {
   if (operations.recentResults.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'ops-empty';
-    empty.textContent = 'No claim results yet.';
+    empty.textContent = tr('results.empty', 'No claim results yet.');
     body.appendChild(empty);
     return;
   }
@@ -820,7 +849,7 @@ function renderResultsList() {
       createCell(item.time, 'ops-muted'),
       createCell(item.row, 'ops-muted'),
       createCell(item.tracking),
-      createCell(item.result, outcomeClass(item.kind)),
+      createCell(localizedInterfaceValue(item.result), outcomeClass(item.kind)),
       createCell(resultDetailText(item), outcomeClass(item.kind)),
       createCell(resultEvidenceText(item), 'ops-muted')
     );
@@ -835,7 +864,7 @@ function renderNeedsReview() {
 
   const head = document.createElement('div');
   head.className = 'ops-head review-grid';
-  head.append(createCell('Row'), createCell('Tracking'), createCell('Issue'));
+  head.append(createCell(tr('common.row', 'Row')), createCell(tr('common.tracking', 'Tracking')), createCell(tr('common.issue', 'Issue')));
   el.appendChild(head);
 
   const body = document.createElement('div');
@@ -845,7 +874,7 @@ function renderNeedsReview() {
   if (operations.needsReview.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'ops-empty';
-    empty.textContent = 'No review items.';
+    empty.textContent = tr('results.noReviewItems', 'No review items.');
     body.appendChild(empty);
     return;
   }
@@ -975,7 +1004,7 @@ function resetStepUi(stepId) {
   const logEl = $(logIdForStep(step));
   if (logEl) logEl.textContent = '';
   setStatus('Idle', '', step);
-  setAction('Waiting.', step);
+  setLocalizedText($(actionIdForStep(step)), 'status.waiting', {}, 'Waiting.');
   updateCounters();
 }
 
@@ -985,7 +1014,7 @@ function resetRunUi(stepId = null) {
 }
 
 function addStep1Warning(message, meta = {}) {
-  const text = String(message || 'Unknown warning').trim() || 'Unknown warning';
+  const text = String(message || tr('step1.unknownWarning', 'Unknown warning')).trim() || tr('step1.unknownWarning', 'Unknown warning');
   state.step1Warnings += 1;
   state.step1WarningMessages.push({
     time: new Date().toLocaleTimeString(),
@@ -1001,11 +1030,11 @@ function renderStep1Warnings() {
   list.textContent = '';
 
   if (!state.step1WarningMessages.length) {
-    summary.textContent = 'No warnings captured for the current Step 1 run.';
+    summary.textContent = tr('step1.noWarnings', 'No warnings captured for the current Step 1 run.');
     return;
   }
 
-  summary.textContent = `${state.step1WarningMessages.length} warning(s) captured for the current Step 1 run.`;
+  summary.textContent = trf('step1.warningCount', { count: state.step1WarningMessages.length }, '{count} warning(s) captured for the current Step 1 run.');
   for (const item of state.step1WarningMessages) {
     const row = document.createElement('div');
     row.className = 'warning-item';
@@ -1015,7 +1044,7 @@ function renderStep1Warnings() {
     time.textContent = item.time || '—';
 
     const body = document.createElement('div');
-    body.textContent = item.message || 'Unknown warning';
+    body.textContent = item.message || tr('step1.unknownWarning', 'Unknown warning');
 
     row.append(time, body);
     list.appendChild(row);
@@ -1051,113 +1080,60 @@ function resetAllUiState() {
 }
 
 function resultTitle(item) {
-  if (!item) return 'Result detail';
-  if (item.kind === 'submitted') return 'Submitted successfully';
-  if (item.kind === 'already') return 'Already submitted / duplicate claim';
-  if (item.kind === 'failed') return 'Failed claim / needs review';
-  if (item.kind === 'captcha') return 'CAPTCHA detected / manual action required';
-  return item.result || item.status || 'Result detail';
+  if (!item) return tr('results.detailTitle', 'Result detail');
+  if (item.kind === 'submitted') return tr('results.title.submitted', 'Submitted successfully');
+  if (item.kind === 'already') return tr('results.title.already', 'Already submitted / duplicate claim');
+  if (item.kind === 'failed') return tr('results.title.failed', 'Failed claim / needs review');
+  if (item.kind === 'captcha') return tr('results.title.captcha', 'CAPTCHA detected / manual action required');
+  return item.result || item.status || tr('results.detailTitle', 'Result detail');
 }
 
 function resultExplanation(item) {
-  if (!item) return 'No result selected.';
+  if (!item) return tr('results.noSelection', 'No result selected.');
 
   if (item.kind === 'submitted') {
-    return [
-      'This item was counted as Submitted because the automation detected Canada Post confirmation language after pressing Create Ticket.',
-      '',
-      'Important: the app no longer treats a button click as success. It only counts success after the Canada Post page shows a confirmation/ticket result.',
-      '',
-      item.message ? `Canada Post/result message: ${item.message}` : 'No extra result message was provided by the runner.'
-    ].join('\n');
+    return trf('results.explanation.submitted', { message: item.message || tr('results.noRunnerMessage', 'No extra result message was provided by the runner.') });
   }
 
   if (item.kind === 'already') {
-    return [
-      'This item was not submitted as a new claim.',
-      '',
-      'Canada Post displayed duplicate/refund-already-received wording after Create Ticket. That means a refund request or inquiry already exists for this tracking number.',
-      '',
-      'The app therefore classifies it as Already submitted instead of Submitted or Failed.',
-      '',
-      item.message ? `Detected message: ${item.message}` : 'Expected Canada Post duplicate wording: inquiry already exists / refund request already received.'
-    ].join('\n');
+    return trf('results.explanation.already', { message: item.message || tr('results.expectedDuplicateMessage') });
   }
 
   if (item.kind === 'captcha') {
-    return [
-      'A CAPTCHA appeared during Step 3 claim submission.',
-      '',
-      'The app paused instead of timing out. Solve the CAPTCHA manually in the visible browser window; the run will continue once the CAPTCHA clears.',
-      '',
-      item.screenshotPath ? `Captured screenshot: ${basename(item.screenshotPath)}` : 'No CAPTCHA screenshot path was provided.'
-    ].join('\n');
+    return trf('results.explanation.captcha', { screenshot: item.screenshotPath ? basename(item.screenshotPath) : tr('results.notAvailable') });
   }
 
   if (item.kind === 'failed') {
-    return [
-      'This item needs review because the automation did not receive a confirmed successful submission.',
-      '',
-      'Possible causes include a Canada Post validation error, timeout, session/login issue, unsupported page state, or unknown rejection text.',
-      '',
-      item.message ? `Runner message: ${item.message}` : 'No detailed runner message was provided.'
-    ].join('\n');
+    return trf('results.explanation.failed', { message: item.message || tr('results.noDetailedRunnerMessage') });
   }
 
-  return item.message || 'No detailed explanation is available for this result type.';
+  return item.message || tr('results.noExplanation', 'No detailed explanation is available for this result type.');
 }
 
 function resultDecision(item) {
-  if (!item) return 'No decision available.';
+  if (!item) return tr('results.noDecision', 'No decision available.');
 
   if (item.kind === 'submitted') {
-    return [
-      'Decision: count as Submitted.',
-      'Reason: Canada Post page matched the strict success detector: ticket/confirmation/accepted request language was found after Create Ticket.',
-      item.screenshotPath ? `Proof screenshot: ${basename(item.screenshotPath)}` : 'Proof screenshot: not available for this row.'
-    ].join('\n');
+    return trf('results.decision.submitted', { screenshot: item.screenshotPath ? basename(item.screenshotPath) : tr('results.notAvailable') });
   }
 
   if (item.kind === 'already') {
-    return [
-      'Decision: count as Already submitted.',
-      'Reason: Canada Post page matched duplicate-claim detector text after Create Ticket.',
-      'Matched business result: duplicate refund request / existing inquiry for the same tracking number.',
-      item.screenshotPath ? `Proof screenshot: ${basename(item.screenshotPath)}` : 'Proof screenshot: not available for this row.'
-    ].join('\n');
+    return trf('results.decision.already', { screenshot: item.screenshotPath ? basename(item.screenshotPath) : tr('results.notAvailable') });
   }
 
   if (item.kind === 'captcha') {
-    return [
-      'A CAPTCHA appeared during Step 3 claim submission.',
-      '',
-      'The app paused instead of timing out. Solve the CAPTCHA manually in the visible browser window; the run will continue once the CAPTCHA clears.',
-      '',
-      item.screenshotPath ? `Captured screenshot: ${basename(item.screenshotPath)}` : 'No CAPTCHA screenshot path was provided.'
-    ].join('\n');
-  }
-
-  if (item.kind === 'captcha') {
-    return [
-      'Decision: pause Step 3 and wait for manual CAPTCHA solve.',
-      'Reason: the page displayed a CAPTCHA/reCAPTCHA challenge, so the app cannot safely classify the claim result yet.',
-      item.screenshotPath ? `CAPTCHA screenshot: ${basename(item.screenshotPath)}` : 'CAPTCHA screenshot: not available.'
-    ].join('\n');
+    return trf('results.decision.captcha', { screenshot: item.screenshotPath ? basename(item.screenshotPath) : tr('results.notAvailable') });
   }
 
   if (item.kind === 'failed') {
-    return [
-      'Decision: count as Failed / Needs Review.',
-      'Reason: the runner did not find a strict success confirmation or a known duplicate business result.',
-      item.screenshotPath ? `Diagnostic screenshot: ${basename(item.screenshotPath)}` : 'Diagnostic screenshot: not available for this row.'
-    ].join('\n');
+    return trf('results.decision.failed', { screenshot: item.screenshotPath ? basename(item.screenshotPath) : tr('results.notAvailable') });
   }
 
-  return item.decision || 'Decision details are unavailable.';
+  return item.decision || tr('results.decisionUnavailable', 'Decision details are unavailable.');
 }
 
 function setDetailLoadingState() {
-  setText('detailEvidenceStatus', 'Loading evidence…');
+  setText('detailEvidenceStatus', tr('results.loadingEvidence', 'Loading evidence…'));
   const imgWrap = $('detailScreenshotWrap');
   const img = $('detailScreenshot');
   if (imgWrap) imgWrap.classList.add('hidden');
@@ -1169,14 +1145,14 @@ async function loadDetailEvidence(item) {
   setDetailLoadingState();
 
   if (!item || (!item.screenshotPath && !item.textPath)) {
-    setText('detailEvidenceStatus', 'No saved Canada Post evidence file was attached to this result.');
+    setText('detailEvidenceStatus', tr('results.noAttachedEvidence', 'No saved Canada Post evidence file was attached to this result.'));
     return;
   }
 
   try {
     const res = await window.cpApp.loadEvidence({ screenshotPath: item.screenshotPath, textPath: item.textPath });
     if (!res.ok) {
-      setText('detailEvidenceStatus', res.error || 'No evidence found.');
+      setText('detailEvidenceStatus', res.error || tr('results.noEvidenceFound', 'No evidence found.'));
       return;
     }
 
@@ -1188,13 +1164,13 @@ async function loadDetailEvidence(item) {
         imgWrap.classList.remove('hidden');
       }
       if ($('openScreenshot')) $('openScreenshot').disabled = false;
-      setText('detailEvidenceStatus', res.screenshotName ? `Loaded screenshot: ${res.screenshotName}` : 'Screenshot evidence loaded.');
+      setText('detailEvidenceStatus', res.screenshotName ? trf('results.loadedScreenshot', { name: res.screenshotName }) : tr('results.screenshotLoaded'));
       return;
     }
 
-    setText('detailEvidenceStatus', 'No screenshot evidence is available for this result.');
+    setText('detailEvidenceStatus', tr('results.noScreenshotEvidence', 'No screenshot evidence is available for this result.'));
   } catch (error) {
-    setText('detailEvidenceStatus', `Could not load evidence: ${error.message}`);
+    setText('detailEvidenceStatus', trf('results.loadEvidenceFailed', { error: error.message }, 'Could not load evidence: {error}'));
   }
 }
 
@@ -1211,7 +1187,7 @@ function openDetail(id) {
   if (detailScreen) detailScreen.classList.remove('hidden');
 
   setText('detailTitle', resultTitle(item));
-  setText('detailStatus', item.status || item.result || '—');
+  setText('detailStatus', localizedInterfaceValue(item.status || item.result || '—'));
   setText('detailTime', item.time || '—');
   setText('detailRow', item.row || '—');
   setText('detailSource', item.source || '—');
@@ -1221,7 +1197,7 @@ function openDetail(id) {
 
   const badge = $('detailBadge');
   if (badge) {
-    badge.textContent = item.status || item.result || 'Result Detail';
+    badge.textContent = item.status || item.result ? localizedInterfaceValue(item.status || item.result) : tr('results.detailBadge', 'Result Detail');
     badge.className = `pill ${pillKind(item.kind)}`.trim();
   }
 
@@ -1325,6 +1301,7 @@ ${event.error}`);
 
 function describeEvent(stage, event) {
   const type = event.type || 'log';
+  const localizedEventMessage = event.messageKey ? trf(event.messageKey, event.messageValues || {}, event.message || '') : '';
 
   if (type === 'debug_raw' || type === 'debug_process_line') {
     return formatDeveloperRaw(stage, event);
@@ -1335,48 +1312,48 @@ function describeEvent(stage, event) {
     if (type === 'health_start') {
       setSiteHealthRunning(true);
       if (resultEl) {
-        resultEl.textContent = event.message || 'Checking Canada Post workflow…';
+        resultEl.textContent = localizedEventMessage || event.message || tr('health.checking', 'Checking Canada Post workflow…');
         resultEl.className = 'health-result warn';
       }
-      return event.message || 'Canada Post workflow health check started.';
+      return localizedEventMessage || event.message || tr('health.started', 'Canada Post workflow health check started.');
     }
     if (type === 'health_complete') {
       setSiteHealthRunning(false);
       const status = event.status === 'healthy' ? 'good' : (event.status === 'warning' ? 'warn' : 'bad');
       if (resultEl) {
-        resultEl.textContent = `${event.code || 'RESULT'}: ${event.message || 'Health check completed.'}`;
+        resultEl.textContent = `${event.code || 'RESULT'}: ${localizedEventMessage || event.message || tr('health.completed', 'Health check completed.')}`;
         resultEl.className = `health-result ${status}`;
       }
       refreshHistory().catch(() => {});
-      return `${event.code || 'Health check'}: ${event.message || 'completed'}`;
+      return `${event.code || tr('health.short', 'Health check')}: ${localizedEventMessage || event.message || tr('health.completedShort', 'completed')}`;
     }
   }
 
   if (stage === 'est-history') {
-    if (type === 'est_endpoint') return event.message || `EST Desktop API endpoint: ${event.host || ''}`;
+    if (type === 'est_endpoint') return localizedEventMessage || trf('event.est.endpoint', { host: event.host || '' }, 'EST Desktop API endpoint: {host}');
     if (type === 'est_start') {
       operations.runStartedAt ||= Date.now();
       updateCurrentItem({ step: 'Exporting EST Desktop history', result: 'In progress', kind: '' });
-      setAction(`Exporting EST Desktop history from ${event.from} to ${event.to}.`);
-      return `EST Desktop export started: ${event.from} to ${event.to}. Customer ${event.customerNumber || '—'}, workgroup ${event.workgroup || 'auto'}, MOBO ${event.mobo || '-2'}, category ${event.categoryGroup || 'SHP'}.`;
+      setActionLocalized('event.est.exportingRange', { from: event.from, to: event.to }, 'Exporting EST Desktop history from {from} to {to}.', 'step1');
+      return trf('event.est.started', { from: event.from, to: event.to, customer: event.customerNumber || '—', workgroup: event.workgroup || tr('common.auto', 'auto'), mobo: event.mobo || '-2', category: event.categoryGroup || 'SHP' }, 'EST Desktop export started: {from} to {to}. Customer {customer}, workgroup {workgroup}, MOBO {mobo}, category {category}.');
     }
-    if (type === 'est_connect') return `EST connect succeeded. Response validated as XML (${event.byteLength || 0} bytes).`;
+    if (type === 'est_connect') return trf('event.est.connected', { bytes: event.byteLength || 0 }, 'EST connect succeeded. Response validated as XML ({bytes} bytes).');
     if (type === 'est_workgroups') {
       state.step1Workgroups = event.count || 0;
-      return `EST workgroups ${event.mode || 'auto'}: ${event.count || 0}.`;
+      return trf('event.est.workgroups', { mode: event.mode || tr('common.auto', 'auto'), count: event.count || 0 }, 'EST workgroups {mode}: {count}.');
     }
-    if (type === 'est_mobos') return `EST MOBO diagnostic for workgroup ${event.workgroup || '—'}: ${event.count || 0} values.`;
-    if (type === 'est_probe') return event.message || `EST probe: ${event.url || ''}`;
+    if (type === 'est_mobos') return trf('event.est.mobos', { workgroup: event.workgroup || '—', count: event.count || 0 }, 'EST MOBO diagnostic for workgroup {workgroup}: {count} values.');
+    if (type === 'est_probe') return localizedEventMessage || trf('event.est.probe', { url: event.url || '' }, 'EST probe: {url}');
     if (type === 'est_orders') {
       state.step1Orders += event.count || 0;
-      return `EST order IDs found using ${event.dateFormat || 'date'} dates: ${event.count || 0}.`;
+      return trf('event.est.orders', { format: event.dateFormat || tr('common.date', 'date'), count: event.count || 0 }, 'EST order IDs found using {format} dates: {count}.');
     }
     if (type === 'est_export') {
       if (Object.prototype.hasOwnProperty.call(event, 'manifestItemsParsed')) {
         state.step1TotalRows += event.manifestItemsParsed || 0;
-        return `EST export chunk ${event.chunk || '?'} parsed. Orders: ${event.orders || 0}; ManifestItems rows: ${event.manifestItemsParsed || 0}.`;
+        return trf('event.est.chunkParsed', { chunk: event.chunk || '?', orders: event.orders || 0, rows: event.manifestItemsParsed || 0 }, 'EST export chunk {chunk} parsed. Orders: {orders}; ManifestItems rows: {rows}.');
       }
-      return `EST export chunk ${event.chunk || '?'} started. Orders: ${event.orders || 0}; filetypes=${event.fileTypes || '2'}.`;
+      return trf('event.est.chunkStarted', { chunk: event.chunk || '?', orders: event.orders || 0, fileTypes: event.fileTypes || '2' }, 'EST export chunk {chunk} started. Orders: {orders}; filetypes={fileTypes}.');
     }
     if (type === 'est_imported_detail') {
       state.step1Imported = event.current || (state.step1Imported + 1);
@@ -1390,49 +1367,49 @@ function describeEvent(stage, event) {
     }
     if (type === 'est_import_progress') {
       state.step1Imported = event.current || state.step1Imported;
-      setAction(`Importing EST shipment rows: ${state.step1Imported} imported.`, 'step1');
-      return `EST import progress: ${state.step1Imported} shipments imported.`;
+      setActionLocalized('event.est.importing', { count: state.step1Imported }, 'Importing EST shipment rows: {count} imported.', 'step1');
+      return trf('event.est.progress', { count: state.step1Imported }, 'EST import progress: {count} shipments imported.');
     }
-    if (type === 'est_export_diagnostic') return `EST export recognized as ${event.format || 'expected format'}; parsed rows: ${event.parsedRows || 0}.`;
-    if (type === 'est_backup') return `Previous tracking.csv backed up before EST import.`;
+    if (type === 'est_export_diagnostic') return trf('event.est.exportDiagnostic', { format: event.format || tr('event.est.expectedFormat', 'expected format'), rows: event.parsedRows || 0 }, 'EST export recognized as {format}; parsed rows: {rows}.');
+    if (type === 'est_backup') return tr('event.est.backup', 'Previous tracking.csv backed up before EST import.');
     if (type === 'est_warning') {
       addStep1Warning(event.message, event);
-      return `WARNING: ${event.message}`;
+      return trf('event.warning', { message: event.message }, 'WARNING: {message}');
     }
-    if (type === 'est_stopped') return `EST Desktop export stopped. Imported so far: ${event.imported || 0}.`;
+    if (type === 'est_stopped') return trf('event.est.stopped', { imported: event.imported || 0 }, 'EST Desktop export stopped. Imported so far: {imported}.');
     if (type === 'est_complete') {
       if (event.outcome === 'EMPTY') {
         updateCurrentItem({ step: 'EST Desktop export complete', result: 'No orders found', kind: '' });
         state.step1Orders = 0;
         state.step1Imported = 0;
         setStatus('Complete', 'good', 'step1');
-        setAction('Completed — no EST orders found for the selected date range.', 'step1');
-        return 'Completed — no EST orders found for the selected date range.';
+        setActionLocalized('event.est.empty', {}, 'Completed — no EST orders found for the selected date range.', 'step1');
+        return tr('event.est.empty', 'Completed — no EST orders found for the selected date range.');
       }
       updateCurrentItem({ step: 'EST Desktop export complete', result: `${event.imported || 0} imported`, kind: '' });
       state.step1Orders = event.orders || state.step1Orders;
       state.step1Imported = event.imported || state.step1Imported;
       if (!state.step1TotalRows && event.imported) state.step1TotalRows = event.imported;
       setStatus('Complete', 'good', 'step1');
-      setAction(`EST Desktop export complete. Imported ${event.imported || 0} shipments into tracking.csv.`, 'step1');
-      return `EST Desktop export complete. Orders: ${event.orders || 0}. Imported: ${event.imported || 0}.`;
+      setActionLocalized('event.est.completeAction', { imported: event.imported || 0 }, 'EST Desktop export complete. Imported {imported} shipments into tracking.csv.', 'step1');
+      return trf('event.est.complete', { orders: event.orders || 0, imported: event.imported || 0 }, 'EST Desktop export complete. Orders: {orders}. Imported: {imported}.');
     }
   }
 
   if (stage === 'history') {
-    if (type === 'history_endpoint') return event.message || `Canada Post API endpoint: production ${event.host || ''}`;
+    if (type === 'history_endpoint') return localizedEventMessage || trf('event.history.endpoint', { host: event.host || '' }, 'Canada Post API endpoint: production {host}');
     if (type === 'history_start') {
       operations.runStartedAt ||= Date.now();
       updateCurrentItem({ step: 'Importing shipping history', result: 'In progress', kind: '' });
-      setAction(`Importing Canada Post shipping history from ${event.from} to ${event.to}.`);
-      return `Shipping history import started: ${event.from} to ${event.to}. Endpoint: ${event.endpointEnvironment || 'production'} ${event.endpointHost || ''}.`;
+      setActionLocalized('event.history.importing', { from: event.from, to: event.to }, 'Importing Canada Post shipping history from {from} to {to}.', 'step1');
+      return trf('event.history.started', { from: event.from, to: event.to, environment: event.endpointEnvironment || 'production', host: event.endpointHost || '' }, 'Shipping history import started: {from} to {to}. Endpoint: {environment} {host}.');
     }
-    if (type === 'history_mobo_discovery') return event.message || `MOBO auto-discovery complete. Values to try: ${event.count || 0}.`;
-    if (type === 'history_mobo') return `Checking MOBO/customer ${event.index || '?'}\/${event.total || '?'}: ${event.mobo || 'unknown'}.`;
-    if (type === 'history_manifest_list') return `Manifest links found: ${event.count || 0}.`;
-    if (type === 'history_manifest') return `Manifest ${event.index}/${event.total}: ${event.manifestId || 'unknown id'}`;
-    if (type === 'history_shipments') return `Shipments found for ${event.manifestId || 'manifest'}: ${event.count || 0}.`;
-    if (type === 'history_no_manifest_day') return `No-manifest lookup ${event.index}/${event.total}: ${event.date}.`;
+    if (type === 'history_mobo_discovery') return localizedEventMessage || trf('event.history.moboDiscovery', { count: event.count || 0 }, 'MOBO auto-discovery complete. Values to try: {count}.');
+    if (type === 'history_mobo') return trf('event.history.mobo', { index: event.index || '?', total: event.total || '?', mobo: event.mobo || tr('common.unknown', 'unknown') }, 'Checking MOBO/customer {index}/{total}: {mobo}.');
+    if (type === 'history_manifest_list') return trf('event.history.manifestList', { count: event.count || 0 }, 'Manifest links found: {count}.');
+    if (type === 'history_manifest') return trf('event.history.manifest', { index: event.index, total: event.total, manifest: event.manifestId || tr('event.history.unknownId', 'unknown id') }, 'Manifest {index}/{total}: {manifest}');
+    if (type === 'history_shipments') return trf('event.history.shipments', { manifest: event.manifestId || tr('event.history.manifestFallback', 'manifest'), count: event.count || 0 }, 'Shipments found for {manifest}: {count}.');
+    if (type === 'history_no_manifest_day') return trf('event.history.noManifestDay', { index: event.index, total: event.total, date: event.date }, 'No-manifest lookup {index}/{total}: {date}.');
     if (type === 'history_imported') {
       updateCurrentItem({
         tracking: event.pin || operations.current.tracking,
@@ -1440,18 +1417,18 @@ function describeEvent(stage, event) {
         result: `${event.current || 0} imported`,
         kind: ''
       });
-      return `Imported shipment: ${event.pin} | postal ${event.postalCode || '—'} | reference ${event.reference || '—'}`;
+      return trf('event.history.imported', { tracking: event.pin, postal: event.postalCode || '—', reference: event.reference || '—' }, 'Imported shipment: {tracking} | postal {postal} | reference {reference}');
     }
-    if (type === 'history_backup') return `Previous tracking.csv backed up.`;
+    if (type === 'history_backup') return tr('event.history.backup', 'Previous tracking.csv backed up.');
     if (type === 'history_warning') {
       addStep1Warning(event.message, event);
-      return `WARNING: ${event.message}`;
+      return trf('event.warning', { message: event.message }, 'WARNING: {message}');
     }
-    if (type === 'history_stopped') return `Shipping history import stopped. Imported so far: ${event.imported || 0}.`;
+    if (type === 'history_stopped') return trf('event.history.stopped', { imported: event.imported || 0 }, 'Shipping history import stopped. Imported so far: {imported}.');
     if (type === 'history_complete') {
       updateCurrentItem({ step: 'Shipping history import complete', result: `${event.imported || 0} imported`, kind: '' });
-      setAction(`Shipping history import complete. Imported ${event.imported || 0} shipments into tracking.csv.`);
-      return `Shipping history import complete. Imported: ${event.imported || 0}. Warnings: ${event.warnings || 0}.`;
+      setActionLocalized('event.history.completeAction', { imported: event.imported || 0 }, 'Shipping history import complete. Imported {imported} shipments into tracking.csv.', 'step1');
+      return trf('event.history.complete', { imported: event.imported || 0, warnings: event.warnings || 0 }, 'Shipping history import complete. Imported: {imported}. Warnings: {warnings}.');
     }
   }
 
@@ -1459,23 +1436,27 @@ function describeEvent(stage, event) {
     applyTrackingPrimaryCategory(event);
     if (type === 'tracking_credential_metadata') {
       const valid = event.clientId?.present && event.clientSecret?.present;
-      return `Tracking API configuration ${valid ? 'valid' : 'invalid'}: client ID ${event.clientId?.present ? 'present' : 'missing'}; client secret ${event.clientSecret?.present ? 'present' : 'missing'}; environment ${event.selectedEnvironment || 'test'}; API ${event.apiVersion || '1.0.0'}; scope ${event.scope || 'merchant'}; legacy credentials active: no.`;
+      return trf('event.tracking.credentialMetadata', {
+        validity: tr(valid ? 'common.valid' : 'common.invalid'), clientId: tr(event.clientId?.present ? 'common.present' : 'common.missing'),
+        clientSecret: tr(event.clientSecret?.present ? 'common.present' : 'common.missing'), environment: event.selectedEnvironment || 'test',
+        api: event.apiVersion || '1.0.0', scope: event.scope || 'merchant', legacy: tr('common.no')
+      }, 'Tracking API configuration {validity}: client ID {clientId}; client secret {clientSecret}; environment {environment}; API {api}; scope {scope}; legacy credentials active: {legacy}.');
     }
     if (type === 'tracking_protocol_stage') {
       const labels = {
-        token_request_sent: 'OAuth token request sent', token_acquired: 'OAuth token acquired', token_cached: 'Valid in-memory OAuth token reused',
-        token_failed: 'OAuth token request failed', tracking_request_sent: 'Tracking API request sent', tracking_json_received: 'Tracking JSON response received',
-        token_cleared: 'In-memory OAuth token cleared', tracking_timeout_backoff: 'Tracking resource timeout retry'
+        token_request_sent: tr('event.tracking.protocol.tokenRequest', 'OAuth token request sent'), token_acquired: tr('event.tracking.protocol.tokenAcquired', 'OAuth token acquired'), token_cached: tr('event.tracking.protocol.tokenCached', 'Valid in-memory OAuth token reused'),
+        token_failed: tr('event.tracking.protocol.tokenFailed', 'OAuth token request failed'), tracking_request_sent: tr('event.tracking.protocol.requestSent', 'Tracking API request sent'), tracking_json_received: tr('event.tracking.protocol.jsonReceived', 'Tracking JSON response received'),
+        token_cleared: tr('event.tracking.protocol.tokenCleared', 'In-memory OAuth token cleared'), tracking_timeout_backoff: tr('event.tracking.protocol.timeoutRetry', 'Tracking resource timeout retry')
       };
       if (!state.trackingDiagnosticMode) {
         if (event.stage === 'token_acquired' && !state.trackingTokenLogged) state.trackingTokenLogged = true;
         else if (event.stage !== 'token_failed' && event.stage !== 'tracking_backoff') return null;
       }
       if (event.stage === 'tracking_rate_limit_wait') return null;
-      if (event.stage === 'tracking_backoff') return `RETRY — ${event.category === 'slm_throttle' ? 'Canada Post SLM Monitor throttle' : (event.status ? `HTTP ${event.status}` : 'network timeout')}; waiting ${event.delayMs} ms (${event.retrySource || 'bounded retry'}), retry ${event.retryAttempt}/${event.maxRetries || 2}.`;
-      if (event.stage === 'tracking_timeout_backoff') return `Tracking resource request timed out after ${event.timeoutMs} ms; retry ${event.retryAttempt}/${event.maxRetries} after ${event.delayMs} ms; environment ${event.environment}.`;
+      if (event.stage === 'tracking_backoff') return trf('event.tracking.protocol.backoff', { reason: event.category === 'slm_throttle' ? 'Canada Post SLM Monitor' : (event.status ? `HTTP ${event.status}` : tr('event.tracking.protocol.networkTimeout', 'network timeout')), delay: event.delayMs, source: event.retrySource || tr('event.tracking.protocol.boundedRetry', 'bounded retry'), attempt: event.retryAttempt, max: event.maxRetries || 2 }, 'RETRY — {reason}; waiting {delay} ms ({source}), retry {attempt}/{max}.');
+      if (event.stage === 'tracking_timeout_backoff') return trf('event.tracking.protocol.timeoutBackoff', { timeout: event.timeoutMs, attempt: event.retryAttempt, max: event.maxRetries, delay: event.delayMs, environment: event.environment }, 'Tracking resource request timed out after {timeout} ms; retry {attempt}/{max} after {delay} ms; environment {environment}.');
       const status = event.tokenHttpStatus || event.resourceHttpStatus;
-      return `${labels[event.stage] || 'Tracking protocol stage'}${status ? `; HTTP ${status}` : ''}; environment ${event.environment || 'test'}; API ${event.apiVersion || '1.0.0'}; scope ${event.scope || 'merchant'}${event.expiresIn ? `; expires in ${event.expiresIn} seconds` : ''}.`;
+      return trf('event.tracking.protocol.stage', { label: labels[event.stage] || tr('event.tracking.protocol.unknownStage', 'Tracking protocol stage'), status: status ? `HTTP ${status}` : '—', environment: event.environment || 'test', api: event.apiVersion || '1.0.0', scope: event.scope || 'merchant', expiry: event.expiresIn ? trf('event.tracking.protocol.expiry', { seconds: event.expiresIn }, 'expires in {seconds} seconds') : '—' }, '{label}; status {status}; environment {environment}; API {api}; scope {scope}; {expiry}.');
     }
     if (type === 'tracking_start') {
       operations.runStartedAt ||= Date.now();
@@ -1484,24 +1465,24 @@ function describeEvent(stage, event) {
       state.trackingDiagnosticMode = Boolean(event.diagnosticMode);
       state.trackingTokenLogged = false;
       setStatus('Running', 'warn', 'step2');
-      return `Tracking stage started. ${state.trackingTotal} row${state.trackingTotal === 1 ? '' : 's'}. Sequential requests use a minimum ${event.requestIntervalMs || 3100} ms start-to-start interval plus up to ${event.jitterMaxMs ?? 100} ms positive jitter.`;
+      return trf('event.tracking.started', { total: state.trackingTotal, interval: event.requestIntervalMs || 3100, jitter: event.jitterMaxMs ?? 100 }, 'Tracking stage started. {total} row(s). Sequential requests use a minimum {interval} ms start-to-start interval plus up to {jitter} ms positive jitter.');
     }
     if (type === 'tracking_progress') {
       state.checked = event.current || state.checked;
-      updateCurrentItem({ step: `Tracking check ${event.current}/${event.total}` });
-      return (event.current === event.total || event.current % 10 === 0) ? `Tracking progress: ${event.current}/${event.total}` : null;
+      updateCurrentItem({ step: trf('event.tracking.check', { current: event.current, total: event.total }, 'Tracking check {current}/{total}') });
+      return (event.current === event.total || event.current % 10 === 0) ? trf('event.tracking.progress', { current: event.current, total: event.total }, 'Tracking progress: {current}/{total}') : null;
     }
     if (type === 'pin_late') {
       const pin = trackingDisplayPin(event);
-      setAction(`Late-delivery candidate found: ${pin}. Recorded in the database candidate queue.`);
-      updateCurrentItem({ tracking: pin, step: 'Late-delivery candidate found', result: 'Recorded in candidate queue', kind: 'submitted' });
-      return `${pin} — LATE — successful delivery after delivery standard${trackingDateSuffix(event)}`;
+      setActionLocalized('event.tracking.lateAction', { tracking: pin }, 'Late-delivery candidate found: {tracking}. Recorded in the database candidate queue.', 'step2');
+      updateCurrentItem({ tracking: pin, step: tr('event.tracking.lateCandidate', 'Late-delivery candidate found'), result: tr('event.tracking.recorded', 'Recorded in candidate queue'), kind: 'submitted' });
+      return trf('event.tracking.late', { tracking: pin, dates: trackingDateSuffix(event) }, '{tracking} — LATE — successful delivery after delivery standard{dates}');
     }
     if (type === 'pin_on_time') {
-      return `${trackingDisplayPin(event)} — ON TIME — successful delivery on or before delivery standard${trackingDateSuffix(event)}`;
+      return trf('event.tracking.onTime', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, '{tracking} — ON TIME — successful delivery on or before delivery standard{dates}');
     }
     if (type === 'pin_not_delivered') {
-      return `${trackingDisplayPin(event)} — NOT DELIVERED${trackingDateSuffix(event)}`;
+      return trf('event.tracking.notDelivered', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, '{tracking} — NOT DELIVERED{dates}');
     }
     if (type === 'pin_overdue' || type === 'pin_overdue_in_transit') {
       state.overdueInTransit += 1;
@@ -1509,18 +1490,18 @@ function describeEvent(stage, event) {
       addNeedsReview('warning', event.pin, event.eligibilityReason || `Overdue — ${deliveryStatus.toLowerCase()}`, event.row || '—', '', {
         kind: 'warning', tracking: event.pin, row: event.row || '—', result: 'Missing-package review', status: `Overdue — ${deliveryStatus}`, message: event.eligibilityReason || ''
       });
-      return `${trackingDisplayPin(event)} — NOT DELIVERED — OVERDUE${trackingDateSuffix(event)}`;
+      return trf('event.tracking.overdue', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, '{tracking} — NOT DELIVERED — OVERDUE{dates}');
     }
     if (type === 'pin_review_required') {
       state.reviewRequired += 1;
       addNeedsReview('warning', event.pin, event.eligibilityReason || 'Eligibility review required', event.row || '—', '', {
         kind: 'warning', tracking: event.pin, row: event.row || '—', result: 'Eligibility review', status: event.classification || 'Review required', message: event.eligibilityReason || ''
       });
-      return `${trackingDisplayPin(event)} — ${event.primaryCategory === 'not_delivered' ? 'NOT DELIVERED — REVIEW' : 'REVIEW'}${trackingDateSuffix(event)}`;
+      return trf(event.primaryCategory === 'not_delivered' ? 'event.tracking.notDeliveredReview' : 'event.tracking.review', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, event.primaryCategory === 'not_delivered' ? '{tracking} — NOT DELIVERED — REVIEW{dates}' : '{tracking} — REVIEW{dates}');
     }
     if (type === 'pin_no_data') {
       state.reviewRequired += 1;
-      return `${trackingDisplayPin(event)} — NOT DELIVERED — REVIEW | ${event.eligibilityReason || event.message || 'No usable successful-delivery evidence'}`;
+      return trf('event.tracking.noData', { tracking: trackingDisplayPin(event), reason: event.eligibilityReason || localizedEventMessage || tr('event.tracking.noDeliveryEvidence', 'No usable successful-delivery evidence') }, '{tracking} — NOT DELIVERED — REVIEW | {reason}');
     }
     if (type === 'pin_error') {
       const diagnostic = event.diagnostic || {};
@@ -1542,45 +1523,49 @@ function describeEvent(stage, event) {
         diagnostic.bodyFingerprint ? `body type ${diagnostic.bodyFingerprint}` : ''
         , Number.isFinite(diagnostic.retryAfterSeconds) ? `Retry-After ${diagnostic.retryAfterSeconds} seconds` : ''
       ].filter(Boolean).join('; ');
-      return `${trackingDisplayPin(event)} — ERROR — ${event.message || 'Unknown tracking error'} Protocol diagnostics: ${protocol}.`;
+      return trf('event.tracking.error', { tracking: trackingDisplayPin(event), message: localizedEventMessage || event.message || tr('event.tracking.unknownError', 'Unknown tracking error'), protocol }, '{tracking} — ERROR — {message} Protocol diagnostics: {protocol}.');
     }
     if (type === 'tracking_circuit_open') {
       setStatus('Blocked', 'bad', 'step2');
-      setAction('Stopped — systemic integration failure. Correct the API configuration, then deliberately retry.', 'step2');
-      return `Stopped — systemic integration failure. Attempted: ${event.attempted || event.processed || 0}; total: ${event.total || state.trackingTotal || 0}; remaining: ${event.remaining || 0}; errors: ${event.errors || event.consecutiveFailures || 0}; queue preserved: ${event.queuePreserved ? 'yes' : 'no'}.`;
+      setActionLocalized('event.tracking.systemicFailureAction', {}, 'Stopped — systemic integration failure. Correct the API configuration, then deliberately retry.', 'step2');
+      return trf('event.tracking.circuitOpen', { attempted: event.attempted || event.processed || 0, total: event.total || state.trackingTotal || 0, remaining: event.remaining || 0, errors: event.errors || event.consecutiveFailures || 0, preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, 'Stopped — systemic integration failure. Attempted: {attempted}; total: {total}; remaining: {remaining}; errors: {errors}; queue preserved: {preserved}.');
     }
     if (type === 'tracking_semantic_circuit_open') {
       setStatus('Blocked', 'bad', 'step2');
-      setAction(event.message || 'Stopped — Tracking API responses were received, but required fields could not be normalized.', 'step2');
-      return `${event.message} Attempted: ${event.attempted || 0}; total: ${event.total || 0}; remaining: ${event.remaining || 0}; queue preserved: ${event.queuePreserved ? 'yes' : 'no'}.`;
+      setAction(localizedEventMessage || tr('event.tracking.semanticFailureAction', 'Stopped — Tracking API responses were received, but required fields could not be normalized.'), 'step2');
+      return trf('event.tracking.semanticCircuitOpen', { message: localizedEventMessage || tr('event.tracking.semanticFailureAction'), attempted: event.attempted || 0, total: event.total || 0, remaining: event.remaining || 0, preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, '{message} Attempted: {attempted}; total: {total}; remaining: {remaining}; queue preserved: {preserved}.');
     }
     if (type === 'tracking_invariant_failure') {
       setStatus('Blocked', 'bad', 'step2');
-      setAction(event.message || 'Internal classification invariant failed.', 'step2');
-      return `${event.message || 'Internal classification invariant failed.'} Run stopped; queue preserved: ${event.queuePreserved ? 'yes' : 'no'}.`;
+      setAction(localizedEventMessage || tr('event.tracking.invariantFailureAction', 'Internal classification invariant failed.'), 'step2');
+      return trf('event.tracking.invariantFailure', { message: localizedEventMessage || tr('event.tracking.invariantFailureAction'), preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, '{message} Run stopped; queue preserved: {preserved}.');
     }
     if (type === 'tracking_aborted') {
       updateCurrentItem({ step: 'Tracking stopped', result: 'Systemic integration failure', kind: 'failed' });
       setStatus('Blocked', 'bad', 'step2');
-      setAction(event.message || 'Stopped — incomplete Tracking API run. A deliberate retry is required.', 'step2');
-      return `Run stopped. Attempted: ${event.attempted || 0}; total: ${event.total || 0}; remaining: ${event.remaining || 0}; errors: ${event.errorCount || 0}; queue preserved: ${event.queuePreserved ? 'yes' : 'no'}.`;
+      setAction(localizedEventMessage || tr('event.tracking.incompleteAction', 'Stopped — incomplete Tracking API run. A deliberate retry is required.'), 'step2');
+      return trf('event.tracking.aborted', { attempted: event.attempted || 0, total: event.total || 0, remaining: event.remaining || 0, errors: event.errorCount || 0, preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, 'Run stopped. Attempted: {attempted}; total: {total}; remaining: {remaining}; errors: {errors}; queue preserved: {preserved}.');
     }
     if (type === 'tracking_diagnostic') {
       const evidence = event.semanticValidation?.deliveryEvidence || {};
-      const evidenceSummary = `first qualifying code ${evidence.firstQualifyingEventCode || 'none'}; category ${evidence.firstQualifyingEventCategory || 'none'}; first-attempt timestamp ${evidence.firstAttemptTimestampPresent ? 'present' : 'absent'}; actual-delivery timestamp ${evidence.actualDeliveryTimestampPresent ? 'present' : 'absent'}; same event ${evidence.sameEvent ? 'yes' : 'no'}; provenance ${evidence.provenance || 'none'}; confidence ${evidence.confidence || 'none'}`;
+      const evidenceSummary = trf('event.tracking.evidenceSummary', {
+        code: evidence.firstQualifyingEventCode || tr('common.noneLower', 'none'), category: evidence.firstQualifyingEventCategory || tr('common.noneLower', 'none'),
+        firstAttempt: tr(evidence.firstAttemptTimestampPresent ? 'common.present' : 'common.absent'), delivery: tr(evidence.actualDeliveryTimestampPresent ? 'common.present' : 'common.absent'),
+        sameEvent: tr(evidence.sameEvent ? 'common.yes' : 'common.no'), provenance: evidence.provenance || tr('common.noneLower', 'none'), confidence: evidence.confidence || tr('common.noneLower', 'none')
+      }, 'first qualifying code {code}; category {category}; first-attempt timestamp {firstAttempt}; actual-delivery timestamp {delivery}; same event {sameEvent}; provenance {provenance}; confidence {confidence}');
       return event.ok
-        ? `One-request semantic diagnostic succeeded for ${event.tracking}. API ${event.apiVersion || '1.0.0'}; HTTP ${event.status}; status parsed; events ${event.eventCount}; service source ${event.serviceResolution?.source || 'unknown'}; ${evidenceSummary}; state unchanged.${event.structureExported ? ' Sanitized structure exported.' : ''}`
-        : `One-request semantic diagnostic failed for ${event.tracking}. ${(event.semanticValidation?.failures || []).join(', ') || event.diagnostic?.message || 'Response was not semantically usable.'} ${evidenceSummary}. State modified: no.`;
+        ? trf('event.tracking.diagnosticSucceeded', { tracking: event.tracking, api: event.apiVersion || '1.0.0', status: event.status, count: event.eventCount, source: event.serviceResolution?.source || tr('common.unknown', 'unknown'), evidence: evidenceSummary, export: event.structureExported ? tr('event.tracking.structureExportedSuffix', 'Sanitized structure exported.') : '' }, 'One-request semantic diagnostic succeeded for {tracking}. API {api}; HTTP {status}; status parsed; events {count}; service source {source}; {evidence}; state unchanged. {export}')
+        : trf('event.tracking.diagnosticFailedDetail', { tracking: event.tracking, failures: (event.semanticValidation?.failures || []).join(', ') || event.diagnostic?.message || tr('event.tracking.responseUnusable', 'Response was not semantically usable.'), evidence: evidenceSummary }, 'One-request semantic diagnostic failed for {tracking}. {failures} {evidence}. State modified: no.');
     }
     if (type === 'tracking_diagnostic_complete') {
       const ok = event.status === 'DIAGNOSTIC_COMPLETE';
       setStatus(ok ? 'Diagnostic passed' : 'Diagnostic failed', ok ? 'good' : 'bad', 'step2');
-      setAction('One-request diagnostic finished. Claim, eligibility, and queue state were not modified.', 'step2');
-      return `One-request diagnostic ${ok ? 'complete' : 'failed'}. Tracking resource requests: 1. Eligibility, claims, queue, and summary state changed: no.`;
+      setActionLocalized('event.tracking.diagnosticFinishedAction', {}, 'One-request diagnostic finished. Claim, eligibility, and queue state were not modified.', 'step2');
+      return trf('event.tracking.diagnosticCompleteSummary', { result: tr(ok ? 'common.completeLower' : 'common.failedLower') }, 'One-request diagnostic {result}. Tracking resource requests: 1. Eligibility, claims, queue, and summary state changed: no.');
     }
     if (type === 'pin_skipped') {
       state.skipped += 1;
-      return `Skipped already processed: ${event.pin}`;
+      return trf('event.tracking.skipped', { tracking: event.pin }, 'Skipped already processed: {tracking}');
     }
     if (type === 'tracking_complete') {
       const eligible = Number(event.eligibleLateCount || 0);
@@ -1594,26 +1579,26 @@ function describeEvent(stage, event) {
       state.trackingErrors = errors;
       updateCurrentItem({ step: 'Tracking complete', result: `${eligible} late-delivery candidates` });
       setStatus(errors > 0 ? 'Warnings' : 'Complete', errors > 0 ? 'warn' : 'good', 'step2');
-      setAction(`Tracking complete: ${eligible} late, ${state.onTime} on time, ${state.notDelivered} not delivered, ${review} review required, ${errors} errors.`, 'step2');
-      return `Tracking complete. Checked: ${state.checked}. Late candidates: ${eligible}. On time: ${state.onTime}. Not delivered: ${state.notDelivered}. Delivered but unclassifiable: ${Number(event.deliveredReviewCount || 0)}. Review required: ${review}. Overdue/in transit: ${overdue}. Errors: ${errors}. Counters reconciled: ${event.countersReconciled ? 'yes' : 'no'}.`;
+      setActionLocalized('event.tracking.completeAction', { late: eligible, onTime: state.onTime, notDelivered: state.notDelivered, review, errors }, 'Tracking complete: {late} late, {onTime} on time, {notDelivered} not delivered, {review} review required, {errors} errors.', 'step2');
+      return trf('event.tracking.complete', { checked: state.checked, late: eligible, onTime: state.onTime, notDelivered: state.notDelivered, deliveredReview: Number(event.deliveredReviewCount || 0), review, overdue, errors, reconciled: tr(event.countersReconciled ? 'common.yes' : 'common.no') }, 'Tracking complete. Checked: {checked}. Late candidates: {late}. On time: {onTime}. Not delivered: {notDelivered}. Delivered but unclassifiable: {deliveredReview}. Review required: {review}. Overdue/in transit: {overdue}. Errors: {errors}. Counters reconciled: {reconciled}.');
     }
   }
 
   if (stage === 'submit') {
     if (type === 'diagnostics_started') {
-      return `Detailed diagnostics started: ${event.directory || 'Step 3 diagnostics folder'}`;
+      return trf('event.submit.diagnosticsStarted', { path: event.directory || tr('event.submit.diagnosticsFolder', 'Step 3 diagnostics folder') }, 'Detailed diagnostics started: {path}');
     }
     if (type === 'diagnostics_complete') {
-      return `Detailed diagnostics complete: ${event.summaryPath || event.directory || 'saved'}`;
+      return trf('event.submit.diagnosticsComplete', { path: event.summaryPath || event.directory || tr('common.savedLower', 'saved') }, 'Detailed diagnostics complete: {path}');
     }
     if (type === 'submit_start') {
       builtinBrowserManualActionPending = false;
-      setBuiltinBrowserActivity(true, 'Preparing Canada Post claim workflow…');
+      setBuiltinBrowserActivity(true, tr('event.submit.preparing', 'Preparing Canada Post claim workflow…'));
       operations.submitStartedAt = Date.now();
       state.submitTotal = event.total || 0;
       setStatus('Running', 'warn', 'step3');
-      updateCurrentItem({ step: 'Claim submission started', result: '—', kind: '' });
-      return `Claim submission started. ${state.submitTotal} claims.`;
+      updateCurrentItem({ step: tr('event.submit.startedShort', 'Claim submission started'), result: '—', kind: '' });
+      return trf('event.submit.started', { total: state.submitTotal }, 'Claim submission started. {total} claims.');
     }
     if (type === 'manual_verification_required') {
       builtinBrowserManualActionPending = true;
@@ -1621,21 +1606,21 @@ function describeEvent(stage, event) {
       finishBuiltinBrowserActivity(waitingForManualActionText());
       updateCurrentItem({ step: 'Manual verification required', result: 'Paused for operator', kind: 'captcha' });
       setStatus('Manual verification required', 'bad', 'step3');
-      setAction(event.message || 'Complete verification in the visible built-in browser. Step 3 is paused.', 'step3');
+      setAction(localizedEventMessage || tr('event.submit.manualVerificationAction', 'Complete verification in the visible built-in browser. Step 3 is paused.'), 'step3');
       synchronizeBuiltinBrowserVisibility({ reason: 'manual-verification-required', scrollIntoView: true, force: true, requireVisible: true }).catch(() => {});
-      return event.message || 'Manual verification required. The built-in browser has been brought into view.';
+      return localizedEventMessage || tr('event.submit.manualVerification', 'Manual verification required. The built-in browser has been brought into view.');
     }
     if (type === 'manual_verification_display_failed') {
       builtinBrowserManualActionPending = false;
-      setBuiltinBrowserStatus('Browser display error', 'bad');
-      finishBuiltinBrowserActivity('Browser display error', 'error');
+      setBuiltinBrowserStatus(tr('step3.browser.displayErrorStatus', 'Browser display error'), 'bad');
+      finishBuiltinBrowserActivity(tr('step3.browser.displayErrorStatus', 'Browser display error'), 'error');
       setStatus('Failed', 'bad', 'step3');
-      setAction(event.message || 'Manual verification could not be displayed safely.', 'step3');
-      return event.message || 'Manual verification could not be displayed safely; Step 3 stopped.';
+      setAction(localizedEventMessage || tr('event.submit.manualDisplayFailedAction', 'Manual verification could not be displayed safely.'), 'step3');
+      return localizedEventMessage || tr('event.submit.manualDisplayFailed', 'Manual verification could not be displayed safely; Step 3 stopped.');
     }
     if (type === 'claim_start') {
       builtinBrowserManualActionPending = false;
-      setBuiltinBrowserActivity(true, `Opening claim ${event.index || ''}${event.total ? ` of ${event.total}` : ''}…`);
+      setBuiltinBrowserActivity(true, trf('event.submit.openingClaim', { index: event.index || '', total: event.total || '' }, 'Opening claim {index} of {total}…'));
       updateCurrentItem({
         tracking: event.trackingNumber || '—',
         row: event.row || '—',
@@ -1646,51 +1631,54 @@ function describeEvent(stage, event) {
         kind: '',
         startedAt: Date.now()
       });
-      setAction(`Submitting claim ${event.index}/${event.total}: ${event.trackingNumber}`);
-      return `Claim ${event.index}/${event.total}: ${event.trackingNumber}`;
+      setActionLocalized('event.submit.submitting', { index: event.index, total: event.total, tracking: event.trackingNumber }, 'Submitting claim {index}/{total}: {tracking}', 'step3');
+      return trf('event.submit.claimStarted', { index: event.index, total: event.total, tracking: event.trackingNumber }, 'Claim {index}/{total}: {tracking}');
     }
     if (type === 'captcha_detected') {
       builtinBrowserManualActionPending = true;
       setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
-      finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
+      finishBuiltinBrowserActivity(tr('event.submit.waitingCaptcha', 'Waiting for manual CAPTCHA'));
       updateCurrentItem({ step: 'CAPTCHA detected', result: 'Paused for manual solve', kind: 'captcha' });
       setStatus('CAPTCHA', 'bad', 'step3');
-      setAction('CAPTCHA detected. Solve it manually in the visible browser window. The app is paused and will resume after it clears.', 'step3');
+      setAction(tr('event.submit.captchaAction', 'CAPTCHA detected. Solve it manually in the visible browser window. The app is paused and will resume after it clears.'), 'step3');
       const detail = detailForEvent('captcha', event, 'CAPTCHA detected', {
         issue: 'Manual CAPTCHA solve required',
         status: 'CAPTCHA detected',
-        message: event.message || 'CAPTCHA detected. Solve it manually in the visible browser window.',
+        message: event.message || tr('event.submit.captchaAction', 'CAPTCHA detected. Solve it manually in the visible browser window.'),
         source: 'Notifications / CAPTCHA'
       });
       addRecentResult('captcha', event.trackingNumber || operations.current.tracking, 'CAPTCHA detected', event.row || operations.current.row, detail);
       if (useBuiltinBrowser()) synchronizeBuiltinBrowserVisibility({ reason: 'captcha-required', scrollIntoView: true, force: true, requireVisible: true }).catch(() => {});
-      return `CAPTCHA detected for ${event.trackingNumber || 'current claim'} — solve it manually in the visible browser. The app is paused.${event.screenshotPath ? ` Screenshot saved: ${event.screenshotPath}` : ' Screenshot skipped in built-in browser mode to keep focus.'}`;
+      return trf('event.submit.captchaDetected', {
+        tracking: event.trackingNumber || tr('event.submit.currentClaim', 'current claim'),
+        screenshot: event.screenshotPath ? trf('event.submit.screenshotSaved', { path: event.screenshotPath }, 'Screenshot saved: {path}') : tr('event.submit.screenshotSkipped', 'Screenshot skipped in built-in browser mode to keep focus.')
+      }, 'CAPTCHA detected for {tracking} — solve it manually in the visible browser. The app is paused. {screenshot}');
     }
     if (type === 'captcha_waiting') {
       builtinBrowserManualActionPending = true;
       setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
-      finishBuiltinBrowserActivity('Waiting for manual CAPTCHA');
+      finishBuiltinBrowserActivity(tr('event.submit.waitingCaptcha', 'Waiting for manual CAPTCHA'));
       updateCurrentItem({ step: 'CAPTCHA still active', result: 'Waiting for manual solve', kind: 'already' });
-      setAction(event.message || 'Still waiting for CAPTCHA solve.', 'step3');
-      return event.message || `Still waiting for CAPTCHA solve for ${event.trackingNumber || 'current claim'}.`;
+      setAction(localizedEventMessage || tr('event.submit.captchaWaitingAction', 'Still waiting for CAPTCHA solve.'), 'step3');
+      return localizedEventMessage || trf('event.submit.captchaWaiting', { tracking: event.trackingNumber || tr('event.submit.currentClaim', 'current claim') }, 'Still waiting for CAPTCHA solve for {tracking}.');
     }
     if (type === 'captcha_cleared') {
       builtinBrowserManualActionPending = false;
-      setBuiltinBrowserActivity(true, 'CAPTCHA cleared — resuming…');
+      setBuiltinBrowserActivity(true, tr('event.submit.captchaClearedActivity', 'CAPTCHA cleared — resuming…'));
       updateCurrentItem({ step: 'CAPTCHA cleared', result: 'Resuming', kind: '' });
       setStatus('Running', 'warn', 'step3');
-      setAction(event.message || 'CAPTCHA cleared. Resuming claim submission.', 'step3');
-      return event.message || `CAPTCHA cleared for ${event.trackingNumber || 'current claim'}. Resuming.`;
+      setAction(localizedEventMessage || tr('event.submit.captchaClearedAction', 'CAPTCHA cleared. Resuming claim submission.'), 'step3');
+      return localizedEventMessage || trf('event.submit.captchaCleared', { tracking: event.trackingNumber || tr('event.submit.currentClaim', 'current claim') }, 'CAPTCHA cleared for {tracking}. Resuming.');
     }
     if (type === 'claim_wait') {
       builtinBrowserManualActionPending = false;
-      setBuiltinBrowserActivity(true, 'Waiting for Canada Post confirmation…');
+      setBuiltinBrowserActivity(true, tr('event.submit.waitingConfirmation', 'Waiting for Canada Post confirmation…'));
       updateCurrentItem({ tracking: event.trackingNumber || operations.current.tracking, step: 'Waiting for Canada Post result', result: 'In progress', kind: '' });
-      setAction(`Waiting for Canada Post result for ${event.trackingNumber}. Timeout: ${Math.round((event.ms || 0) / 1000)} seconds.`);
-      return `Waiting for Canada Post result: ${Math.round((event.ms || 0) / 1000)} seconds`;
+      setActionLocalized('event.submit.waitingResultAction', { tracking: event.trackingNumber, seconds: Math.round((event.ms || 0) / 1000) }, 'Waiting for Canada Post result for {tracking}. Timeout: {seconds} seconds.', 'step3');
+      return trf('event.submit.waitingResult', { seconds: Math.round((event.ms || 0) / 1000) }, 'Waiting for Canada Post result: {seconds} seconds');
     }
     if (type === 'claim_submitted') {
-      finishBuiltinBrowserActivity('Claim submitted');
+      finishBuiltinBrowserActivity(tr('event.submit.claimSubmittedActivity', 'Claim submitted'));
       state.submitted += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1700,11 +1688,11 @@ function describeEvent(stage, event) {
         kind: 'submitted'
       });
       addRecentResult('submitted', event.trackingNumber, 'Submitted', event.row, detailForEvent('submitted', event, 'Submitted'));
-      setAction(`Submitted successfully: ${event.trackingNumber}`);
-      return `Submitted: ${event.trackingNumber}`;
+      setAction(trf('event.submit.submittedAction', { tracking: event.trackingNumber }, 'Submitted successfully: {tracking}'));
+      return trf('event.submit.submitted', { tracking: event.trackingNumber }, 'Submitted: {tracking}');
     }
     if (type === 'claim_already_submitted') {
-      finishBuiltinBrowserActivity('Claim already submitted');
+      finishBuiltinBrowserActivity(tr('event.submit.claimAlreadySubmittedActivity', 'Claim already submitted'));
       state.alreadySubmitted += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1716,11 +1704,11 @@ function describeEvent(stage, event) {
       const detail = detailForEvent('already', event, 'Already submitted', { issue: 'Duplicate claim' });
       addRecentResult('already', event.trackingNumber, 'Already submitted', event.row, detail);
       addNeedsReview('already', event.trackingNumber, 'Duplicate claim', event.row, event.screenshotPath, detail);
-      setAction(`Already submitted: ${event.trackingNumber}`);
-      return `ALREADY SUBMITTED row ${event.row}, ${event.trackingNumber}: ${event.message}`;
+      setActionLocalized('event.submit.alreadySubmittedAction', { tracking: event.trackingNumber }, 'Already submitted: {tracking}', 'step3');
+      return trf('event.submit.alreadySubmittedLog', { row: event.row, tracking: event.trackingNumber, message: localizedEventMessage || event.message }, 'ALREADY SUBMITTED row {row}, {tracking}: {message}');
     }
     if (type === 'claim_rejected') {
-      finishBuiltinBrowserActivity('Claim rejected');
+      finishBuiltinBrowserActivity(tr('event.submit.claimRejectedActivity', 'Claim rejected'));
       state.rejected += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1732,11 +1720,11 @@ function describeEvent(stage, event) {
       const detail = detailForEvent('already', event, 'Rejected / ineligible', { issue: event.reason || event.message || 'Canada Post rejection' });
       addRecentResult('already', event.trackingNumber, 'Rejected / ineligible', event.row, detail);
       addNeedsReview('already', event.trackingNumber, event.reason || event.message || 'Canada Post rejection', event.row, event.screenshotPath, detail);
-      setAction(`Rejected by Canada Post: ${event.trackingNumber}`);
-      return `REJECTED row ${event.row}, ${event.trackingNumber}: ${event.message}`;
+      setActionLocalized('event.submit.rejectedAction', { tracking: event.trackingNumber }, 'Rejected by Canada Post: {tracking}', 'step3');
+      return trf('event.submit.rejectedLog', { row: event.row, tracking: event.trackingNumber, message: localizedEventMessage || event.message }, 'REJECTED row {row}, {tracking}: {message}');
     }
     if (type === 'claim_error') {
-      finishBuiltinBrowserActivity('Claim failed', 'error');
+      finishBuiltinBrowserActivity(tr('event.submit.claimFailedActivity', 'Claim failed'), 'error');
       state.failed += 1;
       updateCurrentItem({
         tracking: event.trackingNumber || operations.current.tracking,
@@ -1748,19 +1736,19 @@ function describeEvent(stage, event) {
       const detail = detailForEvent('failed', event, 'Failed', { issue: event.message || 'Claim failed' });
       addRecentResult('failed', event.trackingNumber, 'Failed', event.row, detail);
       addNeedsReview('failed', event.trackingNumber, event.message || 'Claim failed', event.row, event.screenshotPath, detail);
-      setAction(`Failed: ${event.trackingNumber}`);
-      return `ERROR row ${event.row}, ${event.trackingNumber}: ${event.message}`;
+      setActionLocalized('event.submit.failedAction', { tracking: event.trackingNumber }, 'Failed: {tracking}', 'step3');
+      return trf('event.submit.errorLog', { row: event.row, tracking: event.trackingNumber, message: localizedEventMessage || event.message }, 'ERROR row {row}, {tracking}: {message}');
     }
     if (type === 'submit_complete') {
       builtinBrowserManualActionPending = false;
-      finishBuiltinBrowserActivity('Submission run complete');
+      finishBuiltinBrowserActivity(tr('event.submit.runCompleteActivity', 'Submission run complete'));
       operations.finishedAt = Date.now();
       const dryReady = Number(event.dryRunReady || 0);
       updateCurrentItem({ step: 'Submission complete', result: dryReady ? `${dryReady} dry-run ready` : 'Done', kind: '' });
       setStatus('Complete', 'good', 'step3');
       const summary = dryReady
-        ? `Dry run complete. Ready: ${dryReady}, Failed: ${event.failed || 0}. No claims were submitted.`
-        : `Submission complete. Approved/success: ${event.succeeded}, Already submitted: ${event.alreadySubmitted || 0}, Rejected/ineligible: ${event.rejected || 0}, Submission errors: ${event.failed}.`;
+        ? trf('event.submit.dryComplete', { ready: dryReady, failed: event.failed || 0 }, 'Dry run complete. Ready: {ready}, Failed: {failed}. No claims were submitted.')
+        : trf('event.submit.complete', { succeeded: event.succeeded, already: event.alreadySubmitted || 0, rejected: event.rejected || 0, failed: event.failed }, 'Submission complete. Approved/success: {succeeded}, Already submitted: {already}, Rejected/ineligible: {rejected}, Submission errors: {failed}.');
       setAction(summary, 'step3');
       stopOperationsTimer();
       refreshHistory().catch(() => {});
@@ -1770,7 +1758,7 @@ function describeEvent(stage, event) {
 
   if (type === 'stop_requested') {
     updateCurrentItem({ step: 'Stop requested', result: 'Stopping after current item', kind: 'already' });
-    return event.message;
+    return localizedEventMessage || event.message;
   }
   if (type === 'error') {
     updateCurrentItem({ step: 'Runner error', result: 'Failed', kind: 'failed' });
@@ -1780,10 +1768,11 @@ function describeEvent(stage, event) {
       row: operations.current.row,
       result: 'Runner error',
       status: 'Runner error',
-      message: event.message || 'Runner error'
+      message: localizedEventMessage || event.message || tr('event.runnerError', 'Runner error')
     });
-    return `ERROR: ${event.message}`;
+    return `${tr('common.error', 'ERROR')}: ${localizedEventMessage || event.message}`;
   }
+  if (localizedEventMessage) return localizedEventMessage;
   if (event.message) {
     if (/duplicate-claim detector active/i.test(event.message)) return null;
     return event.message;
@@ -1807,7 +1796,7 @@ function historyCell(text, className = '') {
 
 function updateReconciliationCount(count) {
   const pill = $('reconciliationCountPill');
-  if (pill) pill.textContent = `${count || 0} unresolved`;
+  if (pill) setLocalizedText(pill, 'history.unresolvedCount', { count: count || 0 }, '{count} unresolved');
 }
 
 function setHistoryRecordState(root, state) {
@@ -1852,16 +1841,16 @@ function renderHistory(items = []) {
   const root = $('historyList');
   if (!root) return;
   setHistoryRecordState(root, items.length ? '' : 'empty');
-  setText('historyResultCount', `${items.length} ${items.length === 1 ? 'record' : 'records'}`);
+  setLocalizedText($('historyResultCount'), items.length === 1 ? 'history.oneRecord' : 'history.recordCount', { count: items.length }, items.length === 1 ? '1 record' : '{count} records');
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'history-row head';
-  ['Tracking', 'Attempt time', 'Status', 'Confirmation', 'Message'].forEach(value => head.appendChild(historyCell(value)));
+  ['common.tracking', 'history.attemptTime', 'common.status', 'history.confirmation', 'history.message'].forEach(key => head.appendChild(historyCell(tr(key))));
   root.appendChild(head);
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = 'No claim attempts match the current filters.';
+    empty.textContent = tr('history.noAttempts', 'No claim attempts match the current filters.');
     root.appendChild(empty);
     return;
   }
@@ -1870,7 +1859,7 @@ function renderHistory(items = []) {
     row.className = 'history-row';
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
-    row.appendChild(historyCell(item.status));
+    row.appendChild(historyCell(localizedInterfaceValue(item.status)));
     row.appendChild(historyCell(item.confirmationNumber));
     const messageCell = document.createElement('div');
     messageCell.textContent = item.message || '—';
@@ -1878,7 +1867,7 @@ function renderHistory(items = []) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'secondary';
-      button.textContent = 'View evidence';
+      button.textContent = tr('history.viewEvidence', 'View evidence');
       button.style.marginLeft = '8px';
       button.addEventListener('click', async () => {
         const detail = {
@@ -1890,7 +1879,7 @@ function renderHistory(items = []) {
           message: item.message,
           screenshotPath: item.screenshotPath,
           textPath: item.textPath,
-          source: 'History database',
+          source: tr('history.databaseSource', 'History database'),
           createdAt: item.attemptedAt
         };
         const registered = registerDetailItem(detail);
@@ -1912,15 +1901,15 @@ function reconciliationActionButton(item, label, action, className = 'secondary'
   button.addEventListener('click', async () => {
     let confirmationNumber = '';
     if (action === 'submitted') {
-      const confirmation = window.prompt(`Confirmation or ticket number for ${item.trackingNumber} (optional):`, item.confirmationNumber || '');
+      const confirmation = window.prompt(trf('history.reconcile.confirmationPrompt', { tracking: item.trackingNumber }, 'Confirmation or ticket number for {tracking} (optional):'), item.confirmationNumber || '');
       if (confirmation === null) return;
       confirmationNumber = confirmation.trim();
     }
-    const noteValue = window.prompt(`Optional reconciliation note for ${item.trackingNumber}:`, '');
+    const noteValue = window.prompt(trf('history.reconcile.notePrompt', { tracking: item.trackingNumber }, 'Optional reconciliation note for {tracking}:'), '');
     if (noteValue === null) return;
     const result = await window.cpApp.reconcileAttempt({ attemptId: item.id, action, note: noteValue.trim(), confirmationNumber });
     if (!result.ok) {
-      window.alert(result.error || 'Could not update reconciliation state.');
+      window.alert(result.error || tr('history.reconcile.updateFailed', 'Could not update reconciliation state.'));
       return;
     }
     await refreshHistory();
@@ -1935,13 +1924,13 @@ function renderManualShipments(items = []) {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = 'No manually entered shipments.';
+    empty.textContent = tr('history.manual.empty', 'No manually entered shipments.');
     root.appendChild(empty);
     return;
   }
   const head = document.createElement('div');
   head.className = 'history-row head';
-  ['Tracking', 'Reference', 'Service', 'Expected', 'Note'].forEach(value => head.appendChild(historyCell(value)));
+  ['common.tracking', 'history.manual.referenceShort', 'step3.queue.service', 'history.manual.expectedShort', 'history.manual.note'].forEach(key => head.appendChild(historyCell(tr(key))));
   root.appendChild(head);
   for (const item of items) {
     const row = document.createElement('div');
@@ -1962,12 +1951,12 @@ function renderReconciliation(items = []) {
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'reconciliation-row head';
-  ['Tracking', 'Attempt time', 'Status', 'Reason', 'Actions'].forEach(value => head.appendChild(historyCell(value)));
+  ['common.tracking', 'history.attemptTime', 'common.status', 'history.reason', 'history.actions'].forEach(key => head.appendChild(historyCell(tr(key))));
   root.appendChild(head);
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = 'No uncertain or interrupted claims require reconciliation.';
+    empty.textContent = tr('history.reconcile.empty', 'No uncertain or interrupted claims require reconciliation.');
     root.appendChild(empty);
     return;
   }
@@ -1981,25 +1970,25 @@ function renderReconciliation(items = []) {
     row.dataset.attemptId = String(item.id || '');
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
-    row.appendChild(historyCell(item.status));
-    row.appendChild(historyCell(`${item.errorCode ? `${item.errorCode}: ` : ''}${item.message || 'Remote outcome is uncertain.'}`));
+    row.appendChild(historyCell(localizedInterfaceValue(item.status)));
+    row.appendChild(historyCell(`${item.errorCode ? `${item.errorCode}: ` : ''}${item.message || tr('history.reconcile.uncertain', 'Remote outcome is uncertain.')}`));
     const actions = document.createElement('div');
     actions.className = 'history-actions';
     if (item.screenshotPath || item.textPath) {
       const evidence = document.createElement('button');
       evidence.type = 'button';
       evidence.className = 'secondary';
-      evidence.textContent = 'Evidence';
+      evidence.textContent = tr('common.evidence', 'Evidence');
       evidence.addEventListener('click', async () => {
         const loaded = await window.cpApp.loadEvidence({ screenshotPath: item.screenshotPath, textPath: item.textPath });
         if (loaded.ok && item.screenshotPath) await window.cpApp.openEvidence(item.screenshotPath);
-        else window.alert(loaded.error || loaded.pageText || 'No evidence available.');
+        else window.alert(loaded.error || loaded.pageText || tr('history.noEvidence', 'No evidence available.'));
       });
       actions.appendChild(evidence);
     }
-    actions.appendChild(reconciliationActionButton(item, 'Mark submitted', 'submitted', 'success'));
-    actions.appendChild(reconciliationActionButton(item, 'Mark not submitted', 'not_submitted', 'warning'));
-    actions.appendChild(reconciliationActionButton(item, 'Approve retry', 'retry', 'secondary'));
+    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markSubmitted', 'Mark submitted'), 'submitted', 'success'));
+    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markNotSubmitted', 'Mark not submitted'), 'not_submitted', 'warning'));
+    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.approveRetry', 'Approve retry'), 'retry', 'secondary'));
     row.appendChild(actions);
     root.appendChild(row);
   }
@@ -2010,11 +1999,11 @@ function renderManualReviews(items = []) {
   if (!root) return;
   setHistoryRecordState(root, items.length ? '' : 'empty');
   root.textContent = '';
-  setText('manualReviewCountPill', `${items.length} open`);
+  setLocalizedText($('manualReviewCountPill'), 'history.openCount', { count: items.length }, '{count} open');
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = 'No classification records require manual review.';
+    empty.textContent = tr('history.manualReviewEmpty', 'No classification records require manual review.');
     root.appendChild(empty);
     return;
   }
@@ -2022,21 +2011,21 @@ function renderManualReviews(items = []) {
     const row = document.createElement('div');
     row.className = 'history-row';
     row.appendChild(historyCell(item.tracking_number || '—'));
-    row.appendChild(historyCell(item.service_code || 'Unknown service'));
+    row.appendChild(historyCell(item.service_code || tr('history.unknownService', 'Unknown service')));
     row.appendChild(historyCell([item.expected_date, item.first_attempt_date, item.delivery_date].filter(Boolean).join(' → ')));
-    row.appendChild(historyCell(item.reason_codes_json || item.automated_classification || 'Manual review'));
+    row.appendChild(historyCell(item.reason_codes_json || item.automated_classification || tr('history.manualReviewShort', 'Manual review')));
     const actions = document.createElement('div');
     actions.className = 'history-actions';
-    for (const [label, action, className] of [['Add note', 'note', 'secondary'], ['Resolve as candidate', 'resolved_eligible', 'success'], ['Resolve as not a late candidate', 'resolved_not_eligible', 'warning'], ['Defer', 'resolved_deferred', 'secondary']]) {
+    for (const [label, action, className] of [[tr('history.review.addNote', 'Add note'), 'note', 'secondary'], [tr('history.review.resolveCandidate', 'Resolve as candidate'), 'resolved_eligible', 'success'], [tr('history.review.resolveNotCandidate', 'Resolve as not a late candidate'), 'resolved_not_eligible', 'warning'], [tr('history.review.defer', 'Defer'), 'resolved_deferred', 'secondary']]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = className;
       button.textContent = label;
       button.addEventListener('click', async () => {
-        const note = window.prompt(`${label} — the note is retained in the audit history:`, item.note || '');
+        const note = window.prompt(trf('history.review.notePrompt', { action: label }, '{action} — the note is retained in the audit history:'), item.note || '');
         if (note === null) return;
         const result = await window.cpApp.updateManualReview({ reviewId: item.id, action, note });
-        if (!result.ok) window.alert(result.error || 'Could not update manual review.');
+        if (!result.ok) window.alert(result.error || tr('history.review.updateFailed', 'Could not update manual review.'));
         await refreshHistory();
       });
       actions.appendChild(button);
@@ -2093,12 +2082,12 @@ async function refreshHistory(options = {}) {
   ]);
   if (history.ok) renderHistory(history.items || []);
   else {
-    setText('historyResultCount', 'Unavailable');
-    renderHistoryRecordMessage('historyList', history.error || 'Could not load claim attempts.');
+    setLocalizedText($('historyResultCount'), 'common.unavailable', {}, 'Unavailable');
+    renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
   }
   if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
   if (manualReviews.ok) renderManualReviews(manualReviews.items || []);
-  else renderHistoryRecordMessage('manualReviewList', manualReviews.error || 'Could not load manual reviews.');
+  else renderHistoryRecordMessage('manualReviewList', manualReviews.error || tr('history.loadReviewsFailed', 'Could not load manual reviews.'));
   renderHistoryClassifications([
     ...(reviewClassifications.items || []),
     ...(trackingErrors.items || []),
@@ -2107,7 +2096,7 @@ async function refreshHistory(options = {}) {
   if (reconciliation.ok) {
     renderReconciliation(reconciliation.items || []);
     updateReconciliationCount((reconciliation.items || []).length);
-  } else renderHistoryRecordMessage('reconciliationList', reconciliation.error || 'Could not load reconciliation records.');
+  } else renderHistoryRecordMessage('reconciliationList', reconciliation.error || tr('history.loadReconciliationFailed', 'Could not load reconciliation records.'));
   if (dashboard.ok) {
     const data = dashboard.dashboard || {};
     setText('historyShipments', data.shipments || 0);
@@ -2116,7 +2105,7 @@ async function refreshHistory(options = {}) {
     setText('historyFailed', data.failed || 0);
     const integrity = $('databaseIntegrity');
     if (integrity) {
-      integrity.textContent = dashboard.integrity?.ok ? 'Database healthy' : 'Database check failed';
+      setLocalizedText(integrity, dashboard.integrity?.ok ? 'database.healthy' : 'database.failed', {}, dashboard.integrity?.ok ? 'Database healthy' : 'Database check failed');
       integrity.className = dashboard.integrity?.ok ? 'pill good' : 'pill bad';
     }
   }
@@ -2135,16 +2124,16 @@ function setSiteHealthRunning(running) {
   const button = $('runSiteHealth');
   if (!button) return;
   button.disabled = Boolean(running);
-  button.textContent = running ? 'Health Check Running…' : 'Run Canada Post Workflow Health Check';
+  setLocalizedText(button, running ? 'health.running' : 'health.run', {}, running ? 'Health Check Running…' : 'Run Canada Post Workflow Health Check');
 }
 
 async function runSiteHealthCheck() {
   currentProcessStep = 'step3';
   const resultEl = $('siteHealthResult');
   setSiteHealthRunning(true);
-  if (resultEl) resultEl.textContent = 'Checking Canada Post workflow…';
+  if (resultEl) setLocalizedText(resultEl, 'health.checking', {}, 'Checking Canada Post workflow…');
   try {
-    setBuiltinBrowserStatus('Browser preparing', 'warn');
+    setBuiltinBrowserStatus(tr('step3.browser.preparingStatus', 'Preparing browser'), 'warn');
     await synchronizeBuiltinBrowserVisibility({
       reason: 'site-health-start',
       scrollIntoView: true,
@@ -2153,11 +2142,11 @@ async function runSiteHealthCheck() {
     const result = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
     if (!result.ok) {
       setSiteHealthRunning(false);
-      if (resultEl) resultEl.textContent = result.error || 'Could not start workflow health check.';
+      if (resultEl) resultEl.textContent = result.error || tr('health.startFailed', 'Could not start workflow health check.');
     }
   } catch (error) {
     setSiteHealthRunning(false);
-    if (resultEl) resultEl.textContent = error.message || 'Could not start workflow health check.';
+    if (resultEl) resultEl.textContent = error.message || tr('health.startFailed', 'Could not start workflow health check.');
   }
 }
 
@@ -2169,10 +2158,10 @@ function requestBackupPassword({ confirm = false, restore = false } = {}) {
   const confirmation = $('backupPasswordConfirm');
   const confirmationField = $('backupPasswordConfirmField');
   const error = $('backupPasswordError');
-  $('backupPasswordTitle').textContent = restore ? 'Unlock encrypted backup' : 'Create encrypted backup';
-  $('backupPasswordMessage').textContent = restore
-    ? 'Enter the password used when this backup was created. It is not saved.'
-    : 'Enter a strong password of at least 12 characters. It is never saved and cannot be recovered.';
+  setLocalizedText($('backupPasswordTitle'), restore ? 'backup.unlockTitle' : 'backup.createTitle', {}, restore ? 'Unlock encrypted backup' : 'Create encrypted backup');
+  setLocalizedText($('backupPasswordMessage'), restore ? 'backup.unlockMessage' : 'backup.createMessage', {}, restore
+    ? 'Enter the password used when this encrypted backup was created.'
+    : 'Enter a strong password of at least 12 characters. It is never saved and cannot be recovered.');
   confirmationField?.classList.toggle('hidden', !confirm);
   input.value = '';
   confirmation.value = '';
@@ -2197,10 +2186,10 @@ function submitBackupPassword() {
   const confirmationVisible = !$('backupPasswordConfirmField')?.classList.contains('hidden');
   const error = $('backupPasswordError');
   if (password.length < 12) {
-    error.textContent = 'Use at least 12 characters.'; error.classList.remove('hidden'); return;
+    error.textContent = tr('backup.tooShort', 'Use at least 12 characters.'); error.classList.remove('hidden'); return;
   }
   if (confirmationVisible && password !== ($('backupPasswordConfirm')?.value || '')) {
-    error.textContent = 'The passwords do not match.'; error.classList.remove('hidden'); return;
+    error.textContent = tr('backup.mismatch', 'The passwords do not match.'); error.classList.remove('hidden'); return;
   }
   closeBackupPasswordModal(password);
 }
@@ -2209,13 +2198,12 @@ async function createAppBackup() {
   const password = await requestBackupPassword({ confirm: true });
   if (!password) return;
   const result = await window.cpApp.createBackup({ password });
-  if (result.ok) window.alert(`Backup created:
-${result.path}`);
-  else if (!result.canceled) window.alert(result.error || 'Could not create backup.');
+  if (result.ok) window.alert(trf('backup.created', { path: result.path }, 'Backup created:\n{path}'));
+  else if (!result.canceled) window.alert(result.error || tr('backup.createFailed', 'Could not create backup.'));
 }
 
 async function restoreAppBackup() {
-  if (!window.confirm('Restore a backup? The current database and replaced data files will be preserved in rollback copies.')) return;
+  if (!window.confirm(tr('backup.restoreConfirm', 'Restore a backup? The current database and replaced data files will be preserved in rollback copies.'))) return;
   let result = await window.cpApp.restoreBackup({});
   if (result.passwordRequired) {
     const password = await requestBackupPassword({ restore: true });
@@ -2223,11 +2211,11 @@ async function restoreAppBackup() {
     result = await window.cpApp.restoreBackup({ password });
   }
   if (result.ok) {
-    window.alert(`Backup restored. ${result.restoredDataFiles || 0} data/evidence files restored.`);
+    window.alert(trf('backup.restored', { count: result.restoredDataFiles || 0 }, 'Backup restored. {count} data/evidence files restored.'));
     await refreshConfig();
     await refreshHistory();
   } else if (!result.canceled) {
-    window.alert(result.error || 'Could not restore backup.');
+    window.alert(result.error || tr('backup.restoreFailed', 'Could not restore backup.'));
   }
 }
 
@@ -2317,29 +2305,29 @@ async function deletePrivacyData() {
 
 async function refreshBrowserSessionStatus() {
   const status = $('browserSessionStatus');
-  if (status) status.textContent = 'Checking local browser session…';
+  if (status) setLocalizedText(status, 'browserSession.checking', {}, 'Checking local browser session…');
   const result = await window.cpApp.browserSessionStatus();
   if (status) status.textContent = result.ok
-    ? (result.exists ? 'A local Canada Post browser session exists on this device.' : 'No saved Canada Post browser session was detected.')
-    : (result.error || 'Could not inspect browser session state.');
+    ? (result.exists ? tr('browserSession.exists', 'A local Canada Post browser session exists on this device.') : tr('browserSession.none', 'No saved Canada Post browser session was detected.'))
+    : (result.error || tr('browserSession.inspectFailed', 'Could not inspect browser session state.'));
 }
 
 async function clearBrowserSession() {
-  const confirmed = window.confirm('Log out and clear the Canada Post browser profile? Cookies, cache and site storage will be removed. Claim history and settings will be preserved.');
+  const confirmed = window.confirm(tr('browserSession.clearConfirm', 'Log out and clear the Canada Post browser profile? Cookies, cache and site storage will be removed. Claim history and settings will be preserved.'));
   if (!confirmed) return;
   const result = await window.cpApp.clearBrowserSession({ confirmed: true, resetProfile: true });
-  if (!result.ok) return window.alert(result.error || 'Could not clear browser data.');
-  window.alert('Browser cookies, cache and site storage were cleared. Claim history was preserved.');
+  if (!result.ok) return window.alert(result.error || tr('browserSession.clearFailed', 'Could not clear browser data.'));
+  window.alert(tr('browserSession.cleared', 'Browser cookies, cache and site storage were cleared. Claim history was preserved.'));
   await refreshBrowserSessionStatus();
 }
 
 async function createDiagnosticZip() {
   const result = await window.cpApp.previewSupportBundle({});
-  if (!result?.ok) return window.alert(result?.error || 'Could not preview the support bundle.');
+  if (!result?.ok) return window.alert(result?.error || tr('support.previewFailed', 'Could not preview the support bundle.'));
   const preview = result.preview;
   $('supportReferenceId').textContent = preview.supportReferenceId;
-  $('supportBundleMetadata').textContent = `${preview.applicationVersion} / ${preview.platform}-${preview.architecture} / database schema ${preview.databaseSchemaVersion} / parser ${preview.trackingParserVersion}`;
-  $('supportBundleExclusions').textContent = `Always excluded: ${preview.exclusions.join(', ')}.`;
+  $('supportBundleMetadata').textContent = trf('support.metadata', { version: preview.applicationVersion, platform: preview.platform, architecture: preview.architecture, schema: preview.databaseSchemaVersion, parser: preview.trackingParserVersion }, '{version} / {platform}-{architecture} / database schema {schema} / parser {parser}');
+  $('supportBundleExclusions').textContent = trf('support.exclusions', { exclusions: preview.exclusions.join(', ') }, 'Always excluded: {exclusions}.');
   for (const [name, detail] of Object.entries(preview.components)) {
     const input = document.querySelector(`[data-support-component="${name}"]`);
     if (input) input.checked = detail.selected;
@@ -2364,8 +2352,8 @@ async function confirmSupportBundle() {
   });
   if (result.ok) {
     closeSupportBundle();
-    window.alert(`Sanitized support bundle ${result.supportReferenceId} created:\n${result.path}`);
-  } else if (!result.canceled) window.alert(result.error || 'Could not create support bundle.');
+    window.alert(trf('support.created', { reference: result.supportReferenceId, path: result.path }, 'Sanitized support bundle {reference} created:\n{path}'));
+  } else if (!result.canceled) window.alert(result.error || tr('support.createFailed', 'Could not create support bundle.'));
 }
 
 async function exportClaimHistory() {
@@ -2373,15 +2361,14 @@ async function exportClaimHistory() {
     search: getFieldValue('historySearch'),
     status: $('historyStatusFilter')?.value || 'all'
   });
-  if (result.ok) window.alert(`Claim history exported:
-${result.path}`);
-  else if (!result.canceled) window.alert(result.error || 'Could not export claim history.');
+  if (result.ok) window.alert(trf('history.exported', { path: result.path }, 'Claim history exported:\n{path}'));
+  else if (!result.canceled) window.alert(result.error || tr('history.exportFailed', 'Could not export claim history.'));
 }
 
 async function addManualShipment() {
   const trackingNumber = getFieldValue('manualTracking');
   if (!trackingNumber) {
-    window.alert('Tracking number is required.');
+    window.alert(tr('history.manual.trackingRequired', 'Tracking number is required.'));
     return;
   }
   const result = await window.cpApp.addManualShipment({
@@ -2394,7 +2381,7 @@ async function addManualShipment() {
     note: getFieldValue('manualNote')
   });
   if (!result.ok) {
-    window.alert(result.error || 'Could not save shipment.');
+    window.alert(result.error || tr('history.manual.saveFailed', 'Could not save shipment.'));
     return;
   }
   for (const id of ['manualTracking', 'manualReference', 'manualService', 'manualPostal', 'manualExpected', 'manualDelivery', 'manualNote']) {
@@ -2449,13 +2436,13 @@ function validateSettingsForStep(stepId) {
   const settings = collectUserSettingsOptions();
   const missing = [];
   if (stepId === 'step1' || stepId === 'step3') {
-    if (!settings.webUsername) missing.push('Canada Post Web Username');
-    if (!settings.webPassword && !state.passwordStored) missing.push('Canada Post Web Password');
+    if (!settings.webUsername) missing.push(tr('settings.website.username', 'Canada Post Web Username'));
+    if (!settings.webPassword && !state.passwordStored) missing.push(tr('settings.website.password', 'Canada Post Web Password'));
   }
-  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push('EST customer number');
+  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'EST customer number'));
   if (stepId === 'step3') {
-    if (!settings.claimStreetNumber) missing.push('Claim sender street number');
-    if (!settings.claimStreetName) missing.push('Claim sender street name dropdown option');
+    if (!settings.claimStreetNumber) missing.push(tr('settings.sender.streetNumberShort', 'Claim sender street number'));
+    if (!settings.claimStreetName) missing.push(tr('settings.sender.streetNameShort', 'Claim sender street name dropdown option'));
   }
   return missing;
 }
@@ -2467,8 +2454,8 @@ async function saveUserSettings(showLog = true) {
   const res = await window.cpApp.saveConfig(payload);
   if (!res.ok) {
     const status = $('settingsStatus');
-    if (status) { status.textContent = res.error || 'Settings were not saved.'; status.className = 'pill bad'; }
-    if (showLog) log(res.error || 'Settings were not saved.', 'log-submit-error', 'step1');
+    if (status) { status.textContent = res.error || tr('settings.saveFailed', 'Settings were not saved.'); status.className = 'pill bad'; }
+    if (showLog) log(res.error || tr('settings.saveFailed', 'Settings were not saved.'), 'log-submit-error', 'step1');
     return res;
   }
   if (res.ok) {
@@ -2477,7 +2464,7 @@ async function saveUserSettings(showLog = true) {
     state.trackingDiagnosticGateSatisfied = !!res.trackingDiagnosticGateSatisfied;
     const status = $('settingsStatus');
     if (status) {
-      status.textContent = res.warning || (state.passwordStored ? 'Saved with encrypted password' : 'Saved without password');
+      status.textContent = res.warning || (state.passwordStored ? tr('settings.savedEncrypted', 'Saved with encrypted password') : tr('settings.savedWithoutPassword', 'Saved without password'));
       status.className = res.warning ? 'pill warn' : 'pill good';
     }
     if ($('webPassword')) $('webPassword').value = '';
@@ -2485,7 +2472,7 @@ async function saveUserSettings(showLog = true) {
     if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
     if ($('trackingApiCredentialMetadata') && res.trackingApiCredentialMetadata) renderTrackingApiCredentialMetadata(res.trackingApiCredentialMetadata);
     renderTrackingDiagnosticGate();
-    if (showLog) log(res.warning || 'User settings saved.', res.warning ? 'log-warning' : '', 'step1');
+    if (showLog) log(res.warning || tr('settings.saved', 'User settings saved.'), res.warning ? 'log-warning' : '', 'step1');
   }
   return res;
 }
@@ -2494,7 +2481,7 @@ async function clearTrackingApiCredentials() {
   const confirmed = window.confirm(tr('tracking.credentials.clearConfirm', 'Clear the current Tracking API client ID and client secret from encrypted storage? Website credentials will not be changed.'));
   if (!confirmed) return;
   const result = await window.cpApp.clearTrackingApiCredentials({ confirmed: true });
-  if (!result.ok) return window.alert(result.error || 'Could not clear Tracking API credentials.');
+  if (!result.ok) return window.alert(result.error || tr('tracking.credentials.clearFailed', 'Could not clear Tracking API credentials.'));
   state.trackingApiCredentialsStored = false;
   state.trackingDiagnosticGateSatisfied = false;
   await refreshConfig();
@@ -2555,14 +2542,22 @@ function buildTrackingOnlyOptions() {
 function renderTrackingApiCredentialMetadata(metadata = {}) {
   const element = $('trackingApiCredentialMetadata');
   if (!element) return;
-  element.textContent = `Tracking API ${metadata.apiVersion || state.trackingApiVersion} — client ID: ${metadata.clientId?.present ? 'present' : 'missing'}; client secret: ${metadata.clientSecret?.present ? 'present' : 'missing'}; selected environment: ${metadata.selectedEnvironment || 'test'}; credential environment: ${metadata.credentialEnvironment || 'unknown'}; scope: ${metadata.scope || 'merchant'}. No lengths, values, hashes, or token metadata are displayed.`;
+  element.textContent = trf('settings.api.metadata', {
+    version: metadata.apiVersion || state.trackingApiVersion,
+    clientId: tr(metadata.clientId?.present ? 'common.present' : 'common.missing'),
+    clientSecret: tr(metadata.clientSecret?.present ? 'common.present' : 'common.missing'),
+    selectedEnvironment: metadata.selectedEnvironment || 'test',
+    credentialEnvironment: metadata.credentialEnvironment || tr('common.unknown', 'unknown'),
+    scope: metadata.scope || 'merchant'
+  }, 'Tracking API {version} — client ID: {clientId}; client secret: {clientSecret}; selected environment: {selectedEnvironment}; credential environment: {credentialEnvironment}; scope: {scope}. No lengths, values, hashes, or token metadata are displayed.');
 }
 
 function renderTrackingDiagnosticGate() {
   const element = $('trackingDiagnosticGate');
-  if (element) element.textContent = state.trackingDiagnosticGateSatisfied
-    ? `Diagnostic gate passed for the current credential revision, ${state.trackingApiEnvironment}, and Tracking API ${state.trackingApiVersion}.`
-    : `Normal Step 2 is disabled until the one-shipment diagnostic succeeds for the current credential revision, ${state.trackingApiEnvironment}, and Tracking API ${state.trackingApiVersion}.`;
+  if (element) element.textContent = trf(state.trackingDiagnosticGateSatisfied ? 'settings.api.gatePassed' : 'settings.api.gateRequired', {
+    environment: state.trackingApiEnvironment,
+    version: state.trackingApiVersion
+  });
   if ($('runTrackingOnly')) $('runTrackingOnly').disabled = !state.trackingDiagnosticGateSatisfied;
 }
 
@@ -2574,11 +2569,7 @@ function updateClaimQueueCount() {
   const { selected, total, executable, blocked } = step3QueueController.snapshot();
   const pill = $('claimQueueCount');
   if (pill) {
-    pill.textContent = trf(
-      'step3.selectedExecutableCount',
-      { selected, executable, blocked, total },
-      '{selected} selected · {executable} executable · {blocked} blocked · {total} total'
-    );
+    setLocalizedText(pill, 'step3.selectedExecutableCount', { selected, executable, blocked, total }, '{selected} selected · {executable} executable · {blocked} blocked · {total} total');
     pill.className = `pill ${selected > 0 ? 'good' : (executable > 0 ? 'warn' : 'bad')}`;
   }
   const runButton = $('runSubmitOnly');
@@ -2653,7 +2644,7 @@ function renderClaimQueue(items = [], preserveState = false) {
   const serviceFilter = $('claimQueueServiceFilter');
   if (serviceFilter && !preserveState) {
     serviceFilter.textContent = '';
-    for (const [value, label] of [['all', 'All services'], ...services.map(value => [value, value])]) {
+    for (const [value, label] of [['all', tr('step3.queue.allServices', 'All services')], ...services.map(value => [value, value])]) {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = label;
@@ -2844,13 +2835,13 @@ async function startRun(importHistory = false) {
   currentProcessStep = importHistory ? 'step1' : 'step2';
   resetRunUi(currentProcessStep);
   setStatus('Running', 'warn', currentProcessStep);
-  setAction(importHistory ? 'Importing shipping history, then running tracking and claims.' : 'Starting tracking and claims run.');
+  setActionLocalized(importHistory ? 'run.importAndStart' : 'run.starting', {}, importHistory ? 'Importing shipping history, then running tracking and claims.' : 'Starting tracking and claims run.', currentProcessStep);
 
   const res = await window.cpApp.startRun(buildRunOptions(importHistory));
   if (!res.ok) {
-    finishBuiltinBrowserActivity('Could not start browser workflow', 'error');
+    finishBuiltinBrowserActivity(tr('step3.browser.startFailed', 'Could not start browser workflow'), 'error');
     setStatus('Failed', 'bad');
-    setAction(res.error || 'Could not start run.');
+    setAction(res.error || tr('run.startFailed', 'Could not start run.'));
     updateCurrentItem({ step: 'Could not start run', result: res.error || 'Failed', kind: 'failed' });
     addNeedsReview('failed', '—', res.error || 'Could not start run', '—', '', {
       kind: 'failed',
@@ -2872,12 +2863,12 @@ async function startTrackingOnly() {
   currentProcessStep = 'step2';
   resetRunUi('step2');
   setStatus('Running', 'warn', 'step2');
-  setAction('Comparing successful-delivery dates with original Delivery Standards and recording late-delivery candidates.', 'step2');
+  setActionLocalized('step2.comparingAction', {}, 'Comparing successful-delivery dates with original Delivery Standards and recording late-delivery candidates.', 'step2');
 
   const res = await window.cpApp.runTracking(buildTrackingOnlyOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || 'Could not start tracking check.');
+    setAction(res.error || tr('step2.startFailed', 'Could not start tracking check.'));
     updateCurrentItem({ step: 'Could not start tracking check', result: res.error || 'Failed', kind: 'failed' });
     addNeedsReview('failed', '—', res.error || 'Could not start tracking check', '—', '', {
       kind: 'failed',
@@ -2937,7 +2928,7 @@ async function runTrackingDiagnostic({ structureExport = false } = {}) {
   if (!diagnosticRow) return;
   currentProcessStep = 'step2';
   setStatus(structureExport ? 'Structural diagnostic running' : 'Diagnostic running', 'warn', 'step2');
-  setAction(structureExport ? 'Generating a value-free structural report from one authorized Tracking API response.' : 'Testing the selected Developer Portal Tracking API environment with one authorized shipment.', 'step2');
+  setActionLocalized(structureExport ? 'step2.diagnostic.structureAction' : 'step2.diagnostic.connectionAction', {}, structureExport ? 'Generating a value-free structural report from one authorized Tracking API response.' : 'Testing the selected Developer Portal Tracking API environment with one authorized shipment.', 'step2');
   if (!structureExport) log('One-request OAuth/JSON diagnostic deliberately confirmed. Configuration, token, resource, and state-integrity stages will be reported without secrets.', '', 'step2');
   const res = await window.cpApp.runTracking({
     ...buildTrackingOnlyOptions(),
@@ -2949,7 +2940,7 @@ async function runTrackingDiagnostic({ structureExport = false } = {}) {
   });
   if (!res.ok) {
     setStatus(structureExport ? 'Structural diagnostic blocked' : 'Diagnostic blocked', 'bad', 'step2');
-    setAction(res.error || (structureExport ? 'Could not start sanitized structural diagnostic.' : 'Could not start one-request API diagnostic.'), 'step2');
+    setAction(res.error || tr(structureExport ? 'step2.diagnostic.structureStartFailed' : 'step2.diagnostic.startFailed', structureExport ? 'Could not start sanitized structural diagnostic.' : 'Could not start one-request API diagnostic.'), 'step2');
     if (!structureExport) log(res.error || 'Could not start one-request API diagnostic.', 'log-submit-error', 'step2');
   }
 }
@@ -2959,12 +2950,14 @@ async function testTrackingConnection() { return runTrackingDiagnostic({ structu
 async function exportTrackingStructure() { return runTrackingDiagnostic({ structureExport: true }); }
 
 async function discardIncompleteTracking() {
-  const confirmed = window.confirm('Discard the active incomplete Step 2 staging state? Historical completed runs will be preserved.');
+  const confirmed = window.confirm(tr('step2.discardConfirm', 'Discard the active incomplete Step 2 staging state? Historical completed runs will be preserved.'));
   if (!confirmed) return;
   const result = await window.cpApp.discardIncompleteTracking({ confirmed: true });
-  if (!result.ok) return window.alert(result.error || 'Could not discard incomplete Step 2 state.');
-  setStatus('Incomplete run discarded', '', 'step2');
-  setAction(result.message || 'Incomplete Step 2 staging was discarded; completed history was preserved.', 'step2');
+  if (!result.ok) return window.alert(result.error || tr('step2.discardFailed', 'Could not discard incomplete Step 2 state.'));
+  setLocalizedText($('step2RunStatus'), 'step2.discardedStatus', {}, 'Incomplete run discarded');
+  $('step2RunStatus').className = 'pill';
+  if (result.messageKey) setActionLocalized(result.messageKey, result.messageValues || {}, result.message || '', 'step2');
+  else setAction(result.message || tr('step2.discarded', 'Incomplete Step 2 staging was discarded; completed history was preserved.'), 'step2');
   await refreshClaimQueue();
 }
 
@@ -2985,7 +2978,7 @@ async function startSubmitOnly() {
   const preflight = await runStep3Preflight(preflightOptions);
   if (!preflight?.ready) {
     setStatus('Blocked', 'bad', 'step3');
-    setAction('Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
+    setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
     log('Step 3 was blocked by the readiness check.', 'log-submit-error', 'step3');
     return;
   }
@@ -3004,7 +2997,7 @@ async function startSubmitOnly() {
     canaryMode = confirmation.canaryMode;
     if (!confirmation.confirmed) {
       setStatus('Cancelled', '', 'step3');
-      setAction('Live submission cancelled before the browser workflow started.', 'step3');
+      setActionLocalized('step3.liveCancelledAction', {}, 'Live submission cancelled before the browser workflow started.', 'step3');
       log('Live submission cancelled.', 'log-warning', 'step3');
       return;
     }
@@ -3029,7 +3022,7 @@ async function startSubmitOnly() {
       });
     }
     setStatus('Failed', 'bad');
-    setAction(res.error || 'Could not start claim submission.');
+    setAction(res.error || tr('step3.startFailed', 'Could not start claim submission.'));
     updateCurrentItem({ step: 'Could not start claim submission', result: res.error || 'Failed', kind: 'failed' });
     addNeedsReview('failed', '—', res.error || 'Could not start claim submission', '—', '', {
       kind: 'failed',
@@ -3061,33 +3054,34 @@ async function refreshConfig() {
   const isolatedBanner = $('isolatedTestBanner');
   if (isolatedBanner) isolatedBanner.hidden = !state.isolatedTestMode;
   if ($('isolatedTestPath')) $('isolatedTestPath').textContent = state.isolatedTestMode ? String(cfg.isolatedUserDataPath || '') : '';
-  if (state.isolatedTestMode) document.title = 'Canada Post Claim Runner [ISOLATED TEST DATA]';
+  if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
   for (const id of ['runSubmitOnly', 'runSiteHealth', 'checkForUpdates', 'createBackup', 'restoreBackup', 'createDiagnostics', 'exportHistory']) {
     const control = $(id);
     if (!control) continue;
     control.disabled = state.isolatedTestMode;
-    if (state.isolatedTestMode) control.title = 'Disabled while isolated test data is active.';
+    if (state.isolatedTestMode) control.title = tr('app.isolatedDisabledTitle', 'Disabled while isolated test data is active.');
   }
   state.passwordStored = !!cfg.passwordStored;
   state.trackingApiCredentialsStored = !!(cfg.trackingApiCredentialsStored || cfg.hasTrackingApiCredentials);
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
   state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
-  if ($('siteHealthResult') && cfg.portalCompatibility) {
-    $('siteHealthResult').textContent = cfg.portalCompatibility.ok
-      ? 'Portal compatibility fingerprint is current for live batches.'
-      : (cfg.portalCompatibility.reason || 'Portal compatibility has not been confirmed for live batches.');
-  }
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
   await applyLocale(cfg.locale || 'en-CA');
+  if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
+  if ($('siteHealthResult') && cfg.portalCompatibility) {
+    setLocalizedText($('siteHealthResult'), cfg.portalCompatibility.ok ? 'health.portalCurrent' : 'health.portalNotConfirmed', {}, cfg.portalCompatibility.ok
+      ? 'Portal compatibility fingerprint is current for live batches.'
+      : 'Portal compatibility has not been confirmed for live batches.');
+  }
   if ($('webUsername')) $('webUsername').value = cfg.webUsername || '';
   if ($('webPassword')) {
     $('webPassword').value = '';
-    $('webPassword').placeholder = state.passwordStored ? 'Saved password available — leave blank to reuse' : 'Web login password';
+    $('webPassword').placeholder = tr(state.passwordStored ? 'settings.website.passwordSavedPlaceholder' : 'settings.website.passwordPlaceholder');
   }
-  if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = state.trackingApiCredentialsStored ? 'Saved API Key available — enter both current fields to replace' : 'Developer Portal API Key'; }
-  if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = state.trackingApiCredentialsStored ? 'Saved API Secret available — enter both current fields to replace' : 'Developer Portal API Secret'; }
+  if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientIdSavedPlaceholder' : 'settings.api.clientIdPlaceholder'); }
+  if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
   if ($('trackingApiEnvironment')) $('trackingApiEnvironment').value = state.trackingApiEnvironment;
   renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
   renderTrackingDiagnosticGate();
@@ -3121,7 +3115,7 @@ async function refreshConfig() {
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
   if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '0.4.0-beta.1';
   if ($('buildTrustStatus')) {
-    $('buildTrustStatus').textContent = cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build';
+    setLocalizedText($('buildTrustStatus'), cfg.signedBuild ? 'build.signed' : 'build.unsigned', {}, cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build');
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
   }
   updateReconciliationCount(Number(cfg.reconciliationCount || 0));
@@ -3136,10 +3130,10 @@ async function refreshConfig() {
   const status = $('settingsStatus');
   if (status) {
     const webStatus = state.passwordStored
-      ? (cfg.secureCredentialStorage ? 'web password saved with OS encryption' : 'web password saved with device-local encryption')
-      : 'web password not saved';
-    const apiStatus = state.trackingApiCredentialsStored ? (state.trackingDiagnosticGateSatisfied ? 'Tracking API ready' : 'Tracking API diagnostic required') : 'Tracking API credentials missing';
-    status.textContent = `Loaded / ${webStatus} / ${apiStatus}${cfg.credentialBackend ? ` (${cfg.credentialBackend})` : ''}`;
+      ? (cfg.secureCredentialStorage ? tr('settings.status.webOsEncrypted') : tr('settings.status.webLocalEncrypted'))
+      : tr('settings.status.webNotSaved');
+    const apiStatus = state.trackingApiCredentialsStored ? (state.trackingDiagnosticGateSatisfied ? tr('settings.status.apiReady') : tr('settings.status.apiDiagnostic')) : tr('settings.status.apiMissing');
+    status.textContent = trf('settings.status.loaded', { webStatus, apiStatus, backend: cfg.credentialBackend ? ` (${cfg.credentialBackend})` : '' }, 'Loaded / {webStatus} / {apiStatus}{backend}');
     status.className = state.passwordStored
       ? (cfg.secureCredentialStorage ? 'pill good' : 'pill warn')
       : (state.trackingApiCredentialsStored ? 'pill warn' : 'pill bad');
@@ -3180,7 +3174,7 @@ function renderSetupWizardReadiness(config) {
   });
   $('setupReadinessList').innerHTML = rows.join('');
   $('setupFinish').disabled = !summary.ready;
-  $('setupFinish').title = summary.ready ? '' : `${summary.blockingCount} setup area(s) still require attention.`;
+  $('setupFinish').title = summary.ready ? '' : trf('setup.blockingCount', { count: summary.blockingCount }, '{count} setup area(s) still require attention.');
 }
 
 async function finishSetupWizard() {
@@ -3193,12 +3187,12 @@ async function finishSetupWizard() {
   }
   const saved = await window.cpApp.saveConfig({ setupCompleted: true, setupSafetyAcknowledged: true });
   if (!saved?.ok) {
-    setAction(saved?.error || 'Setup could not be completed.', 'settingsTab');
+    setAction(saved?.error || tr('setup.completeFailed', 'Setup could not be completed.'), 'settingsTab');
     return;
   }
   $('setupWizard')?.classList.add('hidden');
   $('setupWizard')?.setAttribute('aria-hidden', 'true');
-  setAction('Setup recorded. Tracking and dry-run readiness still depend on the checks shown in Settings.', 'settingsTab');
+  setAction(tr('setup.completed', 'Setup recorded. Tracking and dry-run readiness still depend on the checks shown in Settings.'), 'settingsTab');
 }
 
 
@@ -3208,7 +3202,7 @@ $('saveUserSettings')?.addEventListener('click', async () => {
 
 $('selectCsv')?.addEventListener('click', async () => {
   const res = await window.cpApp.selectTrackingCsv();
-  if (res.ok) log('tracking.csv selected.');
+  if (res.ok) log(tr('settings.trackingCsvSelected', 'tracking.csv selected.'));
   await refreshConfig();
 });
 
@@ -3216,7 +3210,7 @@ $('openData')?.addEventListener('click', () => window.cpApp.openDataFolder());
 $('openLogs')?.addEventListener('click', () => window.cpApp.openLogsFolder());
 $('openStep3Diagnostics')?.addEventListener('click', async () => {
   const result = await window.cpApp.openStep3Diagnostics();
-  if (!result?.ok) log(result?.error || 'No Step 3 diagnostics are available yet.', 'log-warning', 'step3');
+  if (!result?.ok) log(result?.error || tr('diagnostics.noneAvailable', 'No Step 3 diagnostics are available yet.'), 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
 $('clearHistoryFilters')?.addEventListener('click', clearHistoryFilters);
@@ -3269,10 +3263,10 @@ $('runSiteHealth')?.addEventListener('click', runSiteHealthCheck);
 $('addManualShipment')?.addEventListener('click', addManualShipment);
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
-  const message = res?.message || res?.error || (res?.ok ? 'Opened update page.' : 'Could not open update page.');
+  const message = res?.message || res?.error || tr(res?.ok ? 'update.pageOpenedMessage' : 'update.pageOpenFailedMessage', res?.ok ? 'Opened update page.' : 'Could not open update page.');
   const status = $('settingsStatus');
   if (status) {
-    status.textContent = res?.ok ? 'Update page opened' : 'Update URL not configured';
+    setLocalizedText(status, res?.ok ? 'update.pageOpened' : 'update.urlMissing', {}, res?.ok ? 'Update page opened' : 'Update URL not configured');
     status.className = res?.ok ? 'pill good' : 'pill bad';
   }
   log(message, res?.ok ? '' : 'log-late', 'step1');
@@ -3285,8 +3279,8 @@ $('developerMode')?.addEventListener('change', async () => {
   state.developerMode = $('developerMode').checked;
   await window.cpApp.saveConfig({ developerMode: state.developerMode });
   log(state.developerMode
-    ? 'Developer mode enabled. New runs will show raw Canada Post API logs in the live log. Credentials are redacted.'
-    : 'Developer mode disabled. New runs will show normal summarized logs.');
+    ? tr('settings.developer.enabledLog', 'Developer mode enabled. New runs will show raw Canada Post API logs in the live log. Credentials are redacted.')
+    : tr('settings.developer.disabledLog', 'Developer mode disabled. New runs will show normal summarized logs.'));
 });
 
 $('historyAutoMobo')?.addEventListener('change', async () => {
@@ -3297,15 +3291,15 @@ $('historyAutoMobo')?.addEventListener('change', async () => {
   }
   await window.cpApp.saveConfig({ historyAutoMobo: autoMobo, historyMobo: autoMobo ? '' : (($('historyMobo')?.value || '').trim()) });
   log(autoMobo
-    ? 'MOBO auto-discovery enabled. The manual MOBO field will be ignored on the next history import.'
-    : 'MOBO auto-discovery disabled. The manual MOBO field will be used on the next history import.');
+    ? tr('settings.mobo.autoEnabledLog', 'MOBO auto-discovery enabled. The manual MOBO field will be ignored on the next history import.')
+    : tr('settings.mobo.autoDisabledLog', 'MOBO auto-discovery disabled. The manual MOBO field will be used on the next history import.'));
 });
 
 $('backToOperations')?.addEventListener('click', showOperationsList);
 $('openScreenshot')?.addEventListener('click', async () => {
   if (!selectedDetail?.screenshotPath) return;
   const res = await window.cpApp.openEvidence(selectedDetail.screenshotPath);
-  if (!res.ok) log(res.error || 'Could not open screenshot.');
+  if (!res.ok) log(res.error || tr('results.screenshotOpenFailed', 'Could not open screenshot.'));
 });
 
 $('step1WarningsCard')?.addEventListener('click', openStep1Warnings);
@@ -3347,44 +3341,45 @@ $('importEstHistory')?.addEventListener('click', async () => {
   const missing = validateSettingsForStep('step1');
   if (missing.length) {
     setStatus('Failed', 'bad', 'step1');
-    setAction(`Missing settings: ${missing.join(', ')}. Open User Settings.`, 'step1');
-    log(`Missing settings: ${missing.join(', ')}. Open User Settings.`, 'log-late', 'step1');
+    const missingMessage = trf('step1.missingSettings', { settings: missing.join(', ') }, 'Missing settings: {settings}. Open User Settings.');
+    setAction(missingMessage, 'step1');
+    log(missingMessage, 'log-late', 'step1');
     return;
   }
   setStatus('Running', 'warn', 'step1');
-  setAction('Exporting EST Desktop history and generating tracking.csv.', 'step1');
+  setActionLocalized('step1.exportStarting', {}, 'Exporting EST Desktop history and generating tracking.csv.', 'step1');
 
   const res = await window.cpApp.importEstHistory(buildEstHistoryOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || 'Could not start EST Desktop history export.');
-    log(res.error || 'Could not start EST Desktop history export.');
+    setAction(res.error || tr('step1.exportStartFailed', 'Could not start EST Desktop history export.'));
+    log(res.error || tr('step1.exportStartFailed', 'Could not start EST Desktop history export.'));
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
     return;
   }
 
-  log('EST Desktop history export started.');
+  log(tr('step1.exportStarted', 'EST Desktop history export started.'));
 });
 
 $('importHistory')?.addEventListener('click', async () => {
   resetRunUi();
   setStatus('Running', 'warn');
-  setAction('Importing shipping history into tracking.csv.');
+  setActionLocalized('step1.historyImportStarting', {}, 'Importing shipping history into tracking.csv.', 'step1');
 
   const res = await window.cpApp.importHistory(buildHistoryOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || 'Could not start history import.');
-    log(res.error || 'Could not start history import.');
+    setAction(res.error || tr('step1.historyStartFailed', 'Could not start history import.'));
+    log(res.error || tr('step1.historyStartFailed', 'Could not start history import.'));
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
     return;
   }
 
-  log('Shipping history import started.');
+  log(tr('step1.historyStarted', 'Shipping history import started.'));
 });
 
 $('importAndStart')?.addEventListener('click', () => startRun(true));
@@ -3421,7 +3416,7 @@ $('confirmLiveSubmit')?.addEventListener('click', () => closeLiveSubmitModal(tru
 
 $('stop')?.addEventListener('click', async () => {
   const res = await window.cpApp.requestStop();
-  if (res.ok) log('Stop requested. Waiting for current item to finish.', '', 'step3');
+  if (res.ok) log(tr('event.stopWaiting', 'Stop requested. Waiting for current item to finish.'), '', 'step3');
 });
 
 document.querySelectorAll('[data-force-stop]').forEach((button) => {
@@ -3429,8 +3424,8 @@ document.querySelectorAll('[data-force-stop]').forEach((button) => {
     const step = button.dataset.forceStop || activeTabId || currentProcessStep || 'step1';
     currentProcessStep = step;
     const res = await window.cpApp.forceStop();
-    if (res.ok) log('Force stop sent.', '', step);
-    else log(res.error || 'Nothing to force stop.', '', step);
+    if (res.ok) log(tr('event.forceStopSentShort', 'Force stop sent.'), '', step);
+    else log(res.error || tr('event.forceStopNone', 'Nothing to force stop.'), '', step);
   });
 });
 
@@ -3446,10 +3441,14 @@ window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
     } else {
       setBuiltinBrowserStatus(tr('step3.browser.opening', 'Loading Canada Post'), 'warn');
     }
-    setBuiltinBrowserActivity(true, text || tr('step3.browser.opening', 'Loading Canada Post'), kind || '');
+    setBuiltinBrowserActivity(true, builtinBrowserManualActionPending
+      ? tr('step3.browser.waitingManualAction', 'Waiting for manual action')
+      : tr('step3.browser.opening', 'Loading Canada Post'), kind || '');
   } else {
     const loaded = /Canada Post page (?:ready|loaded)/i.test(String(text || ''));
-    finishBuiltinBrowserActivity(text || (loaded ? tr('step3.browser.loaded', 'Canada Post loaded') : tr('step3.browser.idleStatus', 'Browser idle')), kind || '');
+    finishBuiltinBrowserActivity(kind === 'error'
+      ? tr('step3.browser.navigationFailed', 'Browser navigation failed')
+      : (loaded ? tr('step3.browser.loaded', 'Canada Post loaded') : tr('step3.browser.idleStatus', 'Browser idle')), kind || '');
     if (kind === 'error') {
       builtinBrowserManualActionPending = false;
       setBuiltinBrowserStatus(tr('step3.browser.navigationFailed', 'Browser navigation failed'), 'bad');
@@ -3494,6 +3493,7 @@ window.cpApp.onEvent(({ stage, event }) => {
 
 window.cpApp.onRun((payload) => {
   const step = currentProcessStep || activeTabId || 'step1';
+  const payloadMessage = payload.messageKey ? trf(payload.messageKey, payload.messageValues || {}, payload.message || '') : payload.message;
   if (payload.status === 'started') {
     operations.runStartedAt ||= Date.now();
     startOperationsTimer();
@@ -3510,18 +3510,18 @@ window.cpApp.onRun((payload) => {
     setStatus('Warnings', 'warn', step);
   }
   if (payload.status === 'failed') {
-    if (step === 'step3') finishBuiltinBrowserActivity('Browser workflow failed', 'error');
+    if (step === 'step3') finishBuiltinBrowserActivity(tr('step3.browser.workflowFailed', 'Browser workflow failed'), 'error');
     operations.finishedAt ||= Date.now();
     stopOperationsTimer();
     setStatus('Failed', 'bad', step);
     if (step === 'step3') {
-      addNeedsReview('failed', operations.current.tracking, payload.message || 'Run failed', operations.current.row, '', {
+      addNeedsReview('failed', operations.current.tracking, payloadMessage || tr('event.runFailed', 'Run failed'), operations.current.row, '', {
         kind: 'failed',
         tracking: operations.current.tracking,
         row: operations.current.row,
-        result: 'Run failed',
-        status: 'Run failed',
-        message: payload.message || 'Run failed'
+        result: tr('event.runFailed', 'Run failed'),
+        status: tr('event.runFailed', 'Run failed'),
+        message: payloadMessage || tr('event.runFailed', 'Run failed')
       });
     }
   }
@@ -3537,14 +3537,15 @@ window.cpApp.onRun((payload) => {
     refreshConfig().catch(() => {});
   }
   if (payload.status === 'stopped') {
-    if (step === 'step3') finishBuiltinBrowserActivity('Browser workflow stopped');
+    if (step === 'step3') finishBuiltinBrowserActivity(tr('step3.browser.workflowStopped', 'Browser workflow stopped'));
     operations.finishedAt ||= Date.now();
     stopOperationsTimer();
     setStatus('Stopped', 'warn', step);
   }
-  if (payload.message) {
-    setAction(payload.message, step);
-    log(payload.message, '', step);
+  if (payloadMessage) {
+    if (payload.messageKey) setActionLocalized(payload.messageKey, payload.messageValues || {}, payload.message || '', step);
+    else setAction(payloadMessage, step);
+    log(payloadMessage, '', step);
   }
   if (step === 'step3' && ['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped'].includes(payload.status)) {
     deactivateBuiltinBrowser(`run-${payload.status}`).catch(() => {});
@@ -3560,17 +3561,17 @@ window.cpApp.onStage(({ stage, status, code }) => {
   currentProcessStep = step;
   if (status === 'running') {
     operations.runStartedAt ||= Date.now();
-    updateCurrentItem({ step: `${stage} process running`, result: 'In progress', kind: '' });
+    updateCurrentItem({ step: trf('event.stage.running', { stage }, '{stage} process running'), result: tr('status.inProgress', 'In progress'), kind: '' });
     setStatus('Running', 'warn', step);
-    log(`${stage} process started.`, '', step);
+    log(trf('event.stage.started', { stage }, '{stage} process started.'), '', step);
   }
   if (status === 'finished') {
     if (stage === 'submit') {
-      finishBuiltinBrowserActivity(code === 0 ? 'Browser workflow complete' : 'Browser workflow finished with warnings', code === 0 ? '' : 'error');
+      finishBuiltinBrowserActivity(code === 0 ? tr('step3.browser.workflowComplete', 'Browser workflow complete') : tr('step3.browser.workflowWarnings', 'Browser workflow finished with warnings'), code === 0 ? '' : 'error');
       deactivateBuiltinBrowser('worker-finished').catch(() => {});
     }
     if (stage === 'health') setSiteHealthRunning(false);
-    log(`${stage} process finished with code ${code}.`, '', step);
+    log(trf('event.stage.finished', { stage, code }, '{stage} process finished with code {code}.'), '', step);
   }
 });
 

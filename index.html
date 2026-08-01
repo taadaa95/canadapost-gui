@@ -4,30 +4,30 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: file:;" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Canada Post Claim Runner</title>
+  <title data-i18n="app.title"></title>
   <link rel="stylesheet" href="renderer/base.css" />
   <link rel="stylesheet" href="renderer/components.css" />
 </head>
 <body>
   <header>
     <div id="isolatedTestBanner" class="isolated-test-banner" role="status" aria-live="polite" hidden>
-      <span>ISOLATED TEST DATA — changes do not affect the normal application profile</span>
+      <span data-i18n="app.isolatedBanner"></span>
       <span id="isolatedTestPath" class="isolated-test-path"></span>
     </div>
     <div class="topbar">
       <div>
-        <h1 id="appTitle">Canada Post Claim Runner</h1><span id="buildTrustStatus" class="pill warn">Unsigned development build</span>
-        <div id="appSubtitle" class="subtitle">Import history, identify late-delivery candidates, and submit selected candidates in one place.</div>
+        <h1 id="appTitle" data-i18n="app.title"></h1><span id="buildTrustStatus" class="pill warn" data-i18n="build.unsigned"></span>
+        <div id="appSubtitle" class="subtitle" data-i18n="app.subtitle"></div>
       </div>
       <div class="theme-control">
-        <label for="localeSelect">Language / Langue</label>
+        <label for="localeSelect" data-i18n="settings.language"></label>
         <select id="localeSelect"><option value="en-CA">English (Canada)</option><option value="fr-CA">Français (Canada)</option></select>
-        <label for="themeSelect">Theme</label>
+        <label for="themeSelect" data-i18n="settings.theme"></label>
         <select id="themeSelect">
-          <option value="system">System</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="high-contrast">High Contrast</option>
+          <option value="system" data-i18n="theme.system"></option>
+          <option value="dark" data-i18n="theme.dark"></option>
+          <option value="light" data-i18n="theme.light"></option>
+          <option value="high-contrast" data-i18n="theme.highContrast"></option>
         </select>
       </div>
     </div>
@@ -37,147 +37,147 @@
     <section class="card app-shell">
       <div class="setup-head">
         <div class="file-grid compact-actions">
-          <button id="selectCsv" class="secondary">Import CSV</button>
-          <button id="openData" class="secondary">Data Folder</button>
-          <button id="openLogs" class="secondary">Logs</button>
-          <button id="fullRefresh" class="warning">Reset UI</button>
+          <button id="selectCsv" class="secondary" data-i18n="action.importCsv"></button>
+          <button id="openData" class="secondary" data-i18n="action.dataFolder"></button>
+          <button id="openLogs" class="secondary" data-i18n="action.logs"></button>
+          <button id="fullRefresh" class="warning" data-i18n="action.resetUi"></button>
         </div>
       </div>
 
-      <div class="step-tabs" role="tablist" aria-label="Claim runner sections">
-        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0">Settings<br><span>Account, sender info, defaults</span></button>
-        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>Import EST history</span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Identify late-delivery candidates</span></button>
-        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit selected candidates</span></button>
-        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span></button>
-        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Results<br><span>Evidence, outcomes, screenshots</span><span id="notificationsBadge" class="notification-badge hidden" aria-label="Result notifications"></span></button>
+      <div class="step-tabs" role="tablist" data-i18n-aria-label="nav.sectionsAria">
+        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0"><span data-i18n="nav.settings.title"></span><br><span data-i18n="nav.settings.detail"></span></button>
+        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1"><span data-i18n="nav.step1.title"></span><br><span data-i18n="nav.step1.detail"></span></button>
+        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1"><span data-i18n="nav.step2.title"></span><br><span data-i18n="nav.step2.detail"></span></button>
+        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1"><span data-i18n="nav.step3.title"></span><br><span data-i18n="nav.step3.detail"></span></button>
+        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1"><span data-i18n="nav.history.title"></span><br><span data-i18n="nav.history.detail"></span></button>
+        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span data-i18n="nav.results.title"></span><br><span data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria"></span></button>
       </div>
 
       <section id="settingsTab" class="tab-panel settings-panel active" role="tabpanel" aria-labelledby="tabSettings">
         <div class="step-title-row">
-          <h2>Settings</h2>
-          <div><button id="resumeSetup" class="secondary hidden" type="button">Resume setup</button> <span id="settingsStatus" class="pill">Not saved</span></div>
+          <h2 data-i18n="settings.title"></h2>
+          <div><button id="resumeSetup" class="secondary hidden" type="button" data-i18n="action.resumeSetup"></button> <span id="settingsStatus" class="pill" data-i18n="settings.notSaved"></span></div>
         </div>
 
         <div class="settings-grid">
           <div class="settings-section">
-            <h3>Canada Post website / EST login</h3>
+            <h3 data-i18n="settings.website.title"></h3>
             <div class="field">
-              <label for="webUsername">Canada Post Web Username</label>
-              <input id="webUsername" type="text" placeholder="Web login username" autocomplete="username" />
+              <label for="webUsername" data-i18n="settings.website.username"></label>
+              <input id="webUsername" type="text" data-i18n-placeholder="settings.website.usernamePlaceholder" autocomplete="username" />
             </div>
             <div class="field">
-              <label for="webPassword">Canada Post Web Password</label>
-              <input id="webPassword" type="password" placeholder="Web login password" autocomplete="current-password" />
+              <label for="webPassword" data-i18n="settings.website.password"></label>
+              <input id="webPassword" type="password" data-i18n-placeholder="settings.website.passwordPlaceholder" autocomplete="current-password" />
             </div>
             <div class="check-row">
-              <label><input id="rememberSettings" type="checkbox" checked /> Remember me / save password securely on this device</label>
+              <label><input id="rememberSettings" type="checkbox" checked /> <span data-i18n="settings.website.remember"></span></label>
             </div>
-            <div class="settings-note">The password is never returned to the interface after saving. OS keyring encryption is preferred; when it is unavailable, the app uses AES-256-GCM device-local encryption protected by your user account file permissions. Other settings are kept in your per-user application data folder.</div>
+            <div class="settings-note" data-i18n="settings.website.securityNote"></div>
           </div>
 
           <div class="settings-section">
-            <h3>Tracking API — current Developer Portal</h3>
+            <h3 data-i18n="settings.api.title"></h3>
             <div class="field">
-              <label for="trackingClientId">Tracking API 2.0 platform client ID / API Key</label>
-              <input id="trackingClientId" type="text" placeholder="Developer Portal API Key" autocomplete="off" />
+              <label for="trackingClientId" data-i18n="settings.api.clientId"></label>
+              <input id="trackingClientId" type="text" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
             </div>
             <div class="field">
-              <label for="trackingClientSecret">Tracking API 2.0 platform client secret / API Secret</label>
-              <input id="trackingClientSecret" type="password" placeholder="Developer Portal API Secret" autocomplete="new-password" />
+              <label for="trackingClientSecret" data-i18n="settings.api.clientSecret"></label>
+              <input id="trackingClientSecret" type="password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" autocomplete="new-password" />
             </div>
             <div class="field">
-              <label for="trackingApiEnvironment">Tracking API environment</label>
-              <select id="trackingApiEnvironment"><option value="test">Test</option><option value="production">Production</option></select>
+              <label for="trackingApiEnvironment" data-i18n="settings.api.environment"></label>
+              <select id="trackingApiEnvironment"><option value="test" data-i18n="environment.test"></option><option value="production" data-i18n="environment.production"></option></select>
             </div>
             <details class="settings-note">
-              <summary>Advanced Tracking API settings</summary>
+              <summary data-i18n="settings.api.advanced"></summary>
               <div class="field">
-                <label for="trackingRequestDelayMs">Minimum start-to-start tracking request interval (milliseconds)</label>
+                <label for="trackingRequestDelayMs" data-i18n="settings.api.requestInterval"></label>
                 <input id="trackingRequestDelayMs" type="number" min="3100" max="60000" step="100" value="3100" inputmode="numeric" />
               </div>
               <div class="field">
-                <label for="trackingResourceTimeoutMs">Tracking resource timeout (milliseconds)</label>
+                <label for="trackingResourceTimeoutMs" data-i18n="settings.api.timeout"></label>
                 <input id="trackingResourceTimeoutMs" type="number" min="1000" max="120000" step="1000" value="45000" inputmode="numeric" />
               </div>
-              <div>Current OAuth/JSON defaults: 3,100 ms minimum start-to-start plus 0–100 ms positive jitter, sequential concurrency 1, and a 45-second resource timeout. Transport timeouts retry at most twice with bounded backoff and do not refresh OAuth. Delay values below 3,100 ms and timeout values below 1,000 ms are rejected.</div>
+              <div data-i18n="settings.api.defaultsNote"></div>
             </details>
-            <div id="trackingApiCredentialMetadata" class="settings-note">Current Tracking API credentials not inspected yet. Only present/missing status is displayed.</div>
-            <div id="trackingDiagnosticGate" class="settings-note">Normal Step 2 remains disabled until the one-shipment diagnostic succeeds for this credential revision, environment, and API version.</div>
-            <div class="settings-note">Step 2 requires a current Canada Post Developer Portal app with Tracking product access. Access tokens remain in worker memory only and are never saved.</div>
-            <button id="clearTrackingApiCredentials" class="warning" type="button">Clear Tracking API credentials</button>
+            <div id="trackingApiCredentialMetadata" class="settings-note" data-i18n="settings.api.metadataPending"></div>
+            <div id="trackingDiagnosticGate" class="settings-note" data-i18n="settings.api.diagnosticGate"></div>
+            <div class="settings-note" data-i18n="settings.api.accessNote"></div>
+            <button id="clearTrackingApiCredentials" class="warning" type="button" data-i18n="settings.api.clear"></button>
           </div>
 
           <div class="settings-section">
-            <h3>EST Export</h3>
+            <h3 data-i18n="settings.est.title"></h3>
             <div class="field">
-              <label for="estCustomerNumber">EST customer number</label>
-              <input id="estCustomerNumber" type="text" placeholder="Example: 0000000000" />
+              <label for="estCustomerNumber" data-i18n="settings.est.customerNumber"></label>
+              <input id="estCustomerNumber" type="text" data-i18n-placeholder="placeholder.customerNumber" />
             </div>
           </div>
 
           <div class="settings-section wide">
-            <h3>Claim Sender Address Match</h3>
+            <h3 data-i18n="settings.sender.title"></h3>
             <div class="settings-two-col">
               <div class="field">
-                <label for="claimStreetNumber">Street number *</label>
-                <input id="claimStreetNumber" type="text" placeholder="Example: 123" />
+                <label for="claimStreetNumber" data-i18n="settings.sender.streetNumber"></label>
+                <input id="claimStreetNumber" type="text" data-i18n-placeholder="placeholder.streetNumber" />
               </div>
               <div class="field">
-                <label for="claimStreetName">Street name dropdown option *</label>
-                <input id="claimStreetName" type="text" placeholder="Example: MAIN/STREET/" />
+                <label for="claimStreetName" data-i18n="settings.sender.streetName"></label>
+                <input id="claimStreetName" type="text" data-i18n-placeholder="placeholder.streetName" />
               </div>
             </div>
             <div class="settings-three-col">
               <div class="field">
-                <label for="claimPostalCode">Postal code</label>
-                <input id="claimPostalCode" type="text" placeholder="Optional, e.g. A1A 1A1" />
+                <label for="claimPostalCode" data-i18n="settings.sender.postalCode"></label>
+                <input id="claimPostalCode" type="text" data-i18n-placeholder="placeholder.postalCode" />
               </div>
               <div class="field">
-                <label for="claimCity">City</label>
-                <input id="claimCity" type="text" placeholder="Optional, e.g. Toronto" />
+                <label for="claimCity" data-i18n="settings.sender.city"></label>
+                <input id="claimCity" type="text" data-i18n-placeholder="placeholder.city" />
               </div>
               <div class="field">
-                <label for="claimProvince">Province</label>
-                <input id="claimProvince" type="text" placeholder="Optional, e.g. ON" />
+                <label for="claimProvince" data-i18n="settings.sender.province"></label>
+                <input id="claimProvince" type="text" data-i18n-placeholder="placeholder.province" />
               </div>
             </div>
             <div class="field">
-              <label for="claimAddressLine2">Address line 2 / unit / suite</label>
-              <input id="claimAddressLine2" type="text" placeholder="Optional, e.g. Unit 100" />
+              <label for="claimAddressLine2" data-i18n="settings.sender.addressLine2"></label>
+              <input id="claimAddressLine2" type="text" data-i18n-placeholder="placeholder.addressLine2" />
             </div>
           </div>
 
           <div class="settings-section wide">
-            <h3>Claim Contact Info</h3>
+            <h3 data-i18n="settings.contact.title"></h3>
             <div class="settings-three-col">
               <div class="field">
-                <label for="claimBusinessName">Business / company name</label>
-                <input id="claimBusinessName" type="text" placeholder="Optional, e.g. Example Company Inc." />
+                <label for="claimBusinessName" data-i18n="settings.contact.businessName"></label>
+                <input id="claimBusinessName" type="text" data-i18n-placeholder="placeholder.businessName" />
               </div>
               <div class="field">
-                <label for="claimContactName">Contact name</label>
-                <input id="claimContactName" type="text" placeholder="Optional, e.g. Jane Smith" />
+                <label for="claimContactName" data-i18n="settings.contact.name"></label>
+                <input id="claimContactName" type="text" data-i18n-placeholder="placeholder.contactName" />
               </div>
               <div class="field">
-                <label for="claimContactPhone">Phone</label>
-                <input id="claimContactPhone" type="text" placeholder="Optional, e.g. 555-555-5555" />
+                <label for="claimContactPhone" data-i18n="settings.contact.phone"></label>
+                <input id="claimContactPhone" type="text" data-i18n-placeholder="placeholder.phone" />
               </div>
             </div>
             <div class="field">
-              <label for="claimContactEmail">Email</label>
-              <input id="claimContactEmail" type="email" placeholder="Optional, e.g. user@example.com" />
+              <label for="claimContactEmail" data-i18n="settings.contact.email"></label>
+              <input id="claimContactEmail" type="email" data-i18n-placeholder="placeholder.email" />
             </div>
           </div>
 <div class="settings-section wide">
-            <button id="saveUserSettings" class="success" type="button">Save Settings</button>
+            <button id="saveUserSettings" class="success" type="button" data-i18n="settings.save"></button>
             <details class="settings-note advanced-settings">
-              <summary id="advancedSettingsTitle">Advanced Settings</summary>
-              <button id="manageStoredData" class="secondary" type="button">Manage stored data…</button>
+              <summary id="advancedSettingsTitle" data-i18n="settings.advanced"></summary>
+              <button id="manageStoredData" class="secondary" type="button" data-i18n="privacy.manageStoredData"></button>
             </details>
             <div class="settings-footer-actions">
-              <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.4.0-beta.1</strong></div>
+              <button id="checkForUpdates" class="secondary" type="button" data-i18n="update.check"></button>
+              <div class="app-version"><span data-i18n="app.version"></span> <strong id="appVersion">0.4.0-beta.1</strong></div>
             </div>
           </div>
         </div>
@@ -186,16 +186,16 @@
       <section id="step1" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep1">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 1 — Import EST history</h2>
-            <span class="pill">Creates data/tracking.csv</span>
+            <h2 data-i18n="step1.title"></h2>
+            <span class="pill" data-i18n="step1.createsTrackingCsv"></span>
           </div>
           <div class="step-fields step1-fields">
             <div class="field">
-              <label for="estFrom">EST from date</label>
+              <label for="estFrom" data-i18n="step1.fromDate"></label>
               <input id="estFrom" type="date" />
             </div>
             <div class="field">
-              <label for="estTo">EST to date</label>
+              <label for="estTo" data-i18n="step1.toDate"></label>
               <input id="estTo" type="date" />
             </div>
           </div>
@@ -210,30 +210,30 @@
           <input id="historyAutoMobo" type="checkbox" checked hidden />
           <input id="historyIncludeNoManifest" type="checkbox" checked hidden />
           <div class="step-actions">
-            <button id="importEstHistory" class="success">Run Step 1 — Import EST History</button>
-            <button id="forceStopStep1" class="danger" data-force-stop="step1">Force Stop</button>
+            <button id="importEstHistory" class="success" data-i18n="step1.run"></button>
+            <button id="forceStopStep1" class="danger" data-force-stop="step1" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
           <div class="card step-status-card">
             <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 1 Status</h2>
-              <span id="step1RunStatus" class="pill">Idle</span>
+              <h2 style="margin:0;" data-i18n="step1.statusTitle"></h2>
+              <span id="step1RunStatus" class="pill" data-i18n="runStatus.idle"></span>
             </div>
             <div class="status-grid">
-              <div class="stat"><div id="step1Orders" class="num">0</div><div class="label">Orders found</div></div>
-              <div class="stat"><div id="step1Imported" class="num">0</div><div class="label">Shipments imported</div></div>
-              <div class="stat"><div id="step1Workgroups" class="num">0</div><div class="label">Workgroups</div></div>
-              <div id="step1WarningsCard" class="stat stat-clickable" role="button" tabindex="0" aria-label="Inspect Step 1 warnings"><div id="step1Warnings" class="num">0</div><div class="label">Warnings — click to inspect</div></div>
+              <div class="stat"><div id="step1Orders" class="num">0</div><div class="label" data-i18n="step1.ordersFound"></div></div>
+              <div class="stat"><div id="step1Imported" class="num">0</div><div class="label" data-i18n="step1.shipmentsImported"></div></div>
+              <div class="stat"><div id="step1Workgroups" class="num">0</div><div class="label" data-i18n="step1.workgroups"></div></div>
+              <div id="step1WarningsCard" class="stat stat-clickable" role="button" tabindex="0" data-i18n-aria-label="step1.warningsAria"><div id="step1Warnings" class="num">0</div><div class="label" data-i18n="step1.warningsInspect"></div></div>
             </div>
             <div class="progress-wrap">
-              <div class="progress-label"><span>EST Import</span><span id="step1Pct">0%</span></div>
+              <div class="progress-label"><span data-i18n="step1.progress"></span><span id="step1Pct">0%</span></div>
               <progress id="step1Progress" max="100" value="0"></progress>
             </div>
-            <div class="current-action" id="step1CurrentAction">Waiting.</div>
+            <div class="current-action" id="step1CurrentAction" data-i18n="status.waiting"></div>
           </div>
           <div class="card step-log-card">
-            <div class="live-log-header"><h2>Step 1 Live Log</h2><button id="step1JumpLatest" class="secondary jump-latest" type="button" hidden>Jump to latest</button></div>
+            <div class="live-log-header"><h2 data-i18n="step1.liveLog"></h2><button id="step1JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
             <div id="step1Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
           </div>
         </div>
@@ -242,43 +242,43 @@
       <section id="step2" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep2">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 2 — Check Tracking / Create Claims</h2>
-            <span class="pill">Reads data/tracking.csv</span>
+            <h2 data-i18n="step2.title"></h2>
+            <span class="pill" data-i18n="step2.readsTrackingCsv"></span>
           </div>
           <div class="step-fields step2-fields">
             <div class="check-row step-checks">
-              <label><input id="freshTracking" type="checkbox" checked /> Fresh tracking run: clear old claims and processed tracking cache</label>
+              <label><input id="freshTracking" type="checkbox" checked /> <span data-i18n="step2.freshRun"></span></label>
             </div>
-            <div id="step2CandidateExplanation" class="step-copy-box">This step compares the successful-delivery date against the original Delivery Standard. A shipment becomes a late-delivery candidate when successful delivery occurred after that standard. First-attempt, service, policy, and claim-window information remains advisory. Canada Post makes the final eligibility decision.</div>
+            <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
           </div>
           <div class="step-actions">
-            <button id="runTrackingOnly" class="success">Run Step 2 — Check Tracking</button>
-            <button id="testTrackingConnection" class="secondary" type="button">Test API connection with one shipment</button>
-            <button id="exportTrackingStructure" class="secondary" type="button">Export sanitized response structure</button>
-            <button id="discardIncompleteTracking" class="warning" type="button">Discard incomplete Step 2 run</button>
-            <button id="forceStopStep2" class="danger" data-force-stop="step2">Force Stop</button>
+            <button id="runTrackingOnly" class="success" data-i18n="step2.run"></button>
+            <button id="testTrackingConnection" class="secondary" type="button" data-i18n="step2.testConnection"></button>
+            <button id="exportTrackingStructure" class="secondary" type="button" data-i18n="step2.exportStructure"></button>
+            <button id="discardIncompleteTracking" class="warning" type="button" data-i18n="step2.discardIncomplete"></button>
+            <button id="forceStopStep2" class="danger" data-force-stop="step2" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
           <div class="card step-status-card">
             <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 2 Status</h2>
-              <span id="step2RunStatus" class="pill">Idle</span>
+              <h2 style="margin:0;" data-i18n="step2.statusTitle"></h2>
+              <span id="step2RunStatus" class="pill" data-i18n="runStatus.idle"></span>
             </div>
             <div class="status-grid">
-              <div class="stat"><div id="checked" class="num">0</div><div class="label">Checked</div></div>
-              <div class="stat"><div id="late" class="num">0</div><div class="label">Late / claims</div></div>
-              <div class="stat"><div id="onTime" class="num">0</div><div class="label">On time</div></div>
-              <div class="stat"><div id="notDelivered" class="num">0</div><div class="label">Not delivered</div></div>
+              <div class="stat"><div id="checked" class="num">0</div><div class="label" data-i18n="step2.checked"></div></div>
+              <div class="stat"><div id="late" class="num">0</div><div class="label" data-i18n="step2.lateClaims"></div></div>
+              <div class="stat"><div id="onTime" class="num">0</div><div class="label" data-i18n="step2.onTime"></div></div>
+              <div class="stat"><div id="notDelivered" class="num">0</div><div class="label" data-i18n="step2.notDelivered"></div></div>
             </div>
             <div class="progress-wrap">
-              <div class="progress-label"><span>Tracking Check</span><span id="trackingPct">0%</span></div>
+              <div class="progress-label"><span data-i18n="step2.progress"></span><span id="trackingPct">0%</span></div>
               <progress id="trackingProgress" max="100" value="0"></progress>
             </div>
-            <div class="current-action" id="step2CurrentAction">Waiting.</div>
+            <div class="current-action" id="step2CurrentAction" data-i18n="status.waiting"></div>
           </div>
           <div class="card step-log-card">
-            <div class="live-log-header"><h2>Step 2 Live Log</h2><button id="step2JumpLatest" class="secondary jump-latest" type="button" hidden>Jump to latest</button></div>
+            <div class="live-log-header"><h2 data-i18n="step2.liveLog"></h2><button id="step2JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
             <div id="step2Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
           </div>
         </div>
@@ -287,23 +287,23 @@
       <section id="step3" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep3">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 3 — Submit late candidates</h2>
-            <span class="pill">Reads LATE_CANDIDATE records only</span>
+            <h2 data-i18n="step3.title"></h2>
+            <span class="pill" data-i18n="step3.readsCandidates"></span>
           </div>
           <div class="step-fields step3-fields compact-step3-fields">
             <div class="field checkbox-field builtin-browser-field">
-              <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked disabled /> Use built-in browser inside the app <span class="muted-inline">full-width browser, compact log below</span></label>
+              <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked disabled /> <span data-i18n="step3.useBuiltinBrowser"></span> <span class="muted-inline" data-i18n="step3.browserLayout"></span></label>
             </div>
             <div class="field checkbox-field">
-              <label class="checkbox-label"><input id="dryRun" type="checkbox" /> Dry run — fill fields only; stop before final review or submission</label>
+              <label class="checkbox-label"><input id="dryRun" type="checkbox" /> <span data-i18n="step3.dryRun"></span></label>
             </div>
           </div>
-          <div id="step3CanadaPostSupport" role="note" aria-label="Canada Post claim support contact">Unsure about a claim? Contact Canada Post at 1-888-550-6333 to verify the shipment or claim details before submitting.</div>
+          <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
           <input id="freshRun" type="checkbox" hidden />
           <div class="step-actions step-actions-3">
-            <button id="runSubmitOnly" class="success">Run Step 3 — Submit selected candidates</button>
-            <button id="stop" class="warning">Stop After Current Item</button>
-            <button id="forceStopStep3" class="danger" data-force-stop="step3">Force Stop</button>
+            <button id="runSubmitOnly" class="success" data-i18n="step3.submitSelected"></button>
+            <button id="stop" class="warning" data-i18n="step3.stopAfterCurrent"></button>
+            <button id="forceStopStep3" class="danger" data-force-stop="step3" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step3-body">
@@ -312,30 +312,30 @@
           <section class="step3-control-card" aria-labelledby="claimQueueTitle">
             <div class="step3-control-head">
               <div>
-                <h3 id="claimQueueTitle">Candidate queue</h3>
-                <span id="claimQueueCount" class="pill">0 selected · 0 executable · 0 blocked</span>
+                <h3 id="claimQueueTitle" data-i18n="step3.candidateQueue"></h3>
+                <span id="claimQueueCount" class="pill" data-i18n="step3.queue.initialCount"></span>
               </div>
               <div class="step3-control-actions">
-                <button id="refreshClaimQueue" class="secondary" type="button">Refresh</button>
-                <button id="selectAllClaims" class="secondary" type="button">Select all</button>
-                <button id="clearClaimSelection" class="secondary" type="button">Clear selection</button>
+                <button id="refreshClaimQueue" class="secondary" type="button" data-i18n="action.refresh"></button>
+                <button id="selectAllClaims" class="secondary" type="button" data-i18n="step3.selectAll"></button>
+                <button id="clearClaimSelection" class="secondary" type="button" data-i18n="step3.clearSelection"></button>
               </div>
             </div>
-            <div class="history-toolbar queue-toolbar" aria-label="Claim queue filters">
-              <div class="field"><label for="claimQueueSearch">Tracking search</label><input id="claimQueueSearch" type="search" placeholder="Tracking or reference" /></div>
-              <div class="field"><label for="claimQueueServiceFilter">Service</label><select id="claimQueueServiceFilter"><option value="all">All services</option></select></div>
-              <div class="field"><label for="claimQueueUrgencyFilter">Deadline guidance</label><select id="claimQueueUrgencyFilter"><option value="all">All guidance</option><option value="advisory">Unverified advisory estimates</option><option value="unavailable">Unavailable / policy review</option></select></div>
-              <div class="field"><label for="claimQueueDateFrom">Deadline from</label><input id="claimQueueDateFrom" type="date" /></div>
-              <div class="field"><label for="claimQueueDateTo">Deadline to</label><input id="claimQueueDateTo" type="date" /></div>
+            <div class="history-toolbar queue-toolbar" data-i18n-aria-label="step3.queue.filtersAria">
+              <div class="field"><label for="claimQueueSearch" data-i18n="step3.queue.search"></label><input id="claimQueueSearch" type="search" data-i18n-placeholder="step3.queue.searchPlaceholder" /></div>
+              <div class="field"><label for="claimQueueServiceFilter" data-i18n="step3.queue.service"></label><select id="claimQueueServiceFilter"><option value="all" data-i18n="step3.queue.allServices"></option></select></div>
+              <div class="field"><label for="claimQueueUrgencyFilter" data-i18n="step3.queue.deadlineGuidance"></label><select id="claimQueueUrgencyFilter"><option value="all" data-i18n="step3.queue.allGuidance"></option><option value="advisory" data-i18n="step3.queue.advisory"></option><option value="unavailable" data-i18n="step3.queue.unavailable"></option></select></div>
+              <div class="field"><label for="claimQueueDateFrom" data-i18n="step3.queue.deadlineFrom"></label><input id="claimQueueDateFrom" type="date" /></div>
+              <div class="field"><label for="claimQueueDateTo" data-i18n="step3.queue.deadlineTo"></label><input id="claimQueueDateTo" type="date" /></div>
             </div>
             <div id="claimQueueList" class="claim-queue-list" aria-live="polite">
-              <div class="history-empty">Refresh to load late-delivery candidates from the database.</div>
+              <div class="history-empty" data-i18n="step3.queue.refreshEmpty"></div>
             </div>
           </section>
         </div>
           <div class="card step3-progress-card">
             <div class="progress-wrap">
-              <div class="progress-label"><span>Claim Submission Progress</span><span><span id="submitProcessedMini">0/0</span> · <span id="submitPct">0%</span></span></div>
+              <div class="progress-label"><span data-i18n="step3.progress"></span><span><span id="submitProcessedMini">0/0</span> · <span id="submitPct">0%</span></span></div>
               <progress id="submitProgress" max="100" value="0"></progress>
             </div>
           </div>
@@ -343,27 +343,25 @@
         <div class="step-workspace step3-workspace builtin-browser-enabled">
           <div class="card step-browser-card">
             <div class="row step-browser-header" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 3 Built-in Browser</h2>
-              <span id="builtinBrowserStatus" class="pill">Browser idle</span>
+              <h2 style="margin:0;" data-i18n="step3.browserTitle"></h2>
+              <span id="builtinBrowserStatus" class="pill" data-i18n="step3.browser.idleStatus"></span>
             </div>
             <div id="builtinBrowserActivity" class="browser-activity" aria-live="polite" aria-atomic="true">
               <div class="browser-activity-copy">
                 <span class="browser-activity-dot" aria-hidden="true"></span>
-                <span id="builtinBrowserActivityText">Browser idle</span>
+                <span id="builtinBrowserActivityText" data-i18n="step3.browser.idleStatus"></span>
               </div>
               <div class="browser-activity-track" aria-hidden="true"><span></span></div>
             </div>
             <div id="builtinBrowserSlot" class="browser-slot">
-              <div class="browser-slot-placeholder">
-                Canada Post will open here after an executable claim passes preflight.
-              </div>
+              <div class="browser-slot-placeholder" data-i18n="step3.browser.idle"></div>
             </div>
           </div>
         </div>
         <div class="card step-log-card step3-log-card">
           <div class="row step3-log-header" style="justify-content: space-between; align-items: center;">
-            <h2 style="margin:0;">Step 3 Live Log</h2>
-            <div class="live-log-actions"><button id="step3JumpLatest" class="secondary jump-latest" type="button" hidden>Jump to latest</button><button id="openStep3Diagnostics" class="secondary compact-button" type="button">Open Detailed Diagnostics</button></div>
+            <h2 style="margin:0;" data-i18n="step3.liveLog"></h2>
+            <div class="live-log-actions"><button id="step3JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button><button id="openStep3Diagnostics" class="secondary compact-button" type="button" data-i18n="diagnostics.openDetailed"></button></div>
           </div>
           <div id="step3Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
         </div>
@@ -372,85 +370,85 @@
 
       <section id="historyTab" class="tab-panel history-panel" role="tabpanel" aria-labelledby="tabHistory">
         <div class="step-title-row">
-          <h2>History, Recovery & Maintenance</h2>
-          <span id="databaseIntegrity" class="pill">Checking database…</span>
+          <h2 data-i18n="history.title"></h2>
+          <span id="databaseIntegrity" class="pill" data-i18n="database.checking"></span>
         </div>
 
         <div class="history-summary">
-          <div class="stat"><div id="historyShipments" class="num">0</div><div class="label">Shipments recorded</div></div>
-          <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label">Submitted</div></div>
-          <div class="stat"><div id="historyReconciliation" class="num">0</div><div class="label">Need reconciliation</div></div>
-          <div class="stat"><div id="historyFailed" class="num">0</div><div class="label">Retryable failures</div></div>
+          <div class="stat"><div id="historyShipments" class="num">0</div><div class="label" data-i18n="history.shipmentsRecorded"></div></div>
+          <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label" data-i18n="history.submitted"></div></div>
+          <div class="stat"><div id="historyReconciliation" class="num">0</div><div class="label" data-i18n="history.needReconciliation"></div></div>
+          <div class="stat"><div id="historyFailed" class="num">0</div><div class="label" data-i18n="history.retryableFailures"></div></div>
         </div>
 
         <div>
           <div class="history-toolbar">
             <div class="field">
-              <label for="historySearch">Search tracking, reference or confirmation</label>
-              <input id="historySearch" type="search" placeholder="Search claim history" />
+              <label for="historySearch" data-i18n="history.searchLabel"></label>
+              <input id="historySearch" type="search" data-i18n-placeholder="history.searchPlaceholder" />
             </div>
             <div class="field">
-              <label for="historyStatusFilter">Status</label>
+              <label for="historyStatusFilter" data-i18n="common.status"></label>
               <select id="historyStatusFilter">
-                <option value="all">All statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="submitted_manual">Manually confirmed submitted</option>
-                <option value="already_submitted">Already submitted</option>
-                <option value="failed">Failed</option>
-                <option value="unknown">Unknown outcome</option>
-                <option value="not_submitted">Verified not submitted</option>
-                <option value="retry_approved">Retry approved</option>
-                <option value="dry_run_ready">Dry-run ready</option>
-                <option value="dry_run_interrupted">Dry-run interrupted</option>
+                <option value="all" data-i18n="history.filter.all"></option>
+                <option value="submitted" data-i18n="history.filter.submitted"></option>
+                <option value="submitted_manual" data-i18n="history.filter.submittedManual"></option>
+                <option value="already_submitted" data-i18n="history.filter.alreadySubmitted"></option>
+                <option value="failed" data-i18n="history.filter.failed"></option>
+                <option value="unknown" data-i18n="history.filter.unknown"></option>
+                <option value="not_submitted" data-i18n="history.filter.notSubmitted"></option>
+                <option value="retry_approved" data-i18n="history.filter.retryApproved"></option>
+                <option value="dry_run_ready" data-i18n="history.filter.dryRunReady"></option>
+                <option value="dry_run_interrupted" data-i18n="history.filter.dryRunInterrupted"></option>
               </select>
             </div>
-            <button id="clearHistoryFilters" class="secondary" type="button" aria-label="Clear History filters" disabled>Clear filters</button>
-            <button id="refreshHistory" class="secondary" type="button">Refresh</button>
-            <button id="exportHistory" class="secondary" type="button">Export CSV</button>
-            <button id="createBackup" class="secondary" type="button">Create Backup</button>
-            <button id="restoreBackup" class="warning" type="button">Restore Backup</button>
-            <button id="createDiagnostics" class="secondary" type="button">Support bundle</button>
+            <button id="clearHistoryFilters" class="secondary" type="button" data-i18n="history.clearFilters" data-i18n-aria-label="history.clearFiltersLabel" disabled></button>
+            <button id="refreshHistory" class="secondary" type="button" data-i18n="action.refresh"></button>
+            <button id="exportHistory" class="secondary" type="button" data-i18n="history.exportCsv"></button>
+            <button id="createBackup" class="secondary" type="button" data-i18n="action.createBackup"></button>
+            <button id="restoreBackup" class="warning" type="button" data-i18n="action.restoreBackup"></button>
+            <button id="createDiagnostics" class="secondary" type="button" data-i18n="support.bundle"></button>
           </div>
           <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto minmax(0,1fr);">
-            <button id="runSiteHealth" class="success" type="button">Run Canada Post Workflow Health Check</button>
-            <div id="siteHealthResult" class="health-result">Not checked in this session.</div>
+            <button id="runSiteHealth" class="success" type="button" data-i18n="health.run"></button>
+            <div id="siteHealthResult" class="health-result" data-i18n="health.notChecked"></div>
           </div>
           <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto auto minmax(0,1fr);">
-            <button id="refreshBrowserSession" class="secondary" type="button">Check Browser Session</button>
-            <button id="clearBrowserSession" class="warning" type="button">Log Out &amp; Clear Browser Data</button>
-            <div id="browserSessionStatus" class="health-result" role="status" aria-live="polite">Browser session status not checked.</div>
+            <button id="refreshBrowserSession" class="secondary" type="button" data-i18n="browserSession.check"></button>
+            <button id="clearBrowserSession" class="warning" type="button" data-i18n="action.clearSession"></button>
+            <div id="browserSessionStatus" class="health-result" role="status" aria-live="polite" data-i18n="browserSession.notChecked"></div>
           </div>
           <details class="history-details">
-            <summary>Manually add or annotate a shipment</summary>
+            <summary data-i18n="history.manual.title"></summary>
             <div class="manual-entry-grid">
-              <div class="field"><label for="manualTracking">Tracking number *</label><input id="manualTracking" type="text" /></div>
-              <div class="field"><label for="manualReference">Reference number</label><input id="manualReference" type="text" /></div>
-              <div class="field"><label for="manualService">Service code</label><input id="manualService" type="text" /></div>
-              <div class="field"><label for="manualPostal">Destination postal code</label><input id="manualPostal" type="text" /></div>
-              <div class="field"><label for="manualExpected">Expected date</label><input id="manualExpected" type="date" /></div>
-              <div class="field"><label for="manualDelivery">Delivery date</label><input id="manualDelivery" type="date" /></div>
-              <div class="field wide"><label for="manualNote">Note</label><input id="manualNote" type="text" /></div>
-              <button id="addManualShipment" class="secondary" type="button">Save Shipment</button>
+              <div class="field"><label for="manualTracking" data-i18n="history.manual.tracking"></label><input id="manualTracking" type="text" /></div>
+              <div class="field"><label for="manualReference" data-i18n="history.manual.reference"></label><input id="manualReference" type="text" /></div>
+              <div class="field"><label for="manualService" data-i18n="history.manual.service"></label><input id="manualService" type="text" /></div>
+              <div class="field"><label for="manualPostal" data-i18n="history.manual.postal"></label><input id="manualPostal" type="text" /></div>
+              <div class="field"><label for="manualExpected" data-i18n="history.manual.expected"></label><input id="manualExpected" type="date" /></div>
+              <div class="field"><label for="manualDelivery" data-i18n="history.manual.delivery"></label><input id="manualDelivery" type="date" /></div>
+              <div class="field wide"><label for="manualNote" data-i18n="history.manual.note"></label><input id="manualNote" type="text" /></div>
+              <button id="addManualShipment" class="secondary" type="button" data-i18n="history.manual.save"></button>
             </div>
             <div id="manualShipmentList" class="history-list compact" aria-live="polite"></div>
           </details>
           <details class="history-details">
-            <summary id="historyClassificationsTitle">Step 2 classification records</summary>
+            <summary id="historyClassificationsTitle" data-i18n="history.classifications"></summary>
             <div id="historyClassificationList" class="history-list compact" aria-live="polite"></div>
           </details>
         </div>
 
         <div class="history-content">
           <div class="history-section">
-            <div class="history-section-head"><h3>Eligibility Manual Review</h3><span id="manualReviewCountPill" class="pill">0 open</span></div>
+            <div class="history-section-head"><h3 data-i18n="history.manualReview"></h3><span id="manualReviewCountPill" class="pill" data-i18n="history.zeroOpen"></span></div>
             <div id="manualReviewList" class="history-list history-record-list" aria-live="polite"></div>
           </div>
           <div class="history-section">
-            <div class="history-section-head"><h3>Reconciliation Queue</h3><span id="reconciliationCountPill" class="pill">0 unresolved</span></div>
+            <div class="history-section-head"><h3 data-i18n="history.reconciliationQueue"></h3><span id="reconciliationCountPill" class="pill" data-i18n="history.zeroUnresolved"></span></div>
             <div id="reconciliationList" class="history-list history-record-list"></div>
           </div>
           <div class="history-section">
-            <div class="history-section-head"><h3>Claim Attempts</h3><span id="historyResultCount" class="pill" role="status" aria-live="polite">0 records</span></div>
+            <div class="history-section-head"><h3 data-i18n="history.claimAttempts"></h3><span id="historyResultCount" class="pill" role="status" aria-live="polite" data-i18n="history.zeroRecords"></span></div>
             <div id="historyList" class="history-list history-record-list"></div>
           </div>
         </div>
@@ -458,50 +456,50 @@
 
       <section id="resultsTab" class="tab-panel results-panel" role="tabpanel" aria-labelledby="tabResults">
         <div class="step-title-row">
-          <h2>Results & Evidence</h2>
-          <span id="notificationsCountPill" class="pill">0 notifications</span>
+          <h2 data-i18n="results.title"></h2>
+          <span id="notificationsCountPill" class="pill" data-i18n="results.zeroNotifications"></span>
         </div>
 
         <div id="opsListScreen" class="operations-grid">
           <div class="operations-panel">
-            <div class="mini-title">Results & Evidence — click any row for details</div>
+            <div class="mini-title" data-i18n="results.clickDetails"></div>
             <div class="ops-table" id="resultsList"></div>
           </div>
         </div>
 
         <div id="detailScreen" class="detail-screen hidden">
           <div class="detail-toolbar">
-            <button id="backToOperations" class="secondary">← Back to Results & Evidence</button>
-            <span id="detailBadge" class="pill">Result Detail</span>
+            <button id="backToOperations" class="secondary" data-i18n="results.back"></button>
+            <span id="detailBadge" class="pill" data-i18n="results.detailBadge"></span>
           </div>
 
           <div class="detail-grid">
             <div class="detail-card">
-              <h3 id="detailTitle" class="detail-title">Result detail</h3>
+              <h3 id="detailTitle" class="detail-title" data-i18n="results.detailTitle"></h3>
 
               <div class="detail-meta-grid">
-                <div class="detail-meta"><div class="detail-label">Status</div><div id="detailStatus" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">Time</div><div id="detailTime" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">CSV Row</div><div id="detailRow" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">Source</div><div id="detailSource" class="detail-value">—</div></div>
-                <div class="detail-meta wide"><div class="detail-label">Tracking Number</div><div id="detailTracking" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.status"></div><div id="detailStatus" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.time"></div><div id="detailTime" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.csvRow"></div><div id="detailRow" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.source"></div><div id="detailSource" class="detail-value">—</div></div>
+                <div class="detail-meta wide"><div class="detail-label" data-i18n="common.trackingNumber"></div><div id="detailTracking" class="detail-value">—</div></div>
               </div>
 
-              <div class="detail-section-title">Explanation</div>
+              <div class="detail-section-title" data-i18n="results.explanation"></div>
               <div id="detailExplanation" class="detail-copy">—</div>
 
-              <div class="detail-section-title">Automation Decision</div>
+              <div class="detail-section-title" data-i18n="results.automationDecision"></div>
               <div id="detailDecision" class="detail-copy">—</div>
             </div>
 
             <div class="detail-card evidence-card">
-              <div class="mini-title">Canada Post Evidence</div>
-              <div id="detailEvidenceStatus" class="detail-copy">Loading evidence…</div>
+              <div class="mini-title" data-i18n="results.canadaPostEvidence"></div>
+              <div id="detailEvidenceStatus" class="detail-copy" data-i18n="results.loadingEvidence"></div>
               <div class="detail-evidence-actions">
-                <button id="openScreenshot" class="secondary">Open Screenshot</button>
+                <button id="openScreenshot" class="secondary" data-i18n="results.openScreenshot"></button>
               </div>
               <div id="detailScreenshotWrap" class="detail-screenshot-wrap hidden">
-                <img id="detailScreenshot" class="detail-screenshot" alt="Saved Canada Post evidence screenshot" />
+                <img id="detailScreenshot" class="detail-screenshot" data-i18n-alt="results.screenshotAlt" />
               </div>
             </div>
           </div>
@@ -514,109 +512,109 @@
   <div id="liveSubmitModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="liveSubmitModalTitle">
       <div class="modal-head">
-        <h2 id="liveSubmitModalTitle">Confirm live claim submission</h2>
+        <h2 id="liveSubmitModalTitle" data-i18n="step3.confirm.title"></h2>
       </div>
       <div id="liveSubmitSummary" class="live-submit-summary"></div>
-      <div class="live-submit-warning">This action will interact with Canada Post and may create real support tickets. Dry run must remain unchecked for this dialog to appear.</div>
-      <label class="live-submit-ack"><input id="liveSubmitCanary" type="checkbox" checked /> <span id="liveSubmitCanaryLabel">Process only the first selected candidate, then stop.</span></label>
-      <label class="live-submit-ack"><input id="liveSubmitAcknowledge" type="checkbox" /> <span>I reviewed the selected claim queue and understand that this is a live submission run.</span></label>
+      <div class="live-submit-warning" data-i18n="step3.confirm.warning"></div>
+      <label class="live-submit-ack"><input id="liveSubmitCanary" type="checkbox" checked /> <span id="liveSubmitCanaryLabel" data-i18n="step3.confirm.canaryOption"></span></label>
+      <label class="live-submit-ack"><input id="liveSubmitAcknowledge" type="checkbox" /> <span data-i18n="step3.confirm.acknowledge"></span></label>
       <div class="live-submit-modal-actions">
-        <button id="cancelLiveSubmit" class="secondary" type="button">Cancel</button>
-        <button id="confirmLiveSubmit" class="success" type="button" disabled>Start live submission</button>
+        <button id="cancelLiveSubmit" class="secondary" type="button" data-i18n="action.cancel"></button>
+        <button id="confirmLiveSubmit" class="success" type="button" disabled data-i18n="step3.confirm.start"></button>
       </div>
     </div>
   </div>
 
   <div id="trackingDiagnosticModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="trackingDiagnosticTitle">
-      <div class="modal-head"><h2 id="trackingDiagnosticTitle">Choose one authorized shipment</h2></div>
-      <p id="trackingDiagnosticMessage">Exactly one authorized shipment will be queried. This does not modify claim state or start the bulk queue.</p>
-      <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow">Tracking CSV row</label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
+      <div class="modal-head"><h2 id="trackingDiagnosticTitle" data-i18n="step2.diagnostic.title"></h2></div>
+      <p id="trackingDiagnosticMessage" data-i18n="step2.diagnostic.message"></p>
+      <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow" data-i18n="step2.diagnostic.rowLabel"></label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
       <div id="trackingDiagnosticError" class="live-submit-warning hidden" role="alert"></div>
-      <div class="live-submit-modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button">Cancel</button><button id="confirmTrackingDiagnostic" class="success" type="button">Continue</button></div>
+      <div class="live-submit-modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmTrackingDiagnostic" class="success" type="button" data-i18n="action.continue"></button></div>
     </div>
   </div>
 
   <div id="step3PreflightModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="step3PreflightDialogTitle">
-      <div class="modal-head"><h2 id="step3PreflightDialogTitle">Step 3 cannot continue</h2></div>
+      <div class="modal-head"><h2 id="step3PreflightDialogTitle" data-i18n="step3.preflight.blockedTitle"></h2></div>
       <div id="step3PreflightFailures" class="blocking-check-list" role="alert"></div>
       <div id="step3PreflightWarningCount" class="modal-summary"></div>
-      <div class="live-submit-modal-actions"><button id="cancelStep3Preflight" class="secondary" type="button">Cancel</button><button id="openSettingsFromPreflight" class="secondary" type="button">Open Settings</button></div>
+      <div class="live-submit-modal-actions"><button id="cancelStep3Preflight" class="secondary" type="button" data-i18n="action.cancel"></button><button id="openSettingsFromPreflight" class="secondary" type="button" data-i18n="action.openSettings"></button></div>
     </div>
   </div>
 
   <div id="privacyDataModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card privacy-modal-card" role="dialog" aria-modal="true" aria-labelledby="privacyDataTitle">
-      <div class="modal-head"><div><h2 id="privacyDataTitle">Data Management / Privacy</h2><span id="privacyDataStatus" class="pill">Preview required</span></div><button id="closePrivacyDataModal" class="secondary" type="button">Close</button></div>
-      <p id="privacyDataIntro">Preview and remove application data by tracking number, date range, or all records. Duplicate-submission protection is retained only as non-identifying hashes and terminal outcomes.</p>
+      <div class="modal-head"><div><h2 id="privacyDataTitle" data-i18n="privacy.title"></h2><span id="privacyDataStatus" class="pill" data-i18n="privacy.status.previewRequired"></span></div><button id="closePrivacyDataModal" class="secondary" type="button" data-i18n="action.close"></button></div>
+      <p id="privacyDataIntro" data-i18n="privacy.intro"></p>
       <div class="privacy-management-grid">
-        <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers">Tracking numbers (separated by spaces, commas, or new lines)</label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
-        <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom">From date (optional)</label><input id="privacyDateFrom" type="date" /></div>
-        <div class="field"><label id="privacyDateToLabel" for="privacyDateTo">To date (optional)</label><input id="privacyDateTo" type="date" /></div>
-        <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel">Include all application records</span></label>
+        <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers" data-i18n="privacy.trackingLabel"></label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
+        <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom" data-i18n="privacy.dateFrom"></label><input id="privacyDateFrom" type="date" /></div>
+        <div class="field"><label id="privacyDateToLabel" for="privacyDateTo" data-i18n="privacy.dateTo"></label><input id="privacyDateTo" type="date" /></div>
+        <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel" data-i18n="privacy.allRecords"></span></label>
       </div>
-      <button id="previewPrivacyData" class="secondary" type="button">Preview selected data</button>
+      <button id="previewPrivacyData" class="secondary" type="button" data-i18n="privacy.preview"></button>
       <div id="privacyPreviewCounts" class="privacy-preview-counts" aria-live="polite"></div>
       <div id="privacyDeletionControls" class="privacy-management-grid hidden">
-        <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel">I understand this removes the selected personal and shipment data from this application.</span></label>
-        <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase">Type the displayed confirmation phrase exactly</label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
+        <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel" data-i18n="privacy.destructiveConfirm"></span></label>
+        <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase" data-i18n="privacy.typedPhraseLabel"></label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
         <div id="privacyExpectedPhrase" class="live-submit-warning wide"></div>
-        <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel">Confirm again that all application data should be deleted.</span></label>
-        <button id="deletePrivacyData" class="danger wide" type="button">Delete previewed data</button>
+        <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel" data-i18n="privacy.secondConfirm"></span></label>
+        <button id="deletePrivacyData" class="danger wide" type="button" data-i18n="privacy.delete"></button>
       </div>
-      <p id="privacyExternalCopiesNotice">External exports and backups are separate copies. The operator is responsible for deleting external copies. Encrypted backups may still contain previously exported data. Deletion from this application does not delete Canada Post’s records.</p>
+      <p id="privacyExternalCopiesNotice" data-i18n="privacy.externalCopies"></p>
     </div>
   </div>
 
   <div id="warningModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="warningModalTitle">
       <div class="modal-head">
-        <h2 id="warningModalTitle">Step 1 Warnings</h2>
-        <button id="closeWarningModal" class="secondary" type="button">Close</button>
+        <h2 id="warningModalTitle" data-i18n="step1.warningsTitle"></h2>
+        <button id="closeWarningModal" class="secondary" type="button" data-i18n="action.close"></button>
       </div>
-      <div id="warningModalSummary" class="modal-summary">No warnings captured for the current Step 1 run.</div>
+      <div id="warningModalSummary" class="modal-summary" data-i18n="step1.noWarnings"></div>
       <div id="warningList" class="warning-list"></div>
     </div>
   </div>
 
   <div id="backupPasswordModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="backupPasswordTitle">
-      <div class="modal-head"><h2 id="backupPasswordTitle">Encrypted backup password</h2></div>
-      <p id="backupPasswordMessage">Enter a strong password of at least 12 characters. It is never saved and cannot be recovered.</p>
-      <div class="field"><label for="backupPassword">Backup password</label><input id="backupPassword" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
-      <div class="field" id="backupPasswordConfirmField"><label for="backupPasswordConfirm">Confirm password</label><input id="backupPasswordConfirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
+      <div class="modal-head"><h2 id="backupPasswordTitle" data-i18n="backup.passwordTitle"></h2></div>
+      <p id="backupPasswordMessage" data-i18n="backup.passwordMessage"></p>
+      <div class="field"><label for="backupPassword" data-i18n="backup.password"></label><input id="backupPassword" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
+      <div class="field" id="backupPasswordConfirmField"><label for="backupPasswordConfirm" data-i18n="backup.confirmPassword"></label><input id="backupPasswordConfirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
       <div id="backupPasswordError" class="live-submit-warning hidden" role="alert"></div>
-      <div class="live-submit-modal-actions"><button id="cancelBackupPassword" class="secondary" type="button">Cancel</button><button id="confirmBackupPassword" class="success" type="button">Continue</button></div>
+      <div class="live-submit-modal-actions"><button id="cancelBackupPassword" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmBackupPassword" class="success" type="button" data-i18n="action.continue"></button></div>
     </div>
   </div>
 
   <div id="setupWizard" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="setupWizardTitle">
-      <div class="modal-head"><h2 id="setupWizardTitle">Welcome — readiness setup</h2></div>
-      <p id="setupIntro">Canada Post Claim Runner keeps credentials, operational records, and browser sessions on this device. Setup never tests an account or submits a claim automatically.</p>
+      <div class="modal-head"><h2 id="setupWizardTitle" data-i18n="setup.title"></h2></div>
+      <p id="setupIntro" data-i18n="setup.intro"></p>
       <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
-      <div id="setupSafetyNotice" class="live-submit-warning">Start with dry run. Live submission remains separately acknowledged and blocked until a reviewed queue passes preflight. CAPTCHA and text verification stay manual in the visible built-in browser.</div>
-      <label class="checkbox-row"><input id="setupSafetyAcknowledge" type="checkbox" /> <span id="setupSafetyAcknowledgeLabel">I understand that setup does not authorize Step 2 or Step 3, and that live submission requires separate supervised gates.</span></label>
-      <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button">Continue later</button><button id="setupOpenSettings" class="secondary" type="button">Review Settings</button><button id="setupFinish" class="success" type="button">Finish Setup</button></div>
+      <div id="setupSafetyNotice" class="live-submit-warning" data-i18n="setup.safety"></div>
+      <label class="checkbox-row"><input id="setupSafetyAcknowledge" type="checkbox" /> <span id="setupSafetyAcknowledgeLabel" data-i18n="setup.safetyAcknowledge"></span></label>
+      <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button" data-i18n="action.continueLater"></button><button id="setupOpenSettings" class="secondary" type="button" data-i18n="action.settings"></button><button id="setupFinish" class="success" type="button" data-i18n="action.finishSetup"></button></div>
     </div>
   </div>
 
   <div id="supportBundleModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supportBundleTitle">
-      <div class="modal-head"><h2 id="supportBundleTitle">Preview sanitized support bundle</h2></div>
-      <p><span id="supportReferenceLabel">Support reference</span>: <strong id="supportReferenceId"></strong></p>
+      <div class="modal-head"><h2 id="supportBundleTitle" data-i18n="support.title"></h2></div>
+      <p><span id="supportReferenceLabel" data-i18n="support.reference"></span>: <strong id="supportReferenceId"></strong></p>
       <p id="supportBundleMetadata"></p>
       <div class="preflight-list">
-        <label><input type="checkbox" data-support-component="system" /> <span id="supportSystemLabel">System and database integrity</span></label>
-        <label><input type="checkbox" data-support-component="settings" /> <span id="supportSettingsLabel">Sanitized configuration status</span></label>
-        <label><input type="checkbox" data-support-component="history" /> <span id="supportHistoryLabel">Masked recent attempt summaries (opt in)</span></label>
-        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel">Recent log metadata without text (opt in)</span></label>
-        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label">Step 3 diagnostic metadata without text or screenshots (opt in)</span></label>
+        <label><input type="checkbox" data-support-component="system" /> <span id="supportSystemLabel" data-i18n="support.component.system"></span></label>
+        <label><input type="checkbox" data-support-component="settings" /> <span id="supportSettingsLabel" data-i18n="support.component.settings"></span></label>
+        <label><input type="checkbox" data-support-component="history" /> <span id="supportHistoryLabel" data-i18n="support.component.history"></span></label>
+        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel" data-i18n="support.component.logs"></span></label>
+        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label" data-i18n="support.component.step3"></span></label>
       </div>
       <div id="supportBundleExclusions" class="live-submit-warning"></div>
-      <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel">I reviewed these components and will inspect the archive before sharing it.</span></label>
-      <div class="live-submit-modal-actions"><button id="cancelSupportBundle" class="secondary" type="button">Cancel</button><button id="confirmSupportBundle" class="success" type="button" disabled>Create support bundle</button></div>
+      <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel" data-i18n="support.acknowledge"></span></label>
+      <div class="live-submit-modal-actions"><button id="cancelSupportBundle" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmSupportBundle" class="success" type="button" disabled data-i18n="support.create"></button></div>
     </div>
   </div>
 

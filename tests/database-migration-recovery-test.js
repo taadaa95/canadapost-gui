@@ -259,7 +259,13 @@ async function migrateAndRepeat(filePath, options = {}, expected = {}) {
     assert.match(mainSource, /await claimDb\.initializeDatabase\(DB_PATH/);
     assert.ok(mainSource.indexOf('await claimDb.initializeDatabase(DB_PATH') < mainSource.indexOf('databaseReady = true'));
     assert.ok(mainSource.indexOf('databaseReady = true') < mainSource.indexOf('createWindow();', mainSource.indexOf('async function startApplication')));
-    assert.match(mainSource, /buttons: \['Open data folder', 'Copy diagnostic', 'Exit'\]/);
+    assert.match(mainSource, /localizedText\('dialog\.databaseRecovery\.openData'/);
+    assert.match(mainSource, /localizedText\('dialog\.databaseRecovery\.copyDiagnostic'/);
+    assert.match(mainSource, /localizedText\('dialog\.databaseRecovery\.exit'/);
+    const frenchLocale = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'locales', 'fr-CA.json'), 'utf8'));
+    assert.strictEqual(frenchLocale['dialog.databaseRecovery.openData'], 'Ouvrir le dossier de données');
+    assert.strictEqual(frenchLocale['dialog.databaseRecovery.copyDiagnostic'], 'Copier le diagnostic');
+    assert.strictEqual(frenchLocale['dialog.databaseRecovery.exit'], 'Quitter');
     assert.match(mainSource, /\.catch\(error => handleStartupFailure\(error\)\)/);
 
     console.log('Database migration recovery fixtures passed (12 states).');

@@ -155,6 +155,22 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
     assert.strictEqual(isolatedResult.ok, false);
     assert.match(isolatedResult.error, /disabled while isolated test data is active/i);
 
+    const frenchHandlers = new Map();
+    const frenchDialogs = [];
+    updater.registerGithubReleaseUpdater({
+      app: { isPackaged: false },
+      registerIpcHandler: (channel, handler) => frenchHandlers.set(channel, handler),
+      dialog: { showMessageBox: async options => { frenchDialogs.push(options); return { response: 0 }; } },
+      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
+      shell: {},
+      localeProvider: () => 'fr-CA'
+    });
+    const frenchDevelopmentResult = await frenchHandlers.get('updates:open')();
+    assert.strictEqual(frenchDevelopmentResult.ok, false);
+    assert.strictEqual(frenchDialogs[0].title, 'Rechercher des mises à jour');
+    assert.match(frenchDialogs[0].message, /version empaquetée/);
+    assert.strictEqual(frenchDialogs[0].buttons[0], 'OK');
+
     const artifactPath = path.join(root, manifest.artifact.file);
     fs.writeFileSync(artifactPath, artifactBytes);
     assert.strictEqual(security.verifyArtifact(artifactPath, manifest.artifact), true);

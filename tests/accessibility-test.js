@@ -3,6 +3,7 @@
 const assert = require('assert');
 const path = require('path');
 const { chromium } = require('playwright');
+const { loadLocale } = require('../lib/i18n');
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -10,6 +11,14 @@ const { chromium } = require('playwright');
   const page = await context.newPage();
   try {
     await page.goto(`file://${path.resolve(__dirname, '../index.html')}`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(messages => {
+      document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = messages[element.dataset.i18n]; });
+      for (const attribute of ['placeholder', 'aria-label', 'title', 'alt']) {
+        document.querySelectorAll(`[data-i18n-${attribute}]`).forEach(element => {
+          element.setAttribute(attribute, messages[element.getAttribute(`data-i18n-${attribute}`)]);
+        });
+      }
+    }, loadLocale('en-CA').messages);
     await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
     const results = await page.evaluate(async () => window.axe.run(document, {
       runOnly: { type: 'rule', values: ['button-name', 'document-title', 'duplicate-id', 'html-has-lang', 'label', 'landmark-one-main'] }

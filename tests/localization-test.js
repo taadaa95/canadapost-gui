@@ -1,10 +1,13 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { assertLocaleCompleteness, loadLocale, normalizeLocale, translate, interpolate } = require('../lib/i18n');
 
+const root = path.resolve(__dirname, '..');
 const keys = assertLocaleCompleteness();
-assert.ok(keys.length >= 35);
+assert.ok(keys.length >= 640, 'the complete interface localization catalogue must be present');
 assert.strictEqual(normalizeLocale('fr'), 'fr-CA');
 assert.strictEqual(normalizeLocale('en-US'), 'en-CA');
 const french = loadLocale('fr-CA');
@@ -15,4 +18,90 @@ assert.strictEqual(interpolate(translate(french, 'step3.selectedCount'), { selec
 assert.strictEqual(interpolate('Keep {tracking} and {phone}', { tracking: '1234567890123456', phone: '1-888-550-6333' }), 'Keep 1234567890123456 and 1-888-550-6333');
 assert.ok(french.messages['step3.supportGuidance'].includes('1-888-550-6333'));
 assert.ok(!Object.values(french.messages).some(value => !String(value).trim()));
-process.stdout.write('Localization completeness tests passed.\n');
+
+const english = loadLocale('en-CA').messages;
+const identicalFrenchAllowlist = new Map([
+  ['step3.queue.service', 'Service is the natural French cognate.'],
+  ['app.version', 'Version is the natural French cognate.'],
+  ['environment.production', 'Production is the natural French cognate.'],
+  ['settings.sender.province', 'Province is the natural French cognate.'],
+  ['common.source', 'Source is the natural French cognate.'],
+  ['history.manual.note', 'Note is the natural French cognate.'],
+  ['results.notificationCount', 'Notification is the natural French cognate and the value is parameterized.'],
+  ['results.oneNotification', 'Notification is the natural French cognate.'],
+  ['history.confirmation', 'Confirmation is the natural French cognate.'],
+  ['history.message', 'Message is the natural French cognate.'],
+  ['history.actions', 'Actions is the natural French cognate.'],
+  ['runStatus.captcha', 'CAPTCHA is an international technical acronym.'],
+  ['common.absent', 'Absent is the natural French cognate.'],
+  ['common.date', 'Date is the natural French cognate.']
+]);
+const identical = keys.filter(key => english[key] === french.messages[key]);
+assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].sort(), 'identical translations require a narrow, reviewed allowlist');
+
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
+assert(localizedAttributes.length >= 270, 'major interface text and accessibility attributes must use declarative localization');
+for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
+
+const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
+  .map(match => match[1].replace(/&amp;/g, '&').trim())
+  .filter(text => /[A-Za-zÀ-ÿ]/.test(text));
+const intentionalTemplateText = new Set(['English (Canada)', 'Français (Canada)', '0.4.0-beta.1']);
+assert.deepStrictEqual([...new Set(visibleTextNodes)].sort(), [...intentionalTemplateText].sort(), 'HTML must not contain hard-coded interface copy');
+
+const rendererSource = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
+const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
+const updaterSource = fs.readFileSync(path.join(root, 'lib', 'github-release-updater.js'), 'utf8');
+const nativeAuthorizationSource = fs.readFileSync(path.join(root, 'lib', 'live-submission-authorization.js'), 'utf8');
+for (const forbidden of [
+  '.textContent = \'No claim results yet.\'',
+  '.textContent = \'View evidence\'',
+  '.textContent = \'Database healthy\'',
+  '.textContent = \'Health Check Running…\'',
+  "window.confirm('Restore a backup?",
+  "window.confirm('Log out and clear the Canada Post browser profile?"
+]) assert(!rendererSource.includes(forbidden), `renderer still hard-codes user-visible English: ${forbidden}`);
+
+for (const forbidden of [
+  "title: 'Select tracking.csv'",
+  "title: 'Export claim history'",
+  "title: 'Create Canada Post Claim Runner backup'",
+  "title: 'Restore Canada Post Claim Runner backup'",
+  "title: 'Create sanitized support bundle'",
+  "title: 'Database recovery required'",
+  "buttons: ['Open data folder', 'Copy diagnostic', 'Exit']"
+]) assert(!mainSource.includes(forbidden), `native dialog still hard-codes English: ${forbidden}`);
+for (const forbidden of [
+  "title: 'Check for updates'", "title: 'No update available'", "title: 'Update available'",
+  "title: 'Final live-submission confirmation'", "buttons: ['Cancel'"
+]) assert(!`${updaterSource}\n${nativeAuthorizationSource}`.includes(forbidden), `native module still hard-codes English: ${forbidden}`);
+
+const staticCodeKeys = new Set();
+for (const source of [rendererSource, mainSource, updaterSource, nativeAuthorizationSource]) {
+  for (const match of source.matchAll(/(?:tr|localizedText)\(\s*['"]([^'"]+)['"]/g)) staticCodeKeys.add(match[1]);
+}
+for (const key of staticCodeKeys) assert(Object.hasOwn(english, key), `code localization key is missing: ${key}`);
+
+for (const key of [
+  'dialog.liveSubmit.title', 'dialog.liveSubmit.message', 'dialog.liveSubmit.canaryMessage',
+  'dialog.liveSubmit.detail', 'dialog.liveSubmit.action', 'dialog.liveSubmit.canaryAction',
+  'update.check', 'update.packagedOnly', 'update.none.title', 'update.none.message',
+  'update.available.title', 'update.available.message', 'update.available.download', 'update.available.openRelease'
+]) {
+  assert(Object.hasOwn(french.messages, key), `French native-confirmation localization is missing: ${key}`);
+  assert.notStrictEqual(french.messages[key], english[key], `French native-confirmation text remained English: ${key}`);
+}
+
+const observedEnglish = [
+  'Run Step 1 — Import EST History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
+  'Test API connection with one shipment', 'Export sanitized response structure', 'Discard incomplete Step 2 run',
+  'Use built-in browser inside the app', 'Stop After Current Item', 'Run Canada Post Workflow Health Check',
+  'Check Browser Session', 'Manually add or annotate a shipment', 'Results & Evidence — click any row for details'
+];
+for (const text of observedEnglish) {
+  assert(Object.values(english).includes(text), `English catalogue is missing reviewed copy: ${text}`);
+  assert(!Object.values(french.messages).includes(text), `French catalogue retained English interface copy: ${text}`);
+}
+
+process.stdout.write(`Localization completeness tests passed for ${keys.length} keys and ${localizedAttributes.length} localized DOM attributes.\n`);

@@ -215,9 +215,11 @@ function createLegacyDatabase(filePath) {
     const renderer = fs.readFileSync(path.join(repositoryRoot, 'renderer.js'), 'utf8');
     const main = fs.readFileSync(path.join(repositoryRoot, 'main.js'), 'utf8');
     const updater = fs.readFileSync(path.join(repositoryRoot, 'lib', 'github-release-updater.js'), 'utf8');
+    const englishLocale = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'locales', 'en-CA.json'), 'utf8'));
     const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'));
     assert.strictEqual(packageJson.main, 'bootstrap.js');
-    assert.match(html, /ISOLATED TEST DATA — changes do not affect the normal application profile/);
+    assert.match(html, /data-i18n="app\.isolatedBanner"/);
+    assert.match(englishLocale['app.isolatedBanner'], /ISOLATED TEST DATA — changes do not affect the normal application profile/);
     assert.match(renderer, /Canada Post Claim Runner \[ISOLATED TEST DATA\]/);
     assert.match(main, /Live claim submission is disabled while isolated test data is active/);
     assert.match(updater, /Updates are disabled while isolated test data is active/);

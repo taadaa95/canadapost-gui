@@ -25,7 +25,9 @@ assert.strictEqual(complete.steps.find(step => step.id === 'external').ready, nu
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'base.css'), 'utf8');
-assert.deepStrictEqual([...html.matchAll(/<option value="([^"]+)">(?:System|Dark|Light|High Contrast)<\/option>/g)].map(match => match[1]), ['system', 'dark', 'light', 'high-contrast']);
+assert.deepStrictEqual([...html.matchAll(/<option value="([^"]+)" data-i18n="theme\.(?:system|dark|light|highContrast)"><\/option>/g)].map(match => match[1]), ['system', 'dark', 'light', 'high-contrast']);
+const french = require('../locales/fr-CA.json');
+assert.deepStrictEqual(['theme.system', 'theme.dark', 'theme.light', 'theme.highContrast'].map(key => french[key]), ['Système', 'Sombre', 'Clair', 'Contraste élevé']);
 for (const removed of ['tokyo-night', 'catppuccin-mocha', 'dracula', 'amoled']) assert.ok(!css.includes(`[data-theme="${removed}"]`));
 assert.match(html, /id="setupSafetyAcknowledge"[^>]*type="checkbox"/);
 
