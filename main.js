@@ -32,6 +32,7 @@ const trackingDiagnosticSelection = require('./lib/tracking-diagnostic-selection
 const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browser-handshake');
 const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
 const { createFocusedRegistrar } = require('./main/ipc');
+const { validateWorkerEvent } = require('./lib/ipc-contracts');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
@@ -1222,7 +1223,13 @@ function spawnJsonProcess(workerName, options, stage, logPath, hooks = {}) {
       appendLog(logPath, raw);
     };
 
-    const handleEvent = event => {
+    const handleEvent = rawEvent => {
+      let event;
+      try {
+        event = validateWorkerEvent(rawEvent, stage);
+      } catch (error) {
+        event = { type: 'worker_protocol_error', code: error.code || 'WORKER_EVENT_INVALID', message: error.message };
+      }
       lastEvent = event;
       const type = String(event?.type || 'unknown');
       lastEventsByType[type] = event;

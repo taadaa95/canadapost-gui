@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateIpcPayload } = require('../../lib/ipc-contracts');
+
 const groups = Object.freeze({
   settings: require('./settings'),
   step1: require('./step1'),
@@ -26,7 +28,16 @@ function createFocusedRegistrar(ipcMain) {
     if (registered.has(channel)) throw new Error(`IPC channel ${channel} was registered more than once.`);
     if (typeof handler !== 'function') throw new TypeError(`IPC handler ${channel} must be a function.`);
     registered.add(channel);
-    ipcMain.handle(channel, handler);
+    ipcMain.handle(channel, (event, payload, ...rest) => {
+      try {
+        return handler(event, validateIpcPayload(channel, payload), ...rest);
+      } catch (error) {
+        if (String(error?.code || '').startsWith('IPC_')) {
+          return { ok: false, code: error.code, error: error.message };
+        }
+        throw error;
+      }
+    });
     return { channel, group: ownership.get(channel) };
   };
 }
