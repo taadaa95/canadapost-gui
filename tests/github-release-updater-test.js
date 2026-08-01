@@ -37,6 +37,16 @@ assert.strictEqual(updater.channelFor('0.4.0'), 'stable');
 assert.throws(() => updater.version('latest'), /invalid/i);
 assert.throws(() => updater.githubUrl('http://github.com/file'), /approved/i);
 assert.throws(() => updater.githubUrl('https://example.com/file'), /approved/i);
+assert.throws(() => security.validateUnsignedManifest({
+  format: security.UPDATE_MANIFEST_FORMAT,
+  manifestVersion: security.UPDATE_MANIFEST_VERSION,
+  applicationVersion: '0.4.1-beta.1',
+  channel: 'beta',
+  publishedAt: '2026-08-01T12:00:00.000Z',
+  platform: 'linux',
+  architecture: 'x64',
+  artifact: { file: '..\\outside.AppImage', bytes: 1, sha256: 'a'.repeat(64) }
+}), /file name is invalid/i);
 
 const stable = updater.selectRelease([
   release('v0.4.2-beta.1', { prerelease: true }),
@@ -86,6 +96,19 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
   const artifactBytes = Buffer.from('synthetic updater artifact');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-updater-trust-'));
   try {
+    const isolatedHandlers = new Map();
+    updater.registerGithubReleaseUpdater({
+      app: { isPackaged: true },
+      registerIpcHandler: (channel, handler) => isolatedHandlers.set(channel, handler),
+      dialog: {},
+      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
+      shell: {},
+      isolated: true
+    });
+    const isolatedResult = await isolatedHandlers.get('updates:open')();
+    assert.strictEqual(isolatedResult.ok, false);
+    assert.match(isolatedResult.error, /disabled while isolated test data is active/i);
+
     const artifactPath = path.join(root, manifest.artifact.file);
     fs.writeFileSync(artifactPath, artifactBytes);
     assert.strictEqual(security.verifyArtifact(artifactPath, manifest.artifact), true);
@@ -117,6 +140,40 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
     assert.strictEqual(result.available, true);
     assert.strictEqual(result.version, '0.4.1-beta.1');
     assert.strictEqual(result.artifact.sha256, manifest.artifact.sha256);
+
+    const redirectCalls = [];
+    await assert.rejects(() => updater.resolveUpdate({
+      source,
+      publicKey: keys.publicKey,
+      currentVersion: '0.4.0-beta.1',
+      channel: 'beta',
+      platform: 'linux',
+      arch: 'x64',
+      fetchImpl: async (url, options) => {
+        redirectCalls.push({ url: String(url), redirect: options.redirect });
+        return new Response('', { status: 302, headers: { location: 'https://attacker.invalid/update.json' } });
+      }
+    }), error => error.code === 'UPDATE_URL_BLOCKED');
+    assert.deepStrictEqual(redirectCalls, [{ url: updater.apiUrl(source), redirect: 'manual' }], 'a disallowed redirect must be rejected before it is followed');
+
+    const currentAppImage = path.join(root, 'Canada.Post.Claim.Runner-current.AppImage');
+    const downloadedAppImage = path.join(root, manifest.artifact.file);
+    fs.writeFileSync(currentAppImage, 'old verified application');
+    fs.writeFileSync(downloadedAppImage, artifactBytes);
+    await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage });
+    assert.strictEqual(fs.readFileSync(currentAppImage, 'utf8'), artifactBytes.toString('utf8'));
+    assert.strictEqual(fs.readFileSync(`${currentAppImage}.previous`, 'utf8'), 'old verified application');
+
+    fs.writeFileSync(downloadedAppImage, Buffer.alloc(manifest.artifact.bytes, 1));
+    let quitCalled = false;
+    await assert.rejects(() => updater.installUpdate({
+      app: { quit: () => { quitCalled = true; } },
+      shell: {},
+      downloadedPath: downloadedAppImage,
+      update: { artifact: manifest.artifact },
+      platform: 'win32'
+    }), /checksum verification/i);
+    assert.strictEqual(quitCalled, false, 'an installer modified after download verification must never be executed');
 
     await assert.rejects(() => updater.resolveUpdate({ source, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl }), /No trusted production update public key/i);
     await assert.rejects(() => updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl: async url => {
