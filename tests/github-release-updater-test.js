@@ -31,6 +31,52 @@ function signedManifest(keys, overrides = {}) {
   }, keys.privateKey);
 }
 
+function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedBytes, fail = () => false, alterHash = null }) {
+  const files = new Map([
+    [current, Buffer.from(currentBytes)],
+    [downloaded, Buffer.from(downloadedBytes)]
+  ]);
+  const calls = [];
+  const counts = new Map();
+  const record = (operation, target, destination = '') => {
+    calls.push({ operation, target, destination });
+    if (fail(operation, target, destination)) throw Object.assign(new Error(`synthetic ${operation} failure`), { code: 'SYNTHETIC_FAILURE' });
+  };
+  const fileSystem = {
+    existsSync(target) { return files.has(target); },
+    accessSync(target) { record('access', target); },
+    rmSync(target) { record('remove', target); files.delete(target); },
+    copyFileSync(source, destination) {
+      record('copy', source, destination);
+      if (!files.has(source)) throw new Error(`Missing synthetic source ${source}`);
+      if (files.has(destination)) throw new Error(`Synthetic exclusive destination exists ${destination}`);
+      files.set(destination, Buffer.from(files.get(source)));
+    },
+    chmodSync(target) { record('chmod', target); },
+    openSync(target) { record('open', target); return target; },
+    fsyncSync(target) { record('fsync', target); },
+    closeSync(target) { record('close', target); },
+    renameSync(source, destination) {
+      record('rename', source, destination);
+      if (!files.has(source)) throw new Error(`Missing synthetic rename source ${source}`);
+      files.set(destination, files.get(source));
+      files.delete(source);
+    }
+  };
+  const hashFile = async target => {
+    record('hash', target);
+    const count = Number(counts.get(target) || 0) + 1;
+    counts.set(target, count);
+    if (!files.has(target)) return '';
+    if (alterHash) {
+      const replacement = alterHash(target, count, files);
+      if (replacement) return replacement;
+    }
+    return crypto.createHash('sha256').update(files.get(target)).digest('hex');
+  };
+  return { fileSystem, hashFile, files, calls, counts };
+}
+
 assert.strictEqual(updater.version('v0.4.1'), '0.4.1');
 assert.strictEqual(updater.channelFor('0.4.0-beta.1'), 'beta');
 assert.strictEqual(updater.channelFor('0.4.0'), 'stable');
@@ -158,11 +204,79 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
 
     const currentAppImage = path.join(root, 'Canada.Post.Claim.Runner-current.AppImage');
     const downloadedAppImage = path.join(root, manifest.artifact.file);
-    fs.writeFileSync(currentAppImage, 'old verified application');
-    fs.writeFileSync(downloadedAppImage, artifactBytes);
-    await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage });
-    assert.strictEqual(fs.readFileSync(currentAppImage, 'utf8'), artifactBytes.toString('utf8'));
-    assert.strictEqual(fs.readFileSync(`${currentAppImage}.previous`, 'utf8'), 'old verified application');
+    const oldAppImage = Buffer.from('old verified application');
+    const stagedPath = path.join(path.dirname(currentAppImage), `.${path.basename(currentAppImage)}.new-${process.pid}`);
+    const backupStagedPath = `${currentAppImage}.previous.new-${process.pid}`;
+    const fake = fakeAppImageFileSystem({
+      current: currentAppImage,
+      downloaded: downloadedAppImage,
+      currentBytes: oldAppImage,
+      downloadedBytes: artifactBytes
+    });
+    await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
+      platform: 'linux', fileSystem: fake.fileSystem, fileHash: fake.hashFile
+    });
+    assert.deepStrictEqual(fake.files.get(currentAppImage), artifactBytes, 'verified staged AppImage must atomically replace the current image');
+    assert.deepStrictEqual(fake.files.get(`${currentAppImage}.previous`), oldAppImage, 'verified previous AppImage must remain available for rollback');
+    assert.strictEqual(fake.counts.get(stagedPath), 2, 'staged AppImage must be verified after copy and immediately before replacement');
+    assert.strictEqual(fake.counts.get(backupStagedPath), 1, 'rollback AppImage copy must be verified before publication');
+    assert(fake.calls.some(call => call.operation === 'fsync' && call.target === stagedPath), 'staged AppImage data must be synchronized');
+    assert(fake.calls.some(call => call.operation === 'fsync' && call.target === backupStagedPath), 'rollback AppImage data must be synchronized');
+    assert.strictEqual(fake.calls.filter(call => call.operation === 'fsync' && call.target === path.dirname(currentAppImage)).length, 2, 'Linux directory must be synchronized after both atomic renames');
+    const replacementRename = fake.calls.findIndex(call => call.operation === 'rename' && call.target === stagedPath && call.destination === currentAppImage);
+    assert(replacementRename > 0);
+    assert.deepStrictEqual(fake.calls[replacementRename - 1], { operation: 'hash', target: stagedPath, destination: '' }, 'no operation may intervene between final staged verification and replacement');
+
+    if (process.platform === 'linux') {
+      fs.writeFileSync(currentAppImage, oldAppImage);
+      fs.writeFileSync(downloadedAppImage, artifactBytes);
+      await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage });
+      assert.strictEqual(fs.readFileSync(currentAppImage, 'utf8'), artifactBytes.toString('utf8'));
+      assert.strictEqual(fs.readFileSync(`${currentAppImage}.previous`, 'utf8'), oldAppImage.toString('utf8'));
+    } else {
+      await assert.rejects(
+        () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }),
+        error => error.code === 'UPDATE_PLATFORM_UNSUPPORTED'
+      );
+    }
+
+    let nonLinuxSyncCalls = 0;
+    assert.strictEqual(updater.syncDirectory(path.dirname(currentAppImage), {
+      platform: 'win32',
+      fileSystem: { openSync() { nonLinuxSyncCalls += 1; throw new Error('must not open'); } }
+    }), false);
+    assert.strictEqual(nonLinuxSyncCalls, 0, 'Windows must not attempt unsupported directory fsync');
+
+    const failureCases = [
+      ['file sync', (operation, target) => operation === 'fsync' && target === stagedPath],
+      ['directory sync', (operation, target) => operation === 'fsync' && target === path.dirname(currentAppImage)],
+      ['atomic rename', (operation, target, destination) => operation === 'rename' && target === stagedPath && destination === currentAppImage]
+    ];
+    for (const [label, fail] of failureCases) {
+      const failing = fakeAppImageFileSystem({ current: currentAppImage, downloaded: downloadedAppImage, currentBytes: oldAppImage, downloadedBytes: artifactBytes, fail });
+      await assert.rejects(
+        () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
+          platform: 'linux', fileSystem: failing.fileSystem, fileHash: failing.hashFile
+        }),
+        error => error.code === 'UPDATE_APPIMAGE_REPLACE_FAILED',
+        `${label} failure must remain fatal on Linux`
+      );
+    }
+
+    const changedBeforeRename = fakeAppImageFileSystem({
+      current: currentAppImage,
+      downloaded: downloadedAppImage,
+      currentBytes: oldAppImage,
+      downloadedBytes: artifactBytes,
+      alterHash: (target, count) => target === stagedPath && count === 2 ? '0'.repeat(64) : ''
+    });
+    await assert.rejects(
+      () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
+        platform: 'linux', fileSystem: changedBeforeRename.fileSystem, fileHash: changedBeforeRename.hashFile
+      }),
+      error => error.code === 'UPDATE_STAGED_HASH_MISMATCH'
+    );
+    assert.deepStrictEqual(changedBeforeRename.files.get(currentAppImage), oldAppImage, 'integrity failure must leave the current AppImage unchanged');
 
     fs.writeFileSync(downloadedAppImage, Buffer.alloc(manifest.artifact.bytes, 1));
     let quitCalled = false;
@@ -174,6 +288,26 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
       platform: 'win32'
     }), /checksum verification/i);
     assert.strictEqual(quitCalled, false, 'an installer modified after download verification must never be executed');
+
+    fs.writeFileSync(downloadedAppImage, artifactBytes);
+    const launches = [];
+    let linuxReplacementCalled = false;
+    await updater.installUpdate({
+      app: { quit: () => { quitCalled = true; } },
+      shell: {},
+      downloadedPath: downloadedAppImage,
+      update: { artifact: manifest.artifact },
+      platform: 'win32',
+      launchDetached: (command, args) => {
+        security.verifyArtifact(downloadedAppImage, manifest.artifact);
+        launches.push({ command, args });
+      },
+      replaceAppImageImpl: async () => { linuxReplacementCalled = true; throw new Error('Windows invoked Linux replacement'); }
+    });
+    assert.strictEqual(launches.length, 1);
+    assert.strictEqual(launches[0].command, 'powershell.exe');
+    assert.strictEqual(linuxReplacementCalled, false, 'Windows NSIS handoff must not invoke AppImage replacement');
+    assert.strictEqual(quitCalled, true);
 
     await assert.rejects(() => updater.resolveUpdate({ source, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl }), /No trusted production update public key/i);
     await assert.rejects(() => updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl: async url => {
