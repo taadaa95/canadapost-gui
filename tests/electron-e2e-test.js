@@ -31,9 +31,12 @@ const { createMockPortal } = require('../mock-portal/server');
     assert.strictEqual(await window.evaluate(() => typeof globalThis.require), 'undefined');
     assert.strictEqual(await window.evaluate(() => typeof globalThis.process), 'undefined');
     await window.locator('#setupWizard:not(.hidden)').waitFor({ state: 'visible' });
-    await window.getByRole('button', { name: 'Finish Setup' }).click();
+    assert.strictEqual(await window.getByRole('button', { name: 'Finish Setup' }).isDisabled(), true, 'incomplete readiness must not be marked finished');
+    await window.getByRole('button', { name: 'Continue later' }).click();
     await window.locator('#setupWizard').waitFor({ state: 'hidden' });
-    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(userData, 'config.json'), 'utf8')).setupCompleted, true);
+    const setupConfigPath = path.join(userData, 'config.json');
+    const setupConfig = fs.existsSync(setupConfigPath) ? JSON.parse(fs.readFileSync(setupConfigPath, 'utf8')) : {};
+    assert.notStrictEqual(setupConfig.setupCompleted, true, 'continue later must preserve resumable onboarding');
     const beforeStep3Target = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(beforeStep3Target.created, false, 'native browser must be created deliberately, not by unrelated startup');
 
