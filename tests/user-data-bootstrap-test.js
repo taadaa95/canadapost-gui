@@ -214,12 +214,13 @@ function createLegacyDatabase(filePath) {
     const html = fs.readFileSync(path.join(repositoryRoot, 'index.html'), 'utf8');
     const renderer = fs.readFileSync(path.join(repositoryRoot, 'renderer.js'), 'utf8');
     const main = fs.readFileSync(path.join(repositoryRoot, 'main.js'), 'utf8');
+    const updater = fs.readFileSync(path.join(repositoryRoot, 'lib', 'github-release-updater.js'), 'utf8');
     const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'));
     assert.strictEqual(packageJson.main, 'bootstrap.js');
     assert.match(html, /ISOLATED TEST DATA — changes do not affect the normal application profile/);
     assert.match(renderer, /Canada Post Claim Runner \[ISOLATED TEST DATA\]/);
     assert.match(main, /Live claim submission is disabled while isolated test data is active/);
-    assert.match(main, /Update actions are disabled while isolated test data is active/);
+    assert.match(updater, /Updates are disabled while isolated test data is active/);
 
     process.stdout.write('User-data bootstrap, containment, isolated UI guard, and migration no-op tests passed.\n');
   } finally {

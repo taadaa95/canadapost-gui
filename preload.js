@@ -2,6 +2,21 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+const subscriptions = new Map();
+function subscribe(channel, callback) {
+  if (typeof callback !== 'function') throw new TypeError(`${channel} listener must be a function.`);
+  const previous = subscriptions.get(channel);
+  if (previous) ipcRenderer.removeListener(channel, previous);
+  const listener = (_event, payload) => callback(payload);
+  subscriptions.set(channel, listener);
+  ipcRenderer.on(channel, listener);
+  return () => {
+    if (subscriptions.get(channel) !== listener) return;
+    subscriptions.delete(channel);
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
 contextBridge.exposeInMainWorld('cpApp', {
   loadConfig: () => ipcRenderer.invoke('config:load'),
   saveConfig: config => ipcRenderer.invoke('config:save', config),
@@ -52,11 +67,11 @@ contextBridge.exposeInMainWorld('cpApp', {
   clearBrowserSession: options => ipcRenderer.invoke('browser:clearSession', options),
   requestStop: () => ipcRenderer.invoke('run:requestStop'),
   forceStop: () => ipcRenderer.invoke('run:forceStop'),
-  onUpdateProgress: callback => ipcRenderer.on('updates:progress', (_event, payload) => callback(payload)),
-  onEvent: callback => ipcRenderer.on('event', (_event, payload) => callback(payload)),
-  onBrowserActivity: callback => ipcRenderer.on('browser:activity', (_event, payload) => callback(payload)),
-  onBuiltinBrowserDisplayState: callback => ipcRenderer.on('browser:display-state', (_event, payload) => callback(payload)),
-  onBuiltinBrowserVisibilityRequest: callback => ipcRenderer.on('browser:visibility-request', (_event, payload) => callback(payload)),
-  onRun: callback => ipcRenderer.on('run', (_event, payload) => callback(payload)),
-  onStage: callback => ipcRenderer.on('stage', (_event, payload) => callback(payload))
+  onUpdateProgress: callback => subscribe('updates:progress', callback),
+  onEvent: callback => subscribe('event', callback),
+  onBrowserActivity: callback => subscribe('browser:activity', callback),
+  onBuiltinBrowserDisplayState: callback => subscribe('browser:display-state', callback),
+  onBuiltinBrowserVisibilityRequest: callback => subscribe('browser:visibility-request', callback),
+  onRun: callback => subscribe('run', callback),
+  onStage: callback => subscribe('stage', callback)
 });

@@ -24,6 +24,7 @@ assert.strictEqual(report.ready, true, 'reconciliation warnings should not block
 assert.strictEqual(report.warningCount, 1);
 
 assert.match(main, /Live submission was not explicitly confirmed/);
+assert.match(main, /await requestNativeAuthorization\(/, 'main process must require a second native live-submission confirmation');
 assert.match(main, /step3QueueService\.createRunSnapshot/);
 assert.doesNotMatch(main, /claims-selected-run-/);
 assert.doesNotMatch(main, /writeSelectedClaimsCsv/);
@@ -35,3 +36,4 @@ assert.match(preload, /runPreflight/);
 assert.match(preload, /previewClaims/);
 
 console.log('Step 3 operator-control tests passed.');
+require('./live-submission-authorization-test');

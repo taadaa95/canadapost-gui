@@ -17,7 +17,7 @@ assert.deepStrictEqual(validateTrackingSelection([' 123 ', '123', '', '456']), [
 
 const validated = validateSubmitOptions({
   browserMode: 'external',
-  dryRun: 'false',
+  dryRun: false,
   liveSubmissionConfirmed: true,
   selectedTrackingNumbers: [' 123 ', '456'],
   selectedClassificationRecords: [
@@ -34,5 +34,7 @@ assert.strictEqual(validated.betweenClaimsMs, 60000);
 assert.deepStrictEqual(validated.selectedTrackingNumbers, ['123', '456']);
 assert.deepStrictEqual(validated.selectedClassificationRecords, [{ recordId: 7, evidenceHash: 'a'.repeat(64) }]);
 assert.strictEqual(validated.liveSubmissionConfirmed, true);
+assert.throws(() => validateSubmitOptions({ dryRun: 'false' }), error => error.code === 'SUBMIT_DRY_RUN_INVALID');
+assert.throws(() => validateSubmitOptions({ liveSubmissionConfirmed: 'true' }), error => error.code === 'SUBMIT_CONFIRMATION_INVALID');
 
 console.log('IPC input validation tests passed.');

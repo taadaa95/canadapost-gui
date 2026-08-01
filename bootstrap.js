@@ -39,7 +39,7 @@ if (bootstrapState) {
       app.exit(1);
     });
   } else {
-    require('./main');
+    const mainRuntime = require('./main');
     const storage = require('./lib/app-storage');
     require('./lib/github-release-updater').registerGithubReleaseUpdater({
       app,
@@ -47,6 +47,7 @@ if (bootstrapState) {
       dialog,
       BrowserWindow,
       shell,
+      registerIpcHandler: mainRuntime.registerIpcHandler,
       isolated: Boolean(bootstrapState.active),
       operationCoordinator: require('./lib/operation-coordinator').coordinator,
       localeProvider: () => storage.publicConfig().locale || 'en-CA'

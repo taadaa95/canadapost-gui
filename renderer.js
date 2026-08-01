@@ -38,7 +38,7 @@ async function applyLocale(locale) {
   }
   const textTargets = {
     appTitle: 'app.title', appSubtitle: 'app.subtitle', setupWizardTitle: 'setup.title', setupIntro: 'setup.intro',
-    setupSafetyNotice: 'setup.safety', setupLater: 'action.continueLater', resumeSetup: 'action.resumeSetup',
+    setupSafetyNotice: 'setup.safety', setupSafetyAcknowledgeLabel: 'setup.safetyAcknowledge', setupLater: 'action.continueLater', resumeSetup: 'action.resumeSetup',
     setupOpenSettings: 'action.settings', setupFinish: 'action.finishSetup', createBackup: 'action.createBackup',
     restoreBackup: 'action.restoreBackup', ['clearBrowserSession']: 'action.clearSession',
     clearHistoryFilters: 'history.clearFilters', historyClassificationsTitle: 'history.classifications', claimQueueTitle: 'step3.candidateQueue',
@@ -365,7 +365,7 @@ function applyBuiltinBrowserDisplayState(result = {}) {
     if (builtinBrowserManualActionPending) {
       setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
     } else if (!$('builtinBrowserActivity')?.classList.contains('active')) {
-      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Loading Canada Post'), 'warn');
     }
     return;
   }
@@ -3154,7 +3154,19 @@ async function refreshConfig() {
 
 function showSetupWizard(config) {
   setupWizardShown = true;
-  const readiness = config.setupReadiness || {};
+  const acknowledgement = $('setupSafetyAcknowledge');
+  if (acknowledgement) acknowledgement.checked = config.setupSafetyAcknowledged === true;
+  renderSetupWizardReadiness(config);
+  $('setupWizard').classList.remove('hidden');
+  $('setupWizard').setAttribute('aria-hidden', 'false');
+  setTimeout(() => $('setupOpenSettings')?.focus(), 0);
+}
+
+function renderSetupWizardReadiness(config) {
+  const readiness = {
+    ...(config.setupReadiness || {}),
+    safetyAcknowledged: $('setupSafetyAcknowledge')?.checked === true
+  };
   const labels = Object.fromEntries(window.Onboarding.STEPS.map(step => [step.id, [
     tr(`setup.step.${step.id}.title`, step.id), tr(`setup.step.${step.id}.detail`, '')
   ]]));
@@ -3169,19 +3181,21 @@ function showSetupWizard(config) {
   $('setupReadinessList').innerHTML = rows.join('');
   $('setupFinish').disabled = !summary.ready;
   $('setupFinish').title = summary.ready ? '' : `${summary.blockingCount} setup area(s) still require attention.`;
-  $('setupWizard').classList.remove('hidden');
-  $('setupWizard').setAttribute('aria-hidden', 'false');
-  setTimeout(() => $('setupOpenSettings')?.focus(), 0);
 }
 
 async function finishSetupWizard() {
   const cfg = await window.cpApp.loadConfig();
-  const summary = window.Onboarding.readinessSummary(cfg.setupReadiness || {});
+  const acknowledged = $('setupSafetyAcknowledge')?.checked === true;
+  const summary = window.Onboarding.readinessSummary({ ...(cfg.setupReadiness || {}), safetyAcknowledged: acknowledged });
   if (!summary.ready) {
-    showSetupWizard(cfg);
+    renderSetupWizardReadiness(cfg);
     return;
   }
-  await window.cpApp.saveConfig({ setupCompleted: true });
+  const saved = await window.cpApp.saveConfig({ setupCompleted: true, setupSafetyAcknowledged: true });
+  if (!saved?.ok) {
+    setAction(saved?.error || 'Setup could not be completed.', 'settingsTab');
+    return;
+  }
   $('setupWizard')?.classList.add('hidden');
   $('setupWizard')?.setAttribute('aria-hidden', 'true');
   setAction('Setup recorded. Tracking and dry-run readiness still depend on the checks shown in Settings.', 'settingsTab');
@@ -3246,6 +3260,7 @@ $('setupOpenSettings')?.addEventListener('click', () => { $('setupWizard')?.clas
 $('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); });
 $('resumeSetup')?.addEventListener('click', async () => showSetupWizard(await window.cpApp.loadConfig()));
 $('setupFinish')?.addEventListener('click', finishSetupWizard);
+$('setupSafetyAcknowledge')?.addEventListener('change', async () => renderSetupWizardReadiness(await window.cpApp.loadConfig()));
 $('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
 $('cancelSupportBundle')?.addEventListener('click', closeSupportBundle);
 $('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
@@ -3429,9 +3444,9 @@ window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
     if (builtinBrowserManualActionPending) {
       setBuiltinBrowserStatus(waitingForManualActionText(), 'warn');
     } else {
-      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Loading Canada Post'), 'warn');
     }
-    setBuiltinBrowserActivity(true, text || tr('step3.browser.opening', 'Opening Canada Post'), kind || '');
+    setBuiltinBrowserActivity(true, text || tr('step3.browser.opening', 'Loading Canada Post'), kind || '');
   } else {
     const loaded = /Canada Post page (?:ready|loaded)/i.test(String(text || ''));
     finishBuiltinBrowserActivity(text || (loaded ? tr('step3.browser.loaded', 'Canada Post loaded') : tr('step3.browser.idleStatus', 'Browser idle')), kind || '');
@@ -3443,7 +3458,7 @@ window.cpApp.onBrowserActivity?.(({ active, text, kind }) => {
     } else if (loaded && builtinBrowserDisplayState.visible) {
       setBuiltinBrowserStatus(tr('step3.browser.loaded', 'Canada Post loaded'), 'good');
     } else if (builtinBrowserRunActive) {
-      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Opening Canada Post'), 'warn');
+      setBuiltinBrowserStatus(tr('step3.browser.opening', 'Loading Canada Post'), 'warn');
     }
   }
 });

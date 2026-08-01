@@ -35,6 +35,8 @@ const { createFocusedRegistrar } = require('./main/ipc');
 const { validateWorkerEvent } = require('./lib/ipc-contracts');
 const supportBundle = require('./lib/support-bundle');
 const portalCompatibility = require('./lib/portal-compatibility');
+const { resolveOwnedRegularFile } = require('./lib/path-confinement');
+const { requestNativeAuthorization } = require('./lib/live-submission-authorization');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
@@ -54,6 +56,35 @@ const BUILTIN_BROWSER_CDP_PORT = String(process.env.CANADAPOST_ELECTRON_CDP_PORT
 const BUILTIN_BROWSER_CDP_URL = `http://127.0.0.1:${BUILTIN_BROWSER_CDP_PORT}`;
 const BUILTIN_BROWSER_MARKER_URL = 'about:blank#canadapost-claim-runner-step3-target';
 const CANADAPOST_LOGIN_URL = portalUrl('https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en', '/login');
+
+function setupReadiness(saved, trackingApiEnvironment) {
+  const browserAvailable = typeof WebContentsView === 'function'
+    && fs.existsSync(path.join(workerResourceRoot(), 'node_modules', 'playwright-core'));
+  return {
+    dataDirectory: applicationStorageWritable(),
+    secureStorage: storage.credentialBackend() !== 'unavailable',
+    accountFields: Boolean(saved.webUsername),
+    apiCredentials: storage.trackingApiCredentialsStored(),
+    apiDiagnostic: trackingDiagnosticGateSatisfied(saved, trackingApiEnvironment),
+    customerNumber: Boolean(saved.estCustomerNumber || saved.historyCustomerNumber),
+    senderInformation: Boolean(saved.claimStreetNumber && saved.claimStreetName && saved.claimPostalCode),
+    contactInformation: Boolean(saved.claimContactName && (saved.claimContactEmail || saved.claimContactPhone)),
+    browserAvailable,
+    databaseHealth: claimDb.integrityCheck(DB_PATH).ok,
+    policyAvailable: Boolean(eligibilityPolicy?.dataVersion),
+    safetyAcknowledged: saved.setupSafetyAcknowledged === true,
+    networkReadiness: 'not_tested',
+    credentialsLiveTested: false
+  };
+}
+
+function setupCompletionAllowed(readiness) {
+  return [
+    'dataDirectory', 'secureStorage', 'accountFields', 'apiCredentials', 'apiDiagnostic',
+    'customerNumber', 'senderInformation', 'contactInformation', 'browserAvailable',
+    'databaseHealth', 'policyAvailable', 'safetyAcknowledged'
+  ].every(key => readiness[key] === true);
+}
 
 function workerRuntimeContext() {
   return {
@@ -1656,26 +1687,7 @@ registerIpcHandler('config:load', () => {
     updateActionsEnabled: !USER_DATA_PROFILE.active,
     updateRecovery,
     portalCompatibility: portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health')),
-    setupReadiness: (() => {
-      const saved = storage.publicConfig();
-      const browserAvailable = typeof WebContentsView === 'function'
-        && fs.existsSync(path.join(workerResourceRoot(), 'node_modules', 'playwright-core'));
-      return {
-        dataDirectory: applicationStorageWritable(),
-        secureStorage: storage.credentialBackend() !== 'unavailable',
-        accountFields: Boolean(saved.webUsername),
-        apiCredentials: storage.trackingApiCredentialsStored(),
-        apiDiagnostic: trackingDiagnosticGateSatisfied(saved, trackingApiEnvironment),
-        customerNumber: Boolean(saved.estCustomerNumber || saved.historyCustomerNumber),
-        senderInformation: Boolean(saved.claimStreetNumber && saved.claimStreetName && saved.claimPostalCode),
-        contactInformation: Boolean(saved.claimContactName && (saved.claimContactEmail || saved.claimContactPhone)),
-        browserAvailable,
-        databaseHealth: claimDb.integrityCheck(DB_PATH).ok,
-        policyAvailable: Boolean(eligibilityPolicy?.dataVersion),
-        networkReadiness: 'not_tested',
-        credentialsLiveTested: false
-      };
-    })(),
+    setupReadiness: setupReadiness(storage.publicConfig(), trackingApiEnvironment),
     ...readUserIniPublicFields()
   };
 });
@@ -1704,6 +1716,10 @@ registerIpcHandler('config:save', (_event, input = {}) => {
   }
   let next = { ...existing, ...sanitized };
   if (trackingClientIdSupplied || trackingEnvironmentChanged) next = invalidateTrackingDiagnosticGate(next, { newRevision: true });
+  if (sanitized.setupCompleted === true && existing.setupCompleted !== true
+    && !setupCompletionAllowed(setupReadiness(next, sanitized.trackingApiEnvironment))) {
+    return { ok: false, error: 'Setup cannot be completed until every required readiness check and the safety acknowledgement are satisfied.' };
+  }
   writeConfig(next);
   const credentialResult = persistPasswordFromOptions(input, next);
   let trackingApiResult = { stored: storage.trackingApiCredentialsStored(), warning: '' };
@@ -1769,37 +1785,8 @@ registerIpcHandler('folder:openStep3Diagnostics', async () => {
   return error ? { ok: false, error } : { ok: true, path: directory };
 });
 
-registerIpcHandler('updates:open', async () => {
-  if (USER_DATA_PROFILE.active) return { ok: false, error: 'Update actions are disabled while isolated test data is active.' };
-  const config = readConfig();
-  const updateUrl = String(process.env.CANADAPOST_UPDATE_URL || config.updateUrl || '').trim();
-  if (!updateUrl) {
-    return {
-      ok: false,
-      appVersion: APP_VERSION,
-      error: 'No update URL is configured yet.',
-      message: 'Update button is installed. Set CANADAPOST_UPDATE_URL or the saved updateUrl setting when the web update page is ready.'
-    };
-  }
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(updateUrl);
-  } catch (_) {
-    return { ok: false, appVersion: APP_VERSION, error: 'Configured update URL is invalid.' };
-  }
-  if (parsedUrl.protocol !== 'https:') {
-    return { ok: false, appVersion: APP_VERSION, error: 'Update URL must use HTTPS.' };
-  }
-  await shell.openExternal(parsedUrl.toString());
-  return { ok: true, appVersion: APP_VERSION, message: `Opened update page for version ${APP_VERSION}.` };
-});
-
 function resolveEvidencePath(filePath) {
-  if (!filePath || typeof filePath !== 'string') return null;
-  const resolved = path.resolve(filePath);
-  const allowedRoots = [DATA_DIR, LOG_DIR].map(root => path.resolve(root));
-  const isAllowed = allowedRoots.some(root => resolved === root || resolved.startsWith(root + path.sep));
-  return isAllowed ? resolved : null;
+  return resolveOwnedRegularFile(filePath, [DATA_DIR, LOG_DIR]);
 }
 
 function mimeFor(filePath) {
@@ -1823,19 +1810,19 @@ registerIpcHandler('evidence:load', (_event, payload = {}) => {
     textPath: ''
   };
 
-  const screenshotPath = resolveEvidencePath(payload.screenshotPath);
-  if (screenshotPath && fs.existsSync(screenshotPath)) {
-    const data = fs.readFileSync(screenshotPath).toString('base64');
-    response.screenshotDataUrl = `data:${mimeFor(screenshotPath)};base64,${data}`;
-    response.screenshotName = path.basename(screenshotPath);
-    response.screenshotPath = screenshotPath;
+  const screenshot = resolveEvidencePath(payload.screenshotPath);
+  if (screenshot && screenshot.size <= 25 * 1024 * 1024) {
+    const data = fs.readFileSync(screenshot.path).toString('base64');
+    response.screenshotDataUrl = `data:${mimeFor(screenshot.path)};base64,${data}`;
+    response.screenshotName = path.basename(screenshot.path);
+    response.screenshotPath = screenshot.path;
   }
 
-  const textPath = resolveEvidencePath(payload.textPath);
-  if (textPath && fs.existsSync(textPath)) {
-    response.pageText = fs.readFileSync(textPath, 'utf8').slice(0, 20000);
-    response.textName = path.basename(textPath);
-    response.textPath = textPath;
+  const text = resolveEvidencePath(payload.textPath);
+  if (text && text.size <= 1024 * 1024) {
+    response.pageText = fs.readFileSync(text.path, 'utf8').slice(0, 20000);
+    response.textName = path.basename(text.path);
+    response.textPath = text.path;
   }
 
   if (!response.screenshotDataUrl && !response.pageText) {
@@ -1847,8 +1834,8 @@ registerIpcHandler('evidence:load', (_event, payload = {}) => {
 
 registerIpcHandler('evidence:open', async (_event, filePath) => {
   const resolved = resolveEvidencePath(filePath);
-  if (!resolved || !fs.existsSync(resolved)) return { ok: false, error: 'Evidence file not found.' };
-  const errorMessage = await shell.openPath(resolved);
+  if (!resolved) return { ok: false, error: 'Evidence file not found.' };
+  const errorMessage = await shell.openPath(resolved.path);
   return errorMessage ? { ok: false, error: errorMessage } : { ok: true };
 });
 
@@ -2808,6 +2795,21 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   let selectedClassificationRecords;
   try { selectedClassificationRecords = step3QueueService.selectionForRun(requestedClassificationRecords, { ...options, canaryMode: effectiveCanaryMode }); }
   catch (error) { return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_SELECTION_INVALID' }; }
+  if (!options.dryRun) {
+    let authorized = false;
+    try {
+      authorized = await requestNativeAuthorization({
+        dialog,
+        parent: win,
+        selectedCount: selectedClassificationRecords.length,
+        requestedCount: requestedClassificationRecords.length,
+        canaryMode: effectiveCanaryMode
+      });
+    } catch (error) {
+      return { ok: false, error: error.message, code: 'LIVE_SUBMISSION_AUTHORIZATION_FAILED' };
+    }
+    if (!authorized) return { ok: false, error: 'Live submission was cancelled in the native confirmation dialog.', code: 'LIVE_SUBMISSION_CANCELLED' };
+  }
 
   const nextConfig = saveRememberedUserSettings({ ...config, developerMode: false }, options, claimSettingsEnv);
   nextConfig.dryRunDefault = Boolean(options.dryRun);
@@ -3152,3 +3154,5 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (databaseReady && BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+
+module.exports = { registerIpcHandler };

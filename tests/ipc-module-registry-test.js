@@ -6,7 +6,7 @@ const { groups, ownership, createFocusedRegistrar } = require('../main/ipc');
 const channels = Object.values(groups).flat();
 assert.strictEqual(new Set(channels).size, channels.length, 'every mutation/read channel must have exactly one module owner');
 assert.strictEqual(ownership.size, channels.length);
-for (const required of ['config:save', 'tracking:run', 'submit:run', 'reconciliation:update', 'privacy:delete', 'updates:open']) {
+for (const required of ['config:save', 'tracking:run', 'submit:run', 'reconciliation:update', 'privacy:delete', 'updates:open', 'updates:cancel']) {
   assert.ok(ownership.has(required), `${required} must be assigned to a focused IPC module`);
 }
 const calls = [];

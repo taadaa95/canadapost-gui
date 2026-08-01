@@ -37,6 +37,10 @@ const { createMockPortal } = require('../mock-portal/server');
     const setupConfigPath = path.join(userData, 'config.json');
     const setupConfig = fs.existsSync(setupConfigPath) ? JSON.parse(fs.readFileSync(setupConfigPath, 'utf8')) : {};
     assert.notStrictEqual(setupConfig.setupCompleted, true, 'continue later must preserve resumable onboarding');
+    const forgedCompletion = await window.evaluate(() => window.cpApp.saveConfig({ setupCompleted: true, setupSafetyAcknowledged: true }));
+    assert.strictEqual(forgedCompletion.ok, false, 'renderer input must not bypass authoritative onboarding readiness gates');
+    const configAfterForgedCompletion = fs.existsSync(setupConfigPath) ? JSON.parse(fs.readFileSync(setupConfigPath, 'utf8')) : {};
+    assert.notStrictEqual(configAfterForgedCompletion.setupCompleted, true);
     const beforeStep3Target = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(beforeStep3Target.created, false, 'native browser must be created deliberately, not by unrelated startup');
 

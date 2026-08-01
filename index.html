@@ -597,6 +597,7 @@
       <p id="setupIntro">Canada Post Claim Runner keeps credentials, operational records, and browser sessions on this device. Setup never tests an account or submits a claim automatically.</p>
       <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
       <div id="setupSafetyNotice" class="live-submit-warning">Start with dry run. Live submission remains separately acknowledged and blocked until a reviewed queue passes preflight. CAPTCHA and text verification stay manual in the visible built-in browser.</div>
+      <label class="checkbox-row"><input id="setupSafetyAcknowledge" type="checkbox" /> <span id="setupSafetyAcknowledgeLabel">I understand that setup does not authorize Step 2 or Step 3, and that live submission requires separate supervised gates.</span></label>
       <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button">Continue later</button><button id="setupOpenSettings" class="secondary" type="button">Review Settings</button><button id="setupFinish" class="success" type="button">Finish Setup</button></div>
     </div>
   </div>
@@ -610,8 +611,8 @@
         <label><input type="checkbox" data-support-component="system" /> <span id="supportSystemLabel">System and database integrity</span></label>
         <label><input type="checkbox" data-support-component="settings" /> <span id="supportSettingsLabel">Sanitized configuration status</span></label>
         <label><input type="checkbox" data-support-component="history" /> <span id="supportHistoryLabel">Masked recent attempt summaries (opt in)</span></label>
-        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel">Sanitized recent logs (opt in)</span></label>
-        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label">Sanitized Step 3 diagnostics without screenshots (opt in)</span></label>
+        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel">Recent log metadata without text (opt in)</span></label>
+        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label">Step 3 diagnostic metadata without text or screenshots (opt in)</span></label>
       </div>
       <div id="supportBundleExclusions" class="live-submit-warning"></div>
       <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel">I reviewed these components and will inspect the archive before sharing it.</span></label>

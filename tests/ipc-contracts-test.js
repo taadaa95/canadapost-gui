@@ -42,3 +42,4 @@ assert.throws(() => validateWorkerEvent({ type: '../bad' }, 'tracking'), error =
 assert.throws(() => validateWorkerEvent('not-an-object', 'tracking'), error => error.code === 'IPC_PAYLOAD_INVALID');
 
 process.stdout.write('IPC and worker boundary contract tests passed.\n');
+require('./path-confinement-test');
