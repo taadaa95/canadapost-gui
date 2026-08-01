@@ -38,8 +38,9 @@
     "docs": [".md", ".json"],
     "lib": [".js", ".json"],
     "locales": [".json"],
+    "main": [".js"],
     "mock-portal": [".js", ".html", ".css", ".json"],
-    "renderer": [".js", ".css"],
+    "renderer": [".js", ".css", ".md"],
     "scripts": [".js"],
     "tests": [".js", ".json", ".xml", ".csv", ".html", ".txt"],
     "wsdl": [".wsdl", ".xsd"]

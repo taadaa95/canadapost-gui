@@ -10,7 +10,7 @@ const main = source('main.js');
 const renderer = source('renderer.js');
 const queue = source('renderer/step3-queue.js');
 
-const submitHandler = main.match(/ipcMain\.handle\('submit:run'[\s\S]*?ipcMain\.handle\('run:requestStop'/)?.[0] || '';
+const submitHandler = main.match(/registerIpcHandler\('submit:run'[\s\S]*?registerIpcHandler\('run:requestStop'/)?.[0] || '';
 assert.ok(submitHandler, 'submit handler must be present');
 assert.ok(submitHandler.indexOf('createRunSnapshot') < submitHandler.indexOf('prepareBuiltinBrowserForWorker'), 'snapshot validation must happen before browser creation/handshake');
 assert.match(submitHandler, /hideBuiltinBrowserView\('submission-validation'\)/);

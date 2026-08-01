@@ -19,6 +19,7 @@ asarUnpack:
 files:
   - bootstrap.js
   - main.js
+  - main/**/*.js
   - preload.js
   - renderer.js
   - renderer/**/*.js

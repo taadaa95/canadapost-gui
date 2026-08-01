@@ -3,6 +3,7 @@
   "allowedRoots": [
     "bootstrap.js",
     "main.js",
+    "main",
     "preload.js",
     "renderer.js",
     "renderer",

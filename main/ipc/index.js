@@ -1,0 +1,34 @@
+'use strict';
+
+const groups = Object.freeze({
+  settings: require('./settings'),
+  step1: require('./step1'),
+  step2: require('./step2'),
+  step3Browser: require('./step3-browser'),
+  historyReconciliation: require('./history-reconciliation'),
+  backupsPrivacy: require('./backups-privacy'),
+  updates: require('./updates'),
+  diagnostics: require('./diagnostics')
+});
+
+const ownership = new Map();
+for (const [group, channels] of Object.entries(groups)) {
+  for (const channel of channels) {
+    if (ownership.has(channel)) throw new Error(`IPC channel ${channel} is assigned to multiple feature modules.`);
+    ownership.set(channel, group);
+  }
+}
+
+function createFocusedRegistrar(ipcMain) {
+  const registered = new Set();
+  return (channel, handler) => {
+    if (!ownership.has(channel)) throw new Error(`IPC channel ${channel} has no focused module owner.`);
+    if (registered.has(channel)) throw new Error(`IPC channel ${channel} was registered more than once.`);
+    if (typeof handler !== 'function') throw new TypeError(`IPC handler ${channel} must be a function.`);
+    registered.add(channel);
+    ipcMain.handle(channel, handler);
+    return { channel, group: ownership.get(channel) };
+  };
+}
+
+module.exports = { groups, ownership, createFocusedRegistrar };

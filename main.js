@@ -31,6 +31,8 @@ const { rowsAsObjects } = require('./lib/csv');
 const trackingDiagnosticSelection = require('./lib/tracking-diagnostic-selection');
 const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browser-handshake');
 const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
+const { createFocusedRegistrar } = require('./main/ipc');
+const registerIpcHandler = createFocusedRegistrar(ipcMain);
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
 const USER_DATA_PROFILE = userDataBootstrap.getState();
@@ -1456,7 +1458,7 @@ function blockedStep3Preflight(result) {
   };
 }
 
-ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
+registerIpcHandler('preflight:run', (_event, rawOptions = {}) => {
   try {
     return runPreflight(rawOptions);
   } catch (error) {
@@ -1464,7 +1466,7 @@ ipcMain.handle('preflight:run', (_event, rawOptions = {}) => {
   }
 });
 
-ipcMain.handle('claims:preview', () => {
+registerIpcHandler('claims:preview', () => {
   ensureDirs();
   try {
     return { ok: true, ...currentClaimPreview() };
@@ -1473,7 +1475,7 @@ ipcMain.handle('claims:preview', () => {
   }
 });
 
-ipcMain.handle('tracking:diagnosticDefaultRow', () => {
+registerIpcHandler('tracking:diagnosticDefaultRow', () => {
   try {
     const { rows } = trackingDiagnosticRows();
     const row = trackingDiagnosticSelection.firstUsableRow(rows);
@@ -1484,7 +1486,7 @@ ipcMain.handle('tracking:diagnosticDefaultRow', () => {
   }
 });
 
-ipcMain.handle('tracking:discardIncomplete', async (_event, payload = {}) => {
+registerIpcHandler('tracking:discardIncomplete', async (_event, payload = {}) => {
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
   if (activeChild) return { ok: false, error: 'Stop the active process before discarding an incomplete Step 2 run.' };
   return operationCoordinator.run('authoritative_data_mutation', async () => {
@@ -1500,7 +1502,7 @@ ipcMain.handle('tracking:discardIncomplete', async (_event, payload = {}) => {
   });
 });
 
-ipcMain.handle('browser:showBuiltin', async (_event, options = {}) => {
+registerIpcHandler('browser:showBuiltin', async (_event, options = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'The live claim browser is disabled while isolated test data is active.' };
   try {
     return await showBuiltinBrowser(options.bounds || options);
@@ -1509,7 +1511,7 @@ ipcMain.handle('browser:showBuiltin', async (_event, options = {}) => {
   }
 });
 
-ipcMain.handle('browser:prepareBuiltin', async () => {
+registerIpcHandler('browser:prepareBuiltin', async () => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'The live claim browser is disabled while isolated test data is active.', code: 'BROWSER_DISABLED' };
   try {
     const publication = await prepareBuiltinBrowserForWorker({ reason: 'renderer-preflight' });
@@ -1524,13 +1526,13 @@ ipcMain.handle('browser:prepareBuiltin', async () => {
   }
 });
 
-ipcMain.handle('browser:targetState', () => ({
+registerIpcHandler('browser:targetState', () => ({
   ...browserDisplaySnapshot(),
   generation: builtinBrowserGeneration,
   debuggingPort: Number(BUILTIN_BROWSER_CDP_PORT)
 }));
 
-ipcMain.handle('browser:syncVisibility', (event, payload = {}) => {
+registerIpcHandler('browser:syncVisibility', (event, payload = {}) => {
   if (!win || event.sender !== win.webContents) return { ok: false, error: 'Browser visibility synchronization came from an unexpected renderer.', code: 'BROWSER_VISIBILITY_SOURCE_REJECTED' };
   try {
     const result = applyBuiltinBrowserVisibility(payload);
@@ -1556,7 +1558,7 @@ ipcMain.handle('browser:syncVisibility', (event, payload = {}) => {
   }
 });
 
-ipcMain.handle('browser:setBuiltinBounds', (_event, bounds = {}) => {
+registerIpcHandler('browser:setBuiltinBounds', (_event, bounds = {}) => {
   try {
     if (!builtinBrowserView) return { ok: true, hidden: true, reason: 'browser-preparing' };
     const state = setBuiltinBrowserBounds(bounds, 'legacy-bounds-sync');
@@ -1566,23 +1568,23 @@ ipcMain.handle('browser:setBuiltinBounds', (_event, bounds = {}) => {
   }
 });
 
-ipcMain.handle('browser:hideBuiltin', () => {
+registerIpcHandler('browser:hideBuiltin', () => {
   hideBuiltinBrowserView('renderer-hide-request');
   return { ok: true };
 });
 
-ipcMain.handle('browser:focusBuiltin', () => {
+registerIpcHandler('browser:focusBuiltin', () => {
   return { ok: focusBuiltinBrowser() };
 });
 
-ipcMain.handle('browser:sessionStatus', async () => {
+registerIpcHandler('browser:sessionStatus', async () => {
   if (USER_DATA_PROFILE.active) return { ok: true, exists: false, cookieCount: 0, disabled: true };
   const browserSession = session.fromPartition('persist:canadapost-claims-builtin');
   const cookies = await browserSession.cookies.get({}).catch(() => []);
   return { ok: true, exists: cookies.length > 0, cookieCount: cookies.length };
 });
 
-ipcMain.handle('browser:clearSession', async (_event, payload = {}) => {
+registerIpcHandler('browser:clearSession', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Browser profile actions are disabled while isolated test data is active.' };
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
   if (activeChild) return { ok: false, error: 'Stop the active process before clearing browser data.' };
@@ -1600,7 +1602,7 @@ ipcMain.handle('browser:clearSession', async (_event, payload = {}) => {
   });
 });
 
-ipcMain.handle('config:load', () => {
+registerIpcHandler('config:load', () => {
   ensureDirs();
   const config = storage.publicConfig();
   const publicConfig = { ...config };
@@ -1664,7 +1666,7 @@ ipcMain.handle('config:load', () => {
   };
 });
 
-ipcMain.handle('config:save', (_event, input = {}) => {
+registerIpcHandler('config:save', (_event, input = {}) => {
   const existing = readConfig();
   let trackingRequestDelayMs;
   let trackingResourceTimeoutMs;
@@ -1705,7 +1707,7 @@ ipcMain.handle('config:save', (_event, input = {}) => {
   };
 });
 
-ipcMain.handle('credentials:clearTrackingApi', (_event, payload = {}) => {
+registerIpcHandler('credentials:clearTrackingApi', (_event, payload = {}) => {
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
   if (activeChild) return { ok: false, error: 'Stop the active process before clearing Tracking API credentials.' };
   storage.clearTrackingApiCredentials();
@@ -1714,12 +1716,12 @@ ipcMain.handle('credentials:clearTrackingApi', (_event, payload = {}) => {
   return { ok: true, trackingApiCredentialsStored: false, trackingDiagnosticGateSatisfied: false };
 });
 
-ipcMain.handle('locale:load', (_event, locale) => {
+registerIpcHandler('locale:load', (_event, locale) => {
   try { return { ok: true, ...i18n.loadLocale(locale) }; }
   catch (error) { return { ok: false, error: error.message, ...i18n.loadLocale('en-CA') }; }
 });
 
-ipcMain.handle('file:selectTrackingCsv', async () => {
+registerIpcHandler('file:selectTrackingCsv', async () => {
   const result = await dialog.showOpenDialog(win, {
     title: 'Select tracking.csv',
     properties: ['openFile'],
@@ -1733,17 +1735,17 @@ ipcMain.handle('file:selectTrackingCsv', async () => {
   return { ok: true, path: dest };
 });
 
-ipcMain.handle('folder:openData', async () => {
+registerIpcHandler('folder:openData', async () => {
   await shell.openPath(DATA_DIR);
   return { ok: true };
 });
 
-ipcMain.handle('folder:openLogs', async () => {
+registerIpcHandler('folder:openLogs', async () => {
   await shell.openPath(LOG_DIR);
   return { ok: true };
 });
 
-ipcMain.handle('folder:openStep3Diagnostics', async () => {
+registerIpcHandler('folder:openStep3Diagnostics', async () => {
   const directory = latestStep3DiagnosticsDir || latestStep3RunDirectory();
   if (!directory || !fs.existsSync(directory)) {
     return { ok: false, error: 'No Step 3 diagnostic run exists yet.' };
@@ -1753,7 +1755,7 @@ ipcMain.handle('folder:openStep3Diagnostics', async () => {
   return error ? { ok: false, error } : { ok: true, path: directory };
 });
 
-ipcMain.handle('updates:open', async () => {
+registerIpcHandler('updates:open', async () => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Update actions are disabled while isolated test data is active.' };
   const config = readConfig();
   const updateUrl = String(process.env.CANADAPOST_UPDATE_URL || config.updateUrl || '').trim();
@@ -1794,7 +1796,7 @@ function mimeFor(filePath) {
   return 'application/octet-stream';
 }
 
-ipcMain.handle('evidence:load', (_event, payload = {}) => {
+registerIpcHandler('evidence:load', (_event, payload = {}) => {
   ensureDirs();
 
   const response = {
@@ -1829,7 +1831,7 @@ ipcMain.handle('evidence:load', (_event, payload = {}) => {
   return response;
 });
 
-ipcMain.handle('evidence:open', async (_event, filePath) => {
+registerIpcHandler('evidence:open', async (_event, filePath) => {
   const resolved = resolveEvidencePath(filePath);
   if (!resolved || !fs.existsSync(resolved)) return { ok: false, error: 'Evidence file not found.' };
   const errorMessage = await shell.openPath(resolved);
@@ -1838,17 +1840,17 @@ ipcMain.handle('evidence:open', async (_event, filePath) => {
 
 
 
-ipcMain.handle('dashboard:get', () => {
+registerIpcHandler('dashboard:get', () => {
   ensureDirs();
   return { ok: true, dashboard: claimDb.dashboard(DB_PATH), integrity: claimDb.integrityCheck(DB_PATH) };
 });
 
-ipcMain.handle('history:list', (_event, options = {}) => {
+registerIpcHandler('history:list', (_event, options = {}) => {
   ensureDirs();
   return { ok: true, items: claimDb.listClaimHistory(DB_PATH, options) };
 });
 
-ipcMain.handle('history:export', async (_event, options = {}) => {
+registerIpcHandler('history:export', async (_event, options = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'External exports are disabled while isolated test data is active.' };
   const result = await dialog.showSaveDialog(win, {
     title: 'Export claim history',
@@ -1860,12 +1862,12 @@ ipcMain.handle('history:export', async (_event, options = {}) => {
   return { ok: true, path: result.filePath };
 });
 
-ipcMain.handle('reconciliation:list', () => {
+registerIpcHandler('reconciliation:list', () => {
   ensureDirs();
   return { ok: true, items: claimDb.listReconciliation(DB_PATH, 1000) };
 });
 
-ipcMain.handle('reconciliation:update', async (_event, payload = {}) => {
+registerIpcHandler('reconciliation:update', async (_event, payload = {}) => {
   try {
     return await operationCoordinator.run('authoritative_data_mutation', async () => {
       const item = claimDb.reconcileAttempt(DB_PATH, payload.attemptId, String(payload.action || ''), String(payload.note || ''), String(payload.confirmationNumber || ''));
@@ -1876,7 +1878,7 @@ ipcMain.handle('reconciliation:update', async (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('manualReview:list', (_event, options = {}) => {
+registerIpcHandler('manualReview:list', (_event, options = {}) => {
   ensureDirs();
   try {
     return { ok: true, items: claimDb.listManualReviews(DB_PATH, {
@@ -1889,12 +1891,12 @@ ipcMain.handle('manualReview:list', (_event, options = {}) => {
   }
 });
 
-ipcMain.handle('classification:list', (_event, payload = {}) => {
+registerIpcHandler('classification:list', (_event, payload = {}) => {
   try { return { ok: true, items: claimDb.listClassificationQueue(DB_PATH, String(payload.classification || ''), payload) }; }
   catch (error) { return { ok: false, error: error.message, items: [] }; }
 });
 
-ipcMain.handle('manualReview:update', async (_event, payload = {}) => {
+registerIpcHandler('manualReview:update', async (_event, payload = {}) => {
   try {
     const reviewId = Number(payload.reviewId);
     if (!Number.isSafeInteger(reviewId) || reviewId < 1) throw new Error('Invalid manual-review identifier.');
@@ -1908,12 +1910,12 @@ ipcMain.handle('manualReview:update', async (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('shipment:listManual', (_event, options = {}) => {
+registerIpcHandler('shipment:listManual', (_event, options = {}) => {
   ensureDirs();
   return { ok: true, items: claimDb.listManualShipments(DB_PATH, options) };
 });
 
-ipcMain.handle('shipment:manualAdd', async (_event, payload = {}) => {
+registerIpcHandler('shipment:manualAdd', async (_event, payload = {}) => {
   try {
     return await operationCoordinator.run('authoritative_data_mutation', async () => {
       const shipment = claimDb.upsertShipment(DB_PATH, {
@@ -1933,7 +1935,7 @@ ipcMain.handle('shipment:manualAdd', async (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('backup:create', async (_event, payload = {}) => {
+registerIpcHandler('backup:create', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Manual backup exports are disabled while isolated test data is active. The verified pre-migration backup remains inside the isolated profile.' };
   ensureDirs();
   const password = typeof payload.password === 'string' ? payload.password : '';
@@ -1964,7 +1966,7 @@ ipcMain.handle('backup:create', async (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('backup:restore', async (_event, payload = {}) => {
+registerIpcHandler('backup:restore', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Backup restore is disabled while isolated test data is active.' };
   ensureDirs();
   if (activeChild) return { ok: false, error: 'Stop the active process before restoring a backup.' };
@@ -2028,7 +2030,7 @@ function validatedPrivacyScope(payload = {}) {
   };
 }
 
-ipcMain.handle('privacy:preview', (_event, payload = {}) => {
+registerIpcHandler('privacy:preview', (_event, payload = {}) => {
   try {
     return { ok: true, ...privacyDeletion.previewData(DB_PATH, validatedPrivacyScope(payload)) };
   } catch (_error) {
@@ -2036,7 +2038,7 @@ ipcMain.handle('privacy:preview', (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('privacy:delete', (_event, payload = {}) => {
+registerIpcHandler('privacy:delete', (_event, payload = {}) => {
   try {
     operationCoordinator.assertInactive();
   } catch (error) {
@@ -2069,7 +2071,7 @@ ipcMain.handle('privacy:delete', (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle('diagnostics:create', async () => {
+registerIpcHandler('diagnostics:create', async () => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'External diagnostic exports are disabled while isolated test data is active.' };
   ensureDirs();
   const result = await dialog.showSaveDialog(win, {
@@ -2101,7 +2103,7 @@ ipcMain.handle('diagnostics:create', async () => {
   }
 });
 
-ipcMain.handle('siteHealth:run', async (_event, options = {}) => {
+registerIpcHandler('siteHealth:run', async (_event, options = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Step 3 browser and site-health actions are disabled while isolated test data is active.' };
   ensureDirs();
   if (activeChild) return { ok: false, error: 'A process is already active.' };
@@ -2169,7 +2171,7 @@ ipcMain.handle('siteHealth:run', async (_event, options = {}) => {
   return { ok: true, logPath };
 });
 
-ipcMain.handle('est:importHistory', async (_event, options = {}) => {
+registerIpcHandler('est:importHistory', async (_event, options = {}) => {
   ensureDirs();
 
   if (activeChild) {
@@ -2264,7 +2266,7 @@ ipcMain.handle('est:importHistory', async (_event, options = {}) => {
   return { ok: true, logPath };
 });
 
-ipcMain.handle('history:import', async (_event, options = {}) => {
+registerIpcHandler('history:import', async (_event, options = {}) => {
   ensureDirs();
 
   if (activeChild) {
@@ -2344,7 +2346,7 @@ ipcMain.handle('history:import', async (_event, options = {}) => {
   return { ok: true, logPath };
 });
 
-ipcMain.handle('run:start', async (_event, options = {}) => {
+registerIpcHandler('run:start', async (_event, options = {}) => {
   ensureDirs();
 
   if (activeChild) {
@@ -2557,7 +2559,7 @@ ipcMain.handle('run:start', async (_event, options = {}) => {
 });
 
 
-ipcMain.handle('tracking:run', async (_event, options = {}) => {
+registerIpcHandler('tracking:run', async (_event, options = {}) => {
   ensureDirs();
 
   if (activeChild) {
@@ -2716,7 +2718,7 @@ ipcMain.handle('tracking:run', async (_event, options = {}) => {
   return { ok: true, logPath };
 });
 
-ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
+registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Live claim submission is disabled while isolated test data is active.' };
   ensureDirs();
   hideBuiltinBrowserView('submission-validation');
@@ -2975,14 +2977,14 @@ ipcMain.handle('submit:run', async (_event, rawOptions = {}) => {
   return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir, selectedClaimCount: selectedClaims.count, canaryMode: Boolean(effectiveCanaryMode) };
 });
 
-ipcMain.handle('run:requestStop', () => {
+registerIpcHandler('run:requestStop', () => {
   ensureDirs();
   fs.writeFileSync(STOP_FILE, new Date().toISOString() + '\n');
   emit('event', { stage: activeStage, event: { type: 'stop_requested', message: 'Stop requested. The runner will stop after the current item.' } });
   return { ok: true };
 });
 
-ipcMain.handle('run:forceStop', () => {
+registerIpcHandler('run:forceStop', () => {
   ensureDirs();
   fs.writeFileSync(STOP_FILE, new Date().toISOString() + '\n', { mode: 0o600 });
   if (activeChild) {

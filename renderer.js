@@ -12,6 +12,7 @@ let activeMessages = {};
 const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
 let reconciliationFocusAttemptId = null;
 const step3QueueController = window.Step3Queue.createController();
+const rendererEvents = window.RendererContext.events;
 
 function tr(key, fallback = '') { return activeMessages[key] || fallback || key; }
 function trf(key, values = {}, fallback = '') {
@@ -58,11 +59,13 @@ async function applyLocale(locale) {
   for (const [id, key] of Object.entries(textTargets)) if ($(id)) $(id).textContent = tr(key, $(id).textContent);
   if ($('clearHistoryFilters')) $('clearHistoryFilters').setAttribute('aria-label', tr('history.clearFiltersLabel', 'Clear History filters'));
   window.Step2Copy.apply(document, key => tr(key));
+  rendererEvents.emit('locale:changed', { locale: result.locale || 'en-CA' });
 }
 
 function applyTheme(theme) {
   const selectedTheme = theme || DEFAULT_THEME;
   document.documentElement.setAttribute('data-theme', selectedTheme);
+  rendererEvents.emit('theme:changed', { theme: selectedTheme });
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, selectedTheme);
   } catch (_) {
@@ -121,6 +124,7 @@ function activateTab(tabId) {
   }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
+  rendererEvents.emit('tab:changed', { tabId: target });
 }
 
 function stepForStage(stage) {
@@ -443,7 +447,8 @@ function initBuiltinBrowserPositionTracking() {
   }
 }
 
-const state = {
+const state = window.RendererContext.state;
+Object.assign(state, {
   step1Orders: 0,
   step1Imported: 0,
   step1TotalRows: 0,
@@ -479,7 +484,7 @@ const state = {
   claimQueueItems: [],
   claimQueueLoaded: false,
   privacyPreview: null
-};
+});
 
 const operations = {
   runStartedAt: null,

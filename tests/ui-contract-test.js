@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const styles = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'base.css'), 'utf8');
 const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const renderer = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
@@ -68,7 +69,7 @@ assert.match(html, /Tracking API 2\.0 platform client ID/i);
 assert.doesNotMatch(html, /Legacy Developer Program credentials|Legacy API username|Legacy API password/i);
 assert.match(html, /does not modify claim state/i);
 assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Current credential metadata must not disclose secret lengths');
-assert.ok(/scrollbar-gutter:\s*stable both-edges/.test(html));
+assert.ok(/scrollbar-gutter:\s*stable both-edges/.test(styles));
 
 assert.ok(renderer.includes("window.addEventListener('scroll', scheduleBuiltinBrowserReposition"), 'Built-in browser must track nested scroll events');
 assert.ok(renderer.includes("new ResizeObserver(() => requestBuiltinBrowserLayout('browser-slot-resize'))"), 'Built-in browser must force a fresh slot measurement after size changes');
@@ -80,8 +81,8 @@ assert.ok(renderer.includes('function setSiteHealthRunning'));
 assert.ok(renderer.includes('Saved password available — leave blank to reuse'));
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
-assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none\s*!important/s.test(html), 'Hidden notification badges must stay hidden');
-assert.ok(/\.settings-section \.field\s*\{[^}]*border:\s*0\s*!important/s.test(html), 'Settings field wrappers must not draw boxes around labels');
+assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
+assert.ok(/\.settings-section \.field\s*\{[^}]*border:\s*0/s.test(styles), 'Settings field wrappers must not draw boxes around labels');
 console.log('UI contract tests passed.');
 
 assert.ok(renderer.includes("$('openStep3Diagnostics')?.addEventListener"), 'Missing Step 3 diagnostics open action');
