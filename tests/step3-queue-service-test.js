@@ -93,6 +93,30 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     claimDb.finishRun(dbPath, run2, 'failed', { failure: 1 });
     assert.throws(() => service.previewCandidates(dbPath), error => error.code === 'STEP2_RUN_NOT_AUTHORITATIVE');
 
+    const runTampered = claimDb.startRun(dbPath, 'tracking', { synthetic: true });
+    candidate(runTampered, '2999999999999999');
+    claimDb.finishRun(dbPath, runTampered, 'complete', { total: 1, success: 1 });
+    const tamperedPreview = service.previewCandidates(dbPath, { now: '2026-06-05' });
+    const tamperedItem = tamperedPreview.items[0];
+    claimDb.withDatabase(dbPath, db => {
+      const row = db.prepare('SELECT input_json FROM classification_records WHERE id = ?').get(tamperedItem.recordId);
+      const input = JSON.parse(row.input_json);
+      input.actualDeliveryDate = input.expectedDeliveryDate;
+      db.exec('DROP TRIGGER classification_records_no_update');
+      db.prepare('UPDATE classification_records SET input_json = ? WHERE id = ?').run(JSON.stringify(input), tamperedItem.recordId);
+    });
+    assert.throws(() => service.createRunSnapshot(dbPath, [{
+      recordId: tamperedItem.recordId,
+      evidenceHash: tamperedItem.evidenceHash
+    }], {
+      csvPath: path.join(root, 'tampered.csv'),
+      snapshotPath: path.join(root, 'tampered.json')
+    }, { allowedDirectory: root, now: '2026-06-05T12:00:00.000Z' }), error => (
+      error.code === 'STEP3_CLASSIFICATION_CHANGED'
+    ), 'snapshot creation must reclassify selected evidence inside the transaction');
+    assert.strictEqual(fs.existsSync(path.join(root, 'tampered.csv')), false);
+    assert.strictEqual(fs.existsSync(path.join(root, 'tampered.json')), false);
+
     const run3 = claimDb.startRun(dbPath, 'tracking', { synthetic: true });
     candidate(run3, '3333333333333333');
     claimDb.finishRun(dbPath, run3, 'complete', { total: 1, success: 1 });
