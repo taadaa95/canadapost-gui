@@ -287,12 +287,17 @@ function browserSlotPlaceholder() {
   return $('builtinBrowserSlot')?.querySelector('.browser-slot-placeholder') || null;
 }
 
-function setBrowserSlotPlaceholder(visible, text = '') {
+function setBrowserSlotPlaceholder(visible, text = '', localizationKey = '') {
   const placeholder = browserSlotPlaceholder();
   if (!placeholder) return;
   placeholder.hidden = !visible;
   placeholder.setAttribute('aria-hidden', visible ? 'false' : 'true');
-  if (text) placeholder.textContent = text;
+  if (text && localizationKey) setLocalizedText(placeholder, localizationKey, {}, text);
+  else if (text) {
+    delete placeholder.dataset.i18nCurrent;
+    delete placeholder.dataset.i18nValues;
+    placeholder.textContent = text;
+  }
 }
 
 function browserSlotMeasurement(reason = 'renderer-measurement') {
@@ -354,11 +359,11 @@ function waitingForManualActionText() {
   return tr('step3.browser.waitingManualAction', 'Waiting for manual action');
 }
 
-function idleBrowserPlaceholderText() {
+function idleBrowserPlaceholderLocalization() {
   const summary = step3QueueController.snapshot();
-  if (!summary.total) return tr('step3.browser.noCandidates', 'No late-delivery candidates are currently available.');
-  if (!summary.executable) return tr('step3.browser.noExecutable', 'No executable claims are available. Review blocked attempts in History.');
-  return tr('step3.browser.idle', 'Canada Post will open here after an executable claim passes preflight.');
+  if (!summary.total) return { key: 'step3.browser.noCandidates', fallback: 'No late-delivery candidates are currently available.' };
+  if (!summary.executable) return { key: 'step3.browser.noExecutable', fallback: 'No executable claims are available. Review blocked attempts in History.' };
+  return { key: 'step3.browser.idle', fallback: 'Canada Post will open here after an executable claim passes preflight.' };
 }
 
 function applyBuiltinBrowserDisplayState(result = {}) {
@@ -373,30 +378,31 @@ function applyBuiltinBrowserDisplayState(result = {}) {
     return;
   }
   if (result.reason === 'browser-preparing' && builtinBrowserRunActive) {
-    setBrowserSlotPlaceholder(true, tr('step3.browser.preparing', 'Preparing the secure Canada Post browser…'));
+    setBrowserSlotPlaceholder(true, tr('step3.browser.preparing', 'Preparing the secure Canada Post browser…'), 'step3.browser.preparing');
     setBuiltinBrowserStatus(tr('step3.browser.preparingStatus', 'Preparing browser'), 'warn');
     return;
   }
   if (result.reason === 'slot-offscreen' || result.reason === 'step3-inactive') {
-    setBrowserSlotPlaceholder(true, tr('step3.browser.hidden', 'Canada Post is hidden while the browser area is offscreen.'));
+    setBrowserSlotPlaceholder(true, tr('step3.browser.hidden', 'Canada Post is hidden while the browser area is offscreen.'), 'step3.browser.hidden');
     setBuiltinBrowserStatus(tr('step3.browser.hiddenStatus', 'Browser hidden'), 'warn');
     return;
   }
   if (result.ok === false && builtinBrowserRunActive) {
-    setBrowserSlotPlaceholder(true, tr('step3.browser.displayError', 'The built-in browser could not be displayed. Stop Step 3 and review diagnostics.'));
+    setBrowserSlotPlaceholder(true, tr('step3.browser.displayError', 'The built-in browser could not be displayed. Stop Step 3 and review diagnostics.'), 'step3.browser.displayError');
     setBuiltinBrowserStatus(tr('step3.browser.displayErrorStatus', 'Browser display error'), 'bad');
     return;
   }
-  setBrowserSlotPlaceholder(true, idleBrowserPlaceholderText());
+  const idlePlaceholder = idleBrowserPlaceholderLocalization();
+  setBrowserSlotPlaceholder(true, tr(idlePlaceholder.key, idlePlaceholder.fallback), idlePlaceholder.key);
   setBuiltinBrowserStatus(tr('step3.browser.idleStatus', 'Browser idle'), '');
 }
 
-async function deactivateBuiltinBrowser(reason = 'run-inactive', placeholderText = '') {
+async function deactivateBuiltinBrowser(reason = 'run-inactive', placeholderText = '', placeholderKey = '') {
   builtinBrowserRunActive = false;
   builtinBrowserManualActionPending = false;
   if (window.cpApp?.hideBuiltinBrowser) await window.cpApp.hideBuiltinBrowser().catch(() => {});
   applyBuiltinBrowserDisplayState({ ok: true, visible: false, reason });
-  if (placeholderText) setBrowserSlotPlaceholder(true, placeholderText);
+  if (placeholderText) setBrowserSlotPlaceholder(true, placeholderText, placeholderKey);
   setBuiltinBrowserActivity(false, tr('step3.browser.idleStatus', 'Browser idle'));
 }
 
@@ -2995,7 +3001,7 @@ async function startSubmitOnly() {
   }
 
   resetRunUi('step3');
-  await deactivateBuiltinBrowser('validating-selection', tr('step3.browser.validating', 'Validating the selected executable claims…'));
+  await deactivateBuiltinBrowser('validating-selection', tr('step3.browser.validating', 'Validating the selected executable claims…'), 'step3.browser.validating');
   setStatus('Validating', 'warn', 'step3');
   setBuiltinBrowserStatus(tr('step3.browser.idleStatus', 'Browser idle'), '');
   setAction(dryRun
@@ -3022,10 +3028,10 @@ async function startSubmitOnly() {
       message: res.error || 'Could not start claim submission'
     });
     log(res.error || 'Could not start claim submission.');
-    const blockedText = ['STEP3_UNRESOLVED_ATTEMPT', 'STEP3_TERMINAL_OUTCOME', 'STEP3_NO_EXECUTABLE_CLAIMS'].includes(res.code)
-      ? tr('step3.browser.noExecutableSelected', 'No executable claims are selected. Review blocked attempts in History.')
-      : idleBrowserPlaceholderText();
-    await deactivateBuiltinBrowser('submission-not-started', blockedText);
+    const blockedPlaceholder = ['STEP3_UNRESOLVED_ATTEMPT', 'STEP3_TERMINAL_OUTCOME', 'STEP3_NO_EXECUTABLE_CLAIMS'].includes(res.code)
+      ? { key: 'step3.browser.noExecutableSelected', fallback: 'No executable claims are selected. Review blocked attempts in History.' }
+      : idleBrowserPlaceholderLocalization();
+    await deactivateBuiltinBrowser('submission-not-started', tr(blockedPlaceholder.key, blockedPlaceholder.fallback), blockedPlaceholder.key);
     await refreshClaimQueue().catch(() => {});
     operations.finishedAt = Date.now();
     stopOperationsTimer();

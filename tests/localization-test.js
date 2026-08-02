@@ -125,6 +125,7 @@ assert.match(rendererSource, /applyLocale\(preferredLocale \|\| cfg\.locale \|\|
 assert.match(rendererSource, /step1: \{ failed: 'step1\.runFailed', blocked: 'step1\.runBlocked' \}/, 'unkeyed Step 1 worker failures must use localized fallbacks');
 assert.match(rendererSource, /step2: \{ failed: 'step2\.runFailed', blocked: 'step2\.runBlocked' \}/, 'unkeyed Step 2 worker failures must use localized fallbacks');
 assert.match(rendererSource, /function setAction[\s\S]*?delete el\.dataset\.i18nCurrent;[\s\S]*?delete el\.dataset\.i18nValues;/, 'raw action updates must clear stale localization metadata');
+assert.match(rendererSource, /setLocalizedText\(placeholder, localizationKey, \{\}, text\)/, 'dynamic browser placeholder text must retain its current localization key');
 assert.ok(!html.includes('id="runSiteHealth"'));
 assert.ok(!html.includes('id="siteHealthResult"'));
 assert.ok(!Object.hasOwn(english, 'health.run'), 'obsolete manual health-check localization must be removed');
