@@ -58,7 +58,6 @@ for (const forbidden of [
   '.textContent = \'No claim results yet.\'',
   '.textContent = \'View evidence\'',
   '.textContent = \'Database healthy\'',
-  '.textContent = \'Health Check Running…\'',
   "window.confirm('Restore a backup?",
   "window.confirm('Log out and clear the Canada Post browser profile?"
 ]) assert(!rendererSource.includes(forbidden), `renderer still hard-codes user-visible English: ${forbidden}`);
@@ -96,12 +95,39 @@ for (const key of [
 const observedEnglish = [
   'Run Step 1 — Import EST History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
   'Test API connection with one shipment', 'Export sanitized response structure', 'Discard incomplete Step 2 run',
-  'Use built-in browser inside the app', 'Stop After Current Item', 'Run Canada Post Workflow Health Check',
+  'Use built-in browser inside the app', 'Stop After Current Item',
   'Check Browser Session', 'Manually add or annotate a shipment', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {
   assert(Object.values(english).includes(text), `English catalogue is missing reviewed copy: ${text}`);
   assert(!Object.values(french.messages).includes(text), `French catalogue retained English interface copy: ${text}`);
 }
+
+for (const key of [
+  'step1.title', 'step1.createsTrackingCsv', 'step1.fromDate', 'step1.toDate', 'step1.run', 'step1.statusTitle',
+  'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups', 'step1.warningsAria', 'step1.warningsInspect',
+  'step1.progress', 'step1.liveLog', 'step1.exportStarting', 'step1.exportStartFailed', 'step1.historyImportStarting',
+  'step1.historyStartFailed', 'step1.runFailed', 'step1.runBlocked', 'step2.title', 'step2.readsTrackingCsv', 'step2.freshRun', 'step2.run',
+  'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'step2.statusTitle', 'step2.checked',
+  'step2.lateClaims', 'step2.onTime', 'step2.notDelivered', 'step2.progress', 'step2.liveLog',
+  'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel', 'step2.comparingAction',
+  'step2.startFailed', 'step2.runFailed', 'step2.runBlocked', 'step2.diagnostic.structureAction', 'step2.diagnostic.connectionAction',
+  'step2.diagnostic.confirmedLog'
+]) {
+  assert(Object.hasOwn(french.messages, key), `French workflow localization is missing: ${key}`);
+  assert.notStrictEqual(french.messages[key], english[key], `French workflow text remained English: ${key}`);
+}
+
+assert.match(rendererSource, /let preferredLocale = '';/, 'renderer must retain the user-selected locale while config refreshes finish');
+assert.match(rendererSource, /const requestVersion = \+\+localeRequestVersion;/, 'locale application must sequence asynchronous requests');
+assert.match(rendererSource, /if \(requestVersion !== localeRequestVersion\) return false;/, 'stale locale responses must not overwrite a newer selection');
+assert.match(rendererSource, /applyLocale\(preferredLocale \|\| cfg\.locale \|\| 'en-CA'\)/, 'config refresh must prefer an in-session language selection');
+assert.match(rendererSource, /step1: \{ failed: 'step1\.runFailed', blocked: 'step1\.runBlocked' \}/, 'unkeyed Step 1 worker failures must use localized fallbacks');
+assert.match(rendererSource, /step2: \{ failed: 'step2\.runFailed', blocked: 'step2\.runBlocked' \}/, 'unkeyed Step 2 worker failures must use localized fallbacks');
+assert.match(rendererSource, /function setAction[\s\S]*?delete el\.dataset\.i18nCurrent;[\s\S]*?delete el\.dataset\.i18nValues;/, 'raw action updates must clear stale localization metadata');
+assert.ok(!html.includes('id="runSiteHealth"'));
+assert.ok(!html.includes('id="siteHealthResult"'));
+assert.ok(!Object.hasOwn(english, 'health.run'), 'obsolete manual health-check localization must be removed');
+assert.ok(!Object.hasOwn(french.messages, 'health.run'), 'obsolete manual health-check French localization must be removed');
 
 process.stdout.write(`Localization completeness tests passed for ${keys.length} keys and ${localizedAttributes.length} localized DOM attributes.\n`);

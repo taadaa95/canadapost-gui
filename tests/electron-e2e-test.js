@@ -44,6 +44,7 @@ const { loadLocale } = require('../lib/i18n');
     const configAfterForgedCompletion = fs.existsSync(setupConfigPath) ? JSON.parse(fs.readFileSync(setupConfigPath, 'utf8')) : {};
     assert.notStrictEqual(configAfterForgedCompletion.setupCompleted, true);
 
+    await window.evaluate(() => window.activateTab('step1'));
     await window.locator('#localeSelect').selectOption('fr-CA');
     await window.locator('html[lang="fr-CA"]').waitFor();
     const localizationMismatches = await window.evaluate(messages => {
@@ -61,10 +62,37 @@ const { loadLocale } = require('../lib/i18n');
       return mismatches;
     }, frenchMessages);
     assert.deepStrictEqual(localizationMismatches, [], 'all declarative text, placeholders, tooltips, and accessibility labels must switch to French');
+    await window.evaluate(() => Promise.all([window.applyLocale('en-CA'), window.applyLocale('fr-CA')]));
+    assert.strictEqual(await window.locator('html').getAttribute('lang'), 'fr-CA', 'the newest asynchronous locale request must win');
+    const assertFrenchKeys = async keys => {
+      const mismatches = await window.evaluate(({ expected, localeMessages }) => expected.flatMap(key => {
+        const element = document.querySelector(`[data-i18n="${key}"]`);
+        return !element || element.textContent !== localeMessages[key] ? [`${key}: ${element?.textContent || '<missing>'}`] : [];
+      }), { expected: keys, localeMessages: frenchMessages });
+      assert.deepStrictEqual(mismatches, []);
+    };
+    await assertFrenchKeys([
+      'step1.title', 'step1.createsTrackingCsv', 'step1.fromDate', 'step1.toDate', 'step1.run', 'action.forceStop',
+      'step1.statusTitle', 'runStatus.idle', 'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups',
+      'step1.warningsInspect', 'step1.progress', 'status.waiting', 'step1.liveLog'
+    ]);
+    assert.strictEqual(await window.locator('#step1WarningsCard').getAttribute('aria-label'), frenchMessages['step1.warningsAria']);
+    await window.evaluate(() => window.activateTab('step2'));
+    await assertFrenchKeys([
+      'step2.title', 'step2.readsTrackingCsv', 'step2.freshRun', 'step2.candidateExplanation', 'step2.run',
+      'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'action.forceStop', 'step2.statusTitle',
+      'runStatus.idle', 'step2.checked', 'step2.lateClaims', 'step2.onTime', 'step2.notDelivered', 'step2.progress',
+      'status.waiting', 'step2.liveLog', 'step2.diagnostic.title', 'step2.diagnostic.message',
+      'step2.diagnostic.rowLabel', 'action.cancel', 'action.continue'
+    ]);
     assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique EST');
     assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Exécuter l’étape 2 — Vérifier le suivi');
     assert.strictEqual(await window.locator('#stop').textContent(), 'Arrêter après l’élément en cours');
-    assert.strictEqual(await window.locator('#runSiteHealth').textContent(), 'Exécuter la vérification de l’état du flux de travail de Postes Canada');
+    assert.strictEqual(await window.locator('#runSiteHealth').count(), 0, 'manual workflow health-check button must be removed');
+    assert.strictEqual(await window.locator('#siteHealthResult').count(), 0, 'standalone workflow health-check result must be removed');
+    const emptyHistoryToolbars = await window.evaluate(() => [...document.querySelectorAll('#historyTab .history-toolbar')]
+      .filter(element => !element.querySelector('button, input, select, textarea, [role="status"]')).length);
+    assert.strictEqual(emptyHistoryToolbars, 0, 'health-check removal must not leave an empty History toolbar');
     assert.strictEqual(await window.locator('#resultsList .ops-head').textContent(), 'HeureLigneSuiviRésultatDétailsPreuve');
     await window.evaluate(() => window.renderClaimQueue([{
       recordId: 8001, evidenceHash: '8'.repeat(64), trackingNumber: 'FRENCH0000000001', referenceNumber: 'REF-FR',
@@ -78,9 +106,16 @@ const { loadLocale } = require('../lib/i18n');
     assert((await window.locator('#historyList .history-row:not(.head)').textContent()).includes('Soumise'));
     const dynamicFrench = await window.evaluate(() => {
       const tracking = window.describeEvent('tracking', { type: 'tracking_start', total: 1, requestIntervalMs: 3100, jitterMaxMs: 100 });
+      window.setStatus('Running', 'warn', 'step1');
+      window.setActionLocalized('step1.exportStarting', {}, '', 'step1');
+      const step1 = {
+        status: document.getElementById('step1RunStatus').textContent,
+        action: document.getElementById('step1CurrentAction').textContent
+      };
       window.UpdateProgress.render(document, { stage: 'checking' }, key => window.tr(key), () => {});
       const result = {
         tracking,
+        step1,
         status: document.getElementById('step2RunStatus').textContent,
         updater: document.getElementById('updateProgressTitle').textContent,
         updaterStage: document.getElementById('updateProgressStage').textContent
@@ -89,9 +124,34 @@ const { loadLocale } = require('../lib/i18n');
       return result;
     });
     assert(dynamicFrench.tracking.startsWith('Étape de suivi démarrée.'));
+    assert.strictEqual(dynamicFrench.step1.status, 'En cours');
+    assert.strictEqual(dynamicFrench.step1.action, frenchMessages['step1.exportStarting']);
     assert.strictEqual(dynamicFrench.status, 'En cours');
     assert.strictEqual(dynamicFrench.updater, 'Mise à jour de l’application');
     assert.strictEqual(dynamicFrench.updaterStage, 'Vérification des versions GitHub…');
+    const localizedStates = await window.evaluate(() => {
+      const result = {};
+      for (const [label, key] of [
+        ['Running', 'running'], ['Complete', 'complete'], ['Failed', 'failed'], ['Blocked', 'blocked'], ['Stopped', 'stopped'],
+        ['Diagnostic passed', 'diagnosticPassed'], ['Diagnostic failed', 'diagnosticFailed'],
+        ['Diagnostic running', 'diagnosticRunning'], ['Diagnostic blocked', 'diagnosticBlocked']
+      ]) {
+        window.setStatus(label, '', 'step2');
+        result[key] = document.getElementById('step2RunStatus').textContent;
+      }
+      window.setLocalizedText(document.getElementById('step2RunStatus'), 'step2.discardedStatus');
+      result.discarded = document.getElementById('step2RunStatus').textContent;
+      document.getElementById('forceStopStep2').disabled = true;
+      result.disabledForceStop = document.getElementById('forceStopStep2').textContent;
+      return result;
+    });
+    for (const [state, key] of [
+      ['running', 'runStatus.running'], ['complete', 'runStatus.complete'], ['failed', 'runStatus.failed'],
+      ['blocked', 'runStatus.blocked'], ['stopped', 'runStatus.stopped'], ['diagnosticPassed', 'runStatus.diagnosticPassed'],
+      ['diagnosticFailed', 'runStatus.diagnosticFailed'], ['diagnosticRunning', 'runStatus.diagnosticRunning'],
+      ['diagnosticBlocked', 'runStatus.diagnosticBlocked'], ['discarded', 'step2.discardedStatus']
+    ]) assert.strictEqual(localizedStates[state], frenchMessages[key]);
+    assert.strictEqual(localizedStates.disabledForceStop, frenchMessages['action.forceStop']);
     const frenchConfirmationPromise = window.waitForEvent('dialog');
     const discardPromise = window.evaluate(() => window.discardIncompleteTracking());
     const frenchConfirmation = await frenchConfirmationPromise;
@@ -112,6 +172,9 @@ const { loadLocale } = require('../lib/i18n');
     assert.deepStrictEqual(mixedEnglish, [], 'major French workflow surfaces must not retain observed English copy');
     await window.locator('#localeSelect').selectOption('en-CA');
     await window.locator('html[lang="en-CA"]').waitFor();
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Run Step 1 — Import EST History');
+    assert.strictEqual(await window.locator('#step1CurrentAction').textContent(), 'Exporting EST Desktop history and generating tracking.csv.');
+    assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Run Step 2 — Check Tracking');
     assert.match(await window.locator('#step2CurrentAction').textContent(), /systemic integration failure/,
       'visible dynamic status text must be regenerated immediately after a language switch');
 

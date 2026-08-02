@@ -10,7 +10,7 @@ Support bundles are ordinary local exports and are not uploaded by the applicati
 
 ## Portal compatibility fingerprint
 
-The workflow health check records a versioned, SHA-256 portal fingerprint only after the built-in browser confirms the allowlisted Canada Post domain, authenticated state, recognized claim navigation, expected support/category/late/ticket stages, and the critical late-package control. It records structural booleans and stage names, not credentials, cookies, form values, or page bodies.
+The supervised live Step 3 workflow automatically records a versioned, SHA-256 portal fingerprint only after the built-in browser confirms the allowlisted Canada Post domain, authenticated state, recognized claim navigation, expected support/category/late/ticket stages, and the critical late-package control. It records structural booleans and stage names, not credentials, cookies, form values, or page bodies.
 
 A live Step 3 batch fails closed unless the latest health-check run:
 

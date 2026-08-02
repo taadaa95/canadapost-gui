@@ -25,10 +25,13 @@ const liveWithoutPortalCheck = buildPreflightReport({
   webUsernameAvailable: true, webPasswordAvailable: true, claimAddressAvailable: true,
   claimCount: 1, builtinBrowserRequired: true, step3WorkersAvailable: true,
   reconciliationCount: 0, liveSubmissionRequested: true,
-  portalCompatibility: { ok: false, reason: 'Health check required.' }
+  portalCompatibility: { ok: false, reason: 'Automatic portal compatibility validation is required.' }
 });
 assert.strictEqual(liveWithoutPortalCheck.ready, false);
-assert.strictEqual(liveWithoutPortalCheck.checks.find(item => item.id === 'portal-compatibility').ok, false);
+const portalCheck = liveWithoutPortalCheck.checks.find(item => item.id === 'portal-compatibility');
+assert.strictEqual(portalCheck.ok, false);
+assert.match(portalCheck.action, /portal compatibility validation runs before submission/i);
+assert.doesNotMatch(portalCheck.action, /workflow health check/i);
 assert.strictEqual(ready.checks.some(item => item.id === 'portal-compatibility'), false, 'dry diagnostics must not require the live portal gate');
 
 const blocked = buildPreflightReport({

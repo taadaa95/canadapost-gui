@@ -9,6 +9,8 @@ const DEFAULT_THEME = 'system';
 const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page: 1, offset: 0 });
 let setupWizardShown = false;
 let activeMessages = {};
+let preferredLocale = '';
+let localeRequestVersion = 0;
 const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
 let reconciliationFocusAttemptId = null;
 const step3QueueController = window.Step3Queue.createController();
@@ -46,7 +48,9 @@ function setLocalizedText(element, key, values = {}, fallback = '') {
 }
 
 async function applyLocale(locale) {
+  const requestVersion = ++localeRequestVersion;
   const result = await window.cpApp.loadLocale(locale);
+  if (requestVersion !== localeRequestVersion) return false;
   activeMessages = result.messages || {};
   document.documentElement.lang = result.locale || 'en-CA';
   if ($('localeSelect')) $('localeSelect').value = result.locale || 'en-CA';
@@ -59,6 +63,7 @@ async function applyLocale(locale) {
   if (state.claimQueueLoaded) renderClaimQueue(state.claimQueueItems, true);
   if (!$('setupWizard')?.classList.contains('hidden')) renderSetupWizardReadiness(await window.cpApp.loadConfig());
   rendererEvents.emit('locale:changed', { locale: result.locale || 'en-CA' });
+  return true;
 }
 
 function applyTheme(theme) {
@@ -600,7 +605,11 @@ function setStatus(text, kind = '', stepId = null) {
 function setAction(text, stepId = null) {
   const step = stepId || currentProcessStep || activeTabId || 'step1';
   const el = $(actionIdForStep(step));
-  if (el) el.textContent = text;
+  if (el) {
+    delete el.dataset.i18nCurrent;
+    delete el.dataset.i18nValues;
+    el.textContent = text;
+  }
 }
 
 function setActionLocalized(key, values = {}, fallback = '', stepId = null) {
@@ -1308,24 +1317,15 @@ function describeEvent(stage, event) {
   }
 
   if (stage === 'health') {
-    const resultEl = $('siteHealthResult');
     if (type === 'health_start') {
-      setSiteHealthRunning(true);
-      if (resultEl) {
-        resultEl.textContent = localizedEventMessage || event.message || tr('health.checking', 'Checking Canada Post workflow…');
-        resultEl.className = 'health-result warn';
-      }
-      return localizedEventMessage || event.message || tr('health.started', 'Canada Post workflow health check started.');
+      return tr('step3.portalValidation.started', 'Step 3 portal compatibility validation started.');
     }
+    if (type === 'health_progress') return tr('step3.portalValidation.progress', 'Step 3 portal compatibility validation is checking the current Canada Post page.');
     if (type === 'health_complete') {
-      setSiteHealthRunning(false);
-      const status = event.status === 'healthy' ? 'good' : (event.status === 'warning' ? 'warn' : 'bad');
-      if (resultEl) {
-        resultEl.textContent = `${event.code || 'RESULT'}: ${localizedEventMessage || event.message || tr('health.completed', 'Health check completed.')}`;
-        resultEl.className = `health-result ${status}`;
-      }
       refreshHistory().catch(() => {});
-      return `${event.code || tr('health.short', 'Health check')}: ${localizedEventMessage || event.message || tr('health.completedShort', 'completed')}`;
+      return trf(event.status === 'healthy' ? 'step3.portalValidation.passed' : 'step3.portalValidation.failed', {
+        code: event.code || 'UNKNOWN'
+      }, event.status === 'healthy' ? 'Step 3 portal compatibility validation passed ({code}).' : 'Step 3 portal compatibility validation did not pass ({code}).');
     }
   }
 
@@ -1532,18 +1532,18 @@ function describeEvent(stage, event) {
     }
     if (type === 'tracking_semantic_circuit_open') {
       setStatus('Blocked', 'bad', 'step2');
-      setAction(localizedEventMessage || tr('event.tracking.semanticFailureAction', 'Stopped — Tracking API responses were received, but required fields could not be normalized.'), 'step2');
+      setActionLocalized(event.messageKey || 'event.tracking.semanticFailureAction', event.messageValues || {}, event.message || 'Stopped — Tracking API responses were received, but required fields could not be normalized.', 'step2');
       return trf('event.tracking.semanticCircuitOpen', { message: localizedEventMessage || tr('event.tracking.semanticFailureAction'), attempted: event.attempted || 0, total: event.total || 0, remaining: event.remaining || 0, preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, '{message} Attempted: {attempted}; total: {total}; remaining: {remaining}; queue preserved: {preserved}.');
     }
     if (type === 'tracking_invariant_failure') {
       setStatus('Blocked', 'bad', 'step2');
-      setAction(localizedEventMessage || tr('event.tracking.invariantFailureAction', 'Internal classification invariant failed.'), 'step2');
+      setActionLocalized(event.messageKey || 'event.tracking.invariantFailureAction', event.messageValues || {}, event.message || 'Internal classification invariant failed.', 'step2');
       return trf('event.tracking.invariantFailure', { message: localizedEventMessage || tr('event.tracking.invariantFailureAction'), preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, '{message} Run stopped; queue preserved: {preserved}.');
     }
     if (type === 'tracking_aborted') {
       updateCurrentItem({ step: 'Tracking stopped', result: 'Systemic integration failure', kind: 'failed' });
       setStatus('Blocked', 'bad', 'step2');
-      setAction(localizedEventMessage || tr('event.tracking.incompleteAction', 'Stopped — incomplete Tracking API run. A deliberate retry is required.'), 'step2');
+      setActionLocalized(event.messageKey || 'event.tracking.incompleteAction', event.messageValues || {}, event.message || 'Stopped — incomplete Tracking API run. A deliberate retry is required.', 'step2');
       return trf('event.tracking.aborted', { attempted: event.attempted || 0, total: event.total || 0, remaining: event.remaining || 0, errors: event.errorCount || 0, preserved: tr(event.queuePreserved ? 'common.yes' : 'common.no') }, 'Run stopped. Attempted: {attempted}; total: {total}; remaining: {remaining}; errors: {errors}; queue preserved: {preserved}.');
     }
     if (type === 'tracking_diagnostic') {
@@ -2118,36 +2118,6 @@ async function clearHistoryFilters() {
   Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS);
   updateClearHistoryFiltersButton();
   await refreshHistory({ resetPage: true });
-}
-
-function setSiteHealthRunning(running) {
-  const button = $('runSiteHealth');
-  if (!button) return;
-  button.disabled = Boolean(running);
-  setLocalizedText(button, running ? 'health.running' : 'health.run', {}, running ? 'Health Check Running…' : 'Run Canada Post Workflow Health Check');
-}
-
-async function runSiteHealthCheck() {
-  currentProcessStep = 'step3';
-  const resultEl = $('siteHealthResult');
-  setSiteHealthRunning(true);
-  if (resultEl) setLocalizedText(resultEl, 'health.checking', {}, 'Checking Canada Post workflow…');
-  try {
-    setBuiltinBrowserStatus(tr('step3.browser.preparingStatus', 'Preparing browser'), 'warn');
-    await synchronizeBuiltinBrowserVisibility({
-      reason: 'site-health-start',
-      scrollIntoView: true,
-      force: true
-    });
-    const result = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
-    if (!result.ok) {
-      setSiteHealthRunning(false);
-      if (resultEl) resultEl.textContent = result.error || tr('health.startFailed', 'Could not start workflow health check.');
-    }
-  } catch (error) {
-    setSiteHealthRunning(false);
-    if (resultEl) resultEl.textContent = error.message || tr('health.startFailed', 'Could not start workflow health check.');
-  }
 }
 
 let backupPasswordResolver = null;
@@ -2868,7 +2838,7 @@ async function startTrackingOnly() {
   const res = await window.cpApp.runTracking(buildTrackingOnlyOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || tr('step2.startFailed', 'Could not start tracking check.'));
+    setActionLocalized('step2.startFailed', {}, 'Could not start tracking check.', 'step2');
     updateCurrentItem({ step: 'Could not start tracking check', result: res.error || 'Failed', kind: 'failed' });
     addNeedsReview('failed', '—', res.error || 'Could not start tracking check', '—', '', {
       kind: 'failed',
@@ -2876,14 +2846,14 @@ async function startTrackingOnly() {
       status: 'Tracking start failed',
       message: res.error || 'Could not start tracking check'
     });
-    log(res.error || 'Could not start tracking check.');
+    log(tr('step2.startFailed', 'Could not start tracking check.'), 'log-submit-error', 'step2');
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
     return;
   }
 
-  log('Tracking check started.');
+  log(tr('step2.started', 'Tracking check started.'), '', 'step2');
 }
 
 let trackingDiagnosticResolver = null;
@@ -2912,7 +2882,7 @@ async function requestTrackingDiagnosticRow() {
   if (!modal) return null;
   const defaults = await window.cpApp.getTrackingDiagnosticDefaultRow();
   if (!defaults?.ok) {
-    window.alert(defaults?.error || tr('step2.diagnostic.noUsableRow', 'No usable tracking row is available.'));
+    window.alert(tr('step2.diagnostic.noUsableRow', 'No usable tracking row is available.'));
     return null;
   }
   if ($('trackingDiagnosticRow')) $('trackingDiagnosticRow').value = String(defaults.row);
@@ -2929,7 +2899,7 @@ async function runTrackingDiagnostic({ structureExport = false } = {}) {
   currentProcessStep = 'step2';
   setStatus(structureExport ? 'Structural diagnostic running' : 'Diagnostic running', 'warn', 'step2');
   setActionLocalized(structureExport ? 'step2.diagnostic.structureAction' : 'step2.diagnostic.connectionAction', {}, structureExport ? 'Generating a value-free structural report from one authorized Tracking API response.' : 'Testing the selected Developer Portal Tracking API environment with one authorized shipment.', 'step2');
-  if (!structureExport) log('One-request OAuth/JSON diagnostic deliberately confirmed. Configuration, token, resource, and state-integrity stages will be reported without secrets.', '', 'step2');
+  if (!structureExport) log(tr('step2.diagnostic.confirmedLog', 'One-request OAuth/JSON diagnostic deliberately confirmed. Configuration, token, resource, and state-integrity stages will be reported without secrets.'), '', 'step2');
   const res = await window.cpApp.runTracking({
     ...buildTrackingOnlyOptions(),
     fresh: false,
@@ -2940,8 +2910,10 @@ async function runTrackingDiagnostic({ structureExport = false } = {}) {
   });
   if (!res.ok) {
     setStatus(structureExport ? 'Structural diagnostic blocked' : 'Diagnostic blocked', 'bad', 'step2');
-    setAction(res.error || tr(structureExport ? 'step2.diagnostic.structureStartFailed' : 'step2.diagnostic.startFailed', structureExport ? 'Could not start sanitized structural diagnostic.' : 'Could not start one-request API diagnostic.'), 'step2');
-    if (!structureExport) log(res.error || 'Could not start one-request API diagnostic.', 'log-submit-error', 'step2');
+    const failureKey = structureExport ? 'step2.diagnostic.structureStartFailed' : 'step2.diagnostic.startFailed';
+    const failureFallback = structureExport ? 'Could not start sanitized structural diagnostic.' : 'Could not start one-request API diagnostic.';
+    setActionLocalized(failureKey, {}, failureFallback, 'step2');
+    log(tr(failureKey, failureFallback), 'log-submit-error', 'step2');
   }
 }
 
@@ -2953,11 +2925,11 @@ async function discardIncompleteTracking() {
   const confirmed = window.confirm(tr('step2.discardConfirm', 'Discard the active incomplete Step 2 staging state? Historical completed runs will be preserved.'));
   if (!confirmed) return;
   const result = await window.cpApp.discardIncompleteTracking({ confirmed: true });
-  if (!result.ok) return window.alert(result.error || tr('step2.discardFailed', 'Could not discard incomplete Step 2 state.'));
+  if (!result.ok) return window.alert(tr('step2.discardFailed', 'Could not discard incomplete Step 2 state.'));
   setLocalizedText($('step2RunStatus'), 'step2.discardedStatus', {}, 'Incomplete run discarded');
   $('step2RunStatus').className = 'pill';
   if (result.messageKey) setActionLocalized(result.messageKey, result.messageValues || {}, result.message || '', 'step2');
-  else setAction(result.message || tr('step2.discarded', 'Incomplete Step 2 staging was discarded; completed history was preserved.'), 'step2');
+  else setActionLocalized('step2.discarded', {}, 'Incomplete Step 2 staging was discarded; completed history was preserved.', 'step2');
   await refreshClaimQueue();
 }
 
@@ -2966,29 +2938,48 @@ async function startSubmitOnly() {
   if (!state.claimQueueLoaded) await refreshClaimQueue();
   const selected = selectedClassificationRecords();
   const dryRun = Boolean($('dryRun')?.checked);
-  const preflightOptions = {
+  const basePreflightOptions = {
     ...collectUserSettingsOptions(),
-    dryRun,
     browserMode: 'builtin',
     selectedClassificationRecords: selected,
     expectedClaimCount: selected.length,
     canaryMode: false,
     liveSubmissionConfirmed: false
   };
-  const preflight = await runStep3Preflight(preflightOptions);
-  if (!preflight?.ready) {
+  const preliminaryPreflight = await runStep3Preflight({ ...basePreflightOptions, dryRun: true });
+  if (!preliminaryPreflight?.ready) {
     setStatus('Blocked', 'bad', 'step3');
     setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
-    log('Step 3 was blocked by the readiness check.', 'log-submit-error', 'step3');
+    log(tr('step3.preflightBlockedAction', 'Step 3 preflight found blocking issues. Resolve them before running claims.'), 'log-submit-error', 'step3');
     return;
   }
   if (!selected.length) {
     setStatus('Blocked', 'bad', 'step3');
-    setAction(tr('step3.zeroSelection', 'No late-delivery candidates are selected in the Step 3 candidate queue.'), 'step3');
+    setActionLocalized('step3.zeroSelection', {}, 'No late-delivery candidates are selected in the Step 3 candidate queue.', 'step3');
     log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before starting a dry or live run.'), 'log-submit-error', 'step3');
     return;
   }
-
+  if (!dryRun) {
+    setStatus('Validating', 'warn', 'step3');
+    setActionLocalized('step3.portalValidation.running', {}, 'Validating Canada Post portal compatibility before live submission.', 'step3');
+    const validation = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
+    if (!validation?.ok) {
+      const values = { code: validation?.code || 'UNKNOWN' };
+      setStatus('Blocked', 'bad', 'step3');
+      setActionLocalized('step3.portalValidation.failed', values, 'Step 3 portal compatibility validation did not pass ({code}).', 'step3');
+      log(trf('step3.portalValidation.failed', values, 'Step 3 portal compatibility validation did not pass ({code}).'), 'log-submit-error', 'step3');
+      return;
+    }
+    setStatus('Validating', 'warn', 'step3');
+    setActionLocalized('step3.portalValidation.passed', { code: validation.code || 'HEALTHY' }, 'Step 3 portal compatibility validation passed ({code}).', 'step3');
+  }
+  const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight({ ...basePreflightOptions, dryRun: false });
+  if (!preflight?.ready) {
+    setStatus('Blocked', 'bad', 'step3');
+    setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
+    log(tr('step3.preflightBlockedAction', 'Step 3 preflight found blocking issues. Resolve them before running claims.'), 'log-submit-error', 'step3');
+    return;
+  }
   let liveSubmissionConfirmed = false;
   let canaryMode = false;
   if (!dryRun) {
@@ -3055,7 +3046,7 @@ async function refreshConfig() {
   if (isolatedBanner) isolatedBanner.hidden = !state.isolatedTestMode;
   if ($('isolatedTestPath')) $('isolatedTestPath').textContent = state.isolatedTestMode ? String(cfg.isolatedUserDataPath || '') : '';
   if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
-  for (const id of ['runSubmitOnly', 'runSiteHealth', 'checkForUpdates', 'createBackup', 'restoreBackup', 'createDiagnostics', 'exportHistory']) {
+  for (const id of ['runSubmitOnly', 'checkForUpdates', 'createBackup', 'restoreBackup', 'createDiagnostics', 'exportHistory']) {
     const control = $(id);
     if (!control) continue;
     control.disabled = state.isolatedTestMode;
@@ -3068,13 +3059,8 @@ async function refreshConfig() {
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
-  await applyLocale(cfg.locale || 'en-CA');
+  await applyLocale(preferredLocale || cfg.locale || 'en-CA');
   if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
-  if ($('siteHealthResult') && cfg.portalCompatibility) {
-    setLocalizedText($('siteHealthResult'), cfg.portalCompatibility.ok ? 'health.portalCurrent' : 'health.portalNotConfirmed', {}, cfg.portalCompatibility.ok
-      ? 'Portal compatibility fingerprint is current for live batches.'
-      : 'Portal compatibility has not been confirmed for live batches.');
-  }
   if ($('webUsername')) $('webUsername').value = cfg.webUsername || '';
   if ($('webPassword')) {
     $('webPassword').value = '';
@@ -3259,7 +3245,6 @@ $('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
 $('cancelSupportBundle')?.addEventListener('click', closeSupportBundle);
 $('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
 $('supportBundleAcknowledge')?.addEventListener('change', () => { $('confirmSupportBundle').disabled = !$('supportBundleAcknowledge').checked; });
-$('runSiteHealth')?.addEventListener('click', runSiteHealthCheck);
 $('addManualShipment')?.addEventListener('click', addManualShipment);
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
@@ -3342,7 +3327,7 @@ $('importEstHistory')?.addEventListener('click', async () => {
   if (missing.length) {
     setStatus('Failed', 'bad', 'step1');
     const missingMessage = trf('step1.missingSettings', { settings: missing.join(', ') }, 'Missing settings: {settings}. Open User Settings.');
-    setAction(missingMessage, 'step1');
+    setActionLocalized('step1.missingSettings', { settings: missing.join(', ') }, 'Missing settings: {settings}. Open User Settings.', 'step1');
     log(missingMessage, 'log-late', 'step1');
     return;
   }
@@ -3352,8 +3337,8 @@ $('importEstHistory')?.addEventListener('click', async () => {
   const res = await window.cpApp.importEstHistory(buildEstHistoryOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || tr('step1.exportStartFailed', 'Could not start EST Desktop history export.'));
-    log(res.error || tr('step1.exportStartFailed', 'Could not start EST Desktop history export.'));
+    setActionLocalized('step1.exportStartFailed', {}, 'Could not start EST Desktop history export.', 'step1');
+    log(tr('step1.exportStartFailed', 'Could not start EST Desktop history export.'), 'log-submit-error', 'step1');
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
@@ -3371,8 +3356,8 @@ $('importHistory')?.addEventListener('click', async () => {
   const res = await window.cpApp.importHistory(buildHistoryOptions());
   if (!res.ok) {
     setStatus('Failed', 'bad');
-    setAction(res.error || tr('step1.historyStartFailed', 'Could not start history import.'));
-    log(res.error || tr('step1.historyStartFailed', 'Could not start history import.'));
+    setActionLocalized('step1.historyStartFailed', {}, 'Could not start history import.', 'step1');
+    log(tr('step1.historyStartFailed', 'Could not start history import.'), 'log-submit-error', 'step1');
     operations.finishedAt = Date.now();
     stopOperationsTimer();
     updateCounters();
@@ -3425,7 +3410,7 @@ document.querySelectorAll('[data-force-stop]').forEach((button) => {
     currentProcessStep = step;
     const res = await window.cpApp.forceStop();
     if (res.ok) log(tr('event.forceStopSentShort', 'Force stop sent.'), '', step);
-    else log(res.error || tr('event.forceStopNone', 'Nothing to force stop.'), '', step);
+    else log(tr('event.forceStopNone', 'Nothing to force stop.'), '', step);
   });
 });
 
@@ -3493,7 +3478,14 @@ window.cpApp.onEvent(({ stage, event }) => {
 
 window.cpApp.onRun((payload) => {
   const step = currentProcessStep || activeTabId || 'step1';
-  const payloadMessage = payload.messageKey ? trf(payload.messageKey, payload.messageValues || {}, payload.message || '') : payload.message;
+  const fallbackMessageKeys = {
+    step1: { failed: 'step1.runFailed', blocked: 'step1.runBlocked' },
+    step2: { failed: 'step2.runFailed', blocked: 'step2.runBlocked' }
+  };
+  const payloadMessageKey = payload.messageKey || fallbackMessageKeys[step]?.[payload.status] || '';
+  const payloadMessage = payloadMessageKey
+    ? trf(payloadMessageKey, payload.messageValues || {}, payload.messageKey ? (payload.message || '') : '')
+    : payload.message;
   if (payload.status === 'started') {
     operations.runStartedAt ||= Date.now();
     startOperationsTimer();
@@ -3543,7 +3535,7 @@ window.cpApp.onRun((payload) => {
     setStatus('Stopped', 'warn', step);
   }
   if (payloadMessage) {
-    if (payload.messageKey) setActionLocalized(payload.messageKey, payload.messageValues || {}, payload.message || '', step);
+    if (payloadMessageKey) setActionLocalized(payloadMessageKey, payload.messageValues || {}, payload.messageKey ? (payload.message || '') : '', step);
     else setAction(payloadMessage, step);
     log(payloadMessage, '', step);
   }
@@ -3570,7 +3562,6 @@ window.cpApp.onStage(({ stage, status, code }) => {
       finishBuiltinBrowserActivity(code === 0 ? tr('step3.browser.workflowComplete', 'Browser workflow complete') : tr('step3.browser.workflowWarnings', 'Browser workflow finished with warnings'), code === 0 ? '' : 'error');
       deactivateBuiltinBrowser('worker-finished').catch(() => {});
     }
-    if (stage === 'health') setSiteHealthRunning(false);
     log(trf('event.stage.finished', { stage, code }, '{stage} process finished with code {code}.'), '', step);
   }
 });
@@ -3584,6 +3575,8 @@ updateCounters();
 
 $('localeSelect')?.addEventListener('change', async () => {
   const locale = $('localeSelect').value;
+  preferredLocale = locale;
   await window.cpApp.saveConfig({ locale });
+  if (preferredLocale !== locale) return;
   await applyLocale(locale);
 });

@@ -2171,25 +2171,45 @@ registerIpcHandler('siteHealth:run', async (_event, options = {}) => {
     claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: failed.error?.message || 'Worker spawn failed.' });
     return { ok: false, error: failed.error?.message || 'Site-health worker could not be started.' };
   }
-  (async () => {
-    try {
-      const result = await healthProcess;
-      const health = result.lastEventsByType?.health_complete || result.lastEvent || {};
-      const compatibility = portalCompatibility.evaluateHealthResult(health);
-      claimDb.finishRun(DB_PATH, runId, health.ok ? 'complete' : 'failed', {
-        total: 1, success: health.ok ? 1 : 0, warning: health.status === 'warning' ? 1 : 0, failure: health.ok ? 0 : 1
-      }, { ...health, portalCompatibility: compatibility });
-      emit('run', {
-        status: health.ok ? (health.status === 'warning' ? 'complete_with_warnings' : 'complete') : 'failed',
-        message: health.message || (health.ok ? 'Workflow health check passed.' : 'Workflow health check failed.'),
-        logPath
-      });
-    } catch (error) {
-      claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: error.message });
-      emit('run', { status: 'failed', message: error.message, logPath });
-    }
-  })();
-  return { ok: true, logPath };
+  try {
+    const result = await healthProcess;
+    const health = result.lastEventsByType?.health_complete || result.lastEvent || {};
+    const compatibility = portalCompatibility.evaluateHealthResult(health);
+    const compatible = compatibility.compatible === true;
+    const code = String(health.code || (compatible ? 'HEALTHY' : 'UNKNOWN'));
+    claimDb.finishRun(DB_PATH, runId, compatible ? 'complete' : 'failed', {
+      total: 1,
+      success: compatible ? 1 : 0,
+      warning: health.status === 'warning' ? 1 : 0,
+      failure: compatible ? 0 : 1
+    }, { ...health, portalCompatibility: compatibility });
+    emit('run', {
+      status: compatible ? 'complete' : 'blocked',
+      messageKey: compatible ? 'step3.portalValidation.passed' : 'step3.portalValidation.failed',
+      messageValues: { code },
+      message: compatible
+        ? `Step 3 portal compatibility validation passed (${code}).`
+        : `Step 3 portal compatibility validation did not pass (${code}).`,
+      logPath
+    });
+    return {
+      ok: compatible,
+      code,
+      error: compatible ? undefined : (health.message || `Portal compatibility validation did not pass (${code}).`),
+      portalCompatibility: compatibility,
+      logPath
+    };
+  } catch (error) {
+    claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: error.message });
+    emit('run', {
+      status: 'blocked',
+      messageKey: 'step3.portalValidation.failed',
+      messageValues: { code: error.code || 'WORKER_FAILED' },
+      message: error.message,
+      logPath
+    });
+    return { ok: false, error: error.message, code: error.code || 'WORKER_FAILED', logPath };
+  }
 });
 
 registerIpcHandler('est:importHistory', async (_event, options = {}) => {

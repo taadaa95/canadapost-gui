@@ -28,8 +28,24 @@ assert.strictEqual(portalCompatibility.gate({ status: 'complete', metadata_json:
 assert.strictEqual(portalCompatibility.gate({ status: 'complete', metadata_json: JSON.stringify({ portalCompatibility: { ...healthy, checkedAt: '2026-07-01T00:00:00.000Z' } }) }, { now }).code, 'PORTAL_COMPATIBILITY_STALE');
 
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const submit = mainSource.match(/registerIpcHandler\('submit:run'[\s\S]*?registerIpcHandler\('run:requestStop'/)?.[0] || '';
 assert.ok(submit.indexOf("latestRunByType(DB_PATH, 'site_health')") < submit.indexOf('createRunSnapshot'), 'live portal gate must run before immutable snapshot creation');
 assert.match(submit, /if \(!options\.dryRun\)/, 'dry diagnostics may proceed without a live portal fingerprint');
+
+const healthHandler = mainSource.match(/registerIpcHandler\('siteHealth:run'[\s\S]*?registerIpcHandler\('est:importHistory'/)?.[0] || '';
+assert.match(healthHandler, /await healthProcess/, 'automatic portal validation must await the worker result');
+assert.match(healthHandler, /portalCompatibility\.evaluateHealthResult\(health\)/, 'portal validation must create a versioned compatibility fingerprint');
+assert.match(healthHandler, /ok: compatible/, 'only a compatible fingerprint may satisfy automatic validation');
+assert.match(preloadSource, /runSiteHealth: options => ipcRenderer\.invoke\('siteHealth:run', options\)/, 'the narrow Step 3 portal-validation bridge must remain');
+
+const startSubmit = rendererSource.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0] || '';
+assert.ok(startSubmit.indexOf('window.cpApp.runSiteHealth') >= 0, 'live Step 3 must automatically request portal validation');
+assert.ok(startSubmit.indexOf('if (!selected.length)') < startSubmit.indexOf('window.cpApp.runSiteHealth'), 'an empty queue must be rejected without launching portal validation');
+const finalPreflightIndex = startSubmit.indexOf('const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight');
+assert.ok(startSubmit.indexOf('window.cpApp.runSiteHealth') < finalPreflightIndex, 'automatic validation must precede the live preflight that consumes its fingerprint');
+assert.ok(finalPreflightIndex < startSubmit.indexOf('window.cpApp.runSubmit'), 'final preflight must still block before submission starts');
+assert.match(startSubmit, /if \(!dryRun\)/, 'dry runs must not launch the live portal validation worker');
 
 process.stdout.write('Versioned portal compatibility fingerprint and live gate tests passed.\n');

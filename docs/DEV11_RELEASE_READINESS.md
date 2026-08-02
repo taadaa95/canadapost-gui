@@ -56,7 +56,7 @@ Do not publish or merge when a required check fails. Stop live operations, prese
 - Supply and protect the offline production Ed25519 private key; configure its reviewed public key in source; sign/verify exact post-signing manifests outside the repository.
 - Obtain legal, privacy, EULA, trademark, policy, holiday-calendar, and support/lifecycle approval.
 - Perform human physical clean-install, launch, visual/keyboard, upgrade/migration, backup/restore, rollback, uninstall, and residue checks on supported Windows and Linux machines.
-- With authorized real credentials only, perform the website/API diagnostic, CAPTCHA/text verification, supervised Step 1/Step 2 procedure, portal health check, dry run, one-claim canary, and reconciliation. No automated session may do this.
+- With authorized real credentials only, perform the website/API diagnostic, CAPTCHA/text verification, supervised Step 1/Step 2 procedure, automatic live Step 3 portal-compatibility validation, dry run, one-claim canary, and reconciliation. No automated session may do this.
 - Execute and review the customer pilot with staffed support and deletion/incident rehearsals.
 
 Until every gate is signed off, this is an unsigned public-beta candidate, not a production-signed or stable release.

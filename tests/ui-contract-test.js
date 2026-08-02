@@ -17,7 +17,7 @@ const requiredIds = [
   'reconciliationList', 'reconciliationCountPill', 'historyResultCount', 'clearHistoryFilters',
   'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
   'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
-  'runSiteHealth', 'siteHealthResult', 'exportHistory', 'refreshHistory',
+  'exportHistory', 'refreshHistory',
   'dryRun', 'claimQueueList', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
@@ -38,7 +38,6 @@ assert.ok(englishLocale['step3.supportGuidance'].includes('Unsure about a claim?
 assert.match(html, /data-i18n="step3\.supportGuidance"/);
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
 assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
-assert.ok(renderer.includes("$('runSiteHealth')?.addEventListener"));
 assert.ok(renderer.includes("$('historySearch')?.addEventListener"));
 assert.ok(renderer.includes("$('clearHistoryFilters')?.addEventListener"));
 assert.ok(renderer.includes('Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS)'));
@@ -83,8 +82,21 @@ assert.ok(renderer.includes('window.visualViewport?.addEventListener'), 'Built-i
 
 assert.ok(englishLocale['settings.website.remember'].includes('save password securely on this device'));
 assert.ok(englishLocale['settings.website.securityNote'].includes('AES-256-GCM device-local encryption'));
-assert.ok(renderer.includes('function setSiteHealthRunning'));
 assert.ok(englishLocale['settings.website.passwordSavedPlaceholder'].includes('Saved password available — leave blank to reuse'));
+
+assert.ok(!html.includes('id="runSiteHealth"'), 'The redundant manual workflow health-check button must be absent');
+assert.ok(!html.includes('id="siteHealthResult"'), 'The standalone manual health-check result panel must be absent');
+assert.ok(!html.includes('Run Canada Post Workflow Health Check'));
+assert.ok(!html.includes('Not checked in this session.'));
+assert.ok(!renderer.includes("$('runSiteHealth')"), 'Removed health-check UI must not retain a renderer binding');
+assert.ok(!renderer.includes("$('siteHealthResult')"), 'Removed health-check result panel must not retain renderer state');
+assert.ok(!renderer.includes('function setSiteHealthRunning'), 'Removed health-check UI must not retain its state helper');
+const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?.[0] || '';
+assert.ok(historyMarkup.includes('id="refreshBrowserSession"'), 'Browser-session safety controls must remain after UI removal');
+assert.ok(!/<div class="history-toolbar"[^>]*>\s*<\/div>/.test(historyMarkup), 'Health-check removal must not leave an empty toolbar');
+assert.ok(preload.includes('runSiteHealth:'), 'Step 3 must retain the portal-validation IPC bridge');
+assert.ok(renderer.includes('await window.cpApp.runSiteHealth(collectUserSettingsOptions())'), 'Live Step 3 must automatically run portal validation');
+assert.ok(main.includes("registerIpcHandler('siteHealth:run'"), 'Portal compatibility validation backend must remain');
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
 assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
