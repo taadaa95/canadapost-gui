@@ -33,19 +33,22 @@ const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 
 const submit = mainSource.match(/registerIpcHandler\('submit:run'[\s\S]*?registerIpcHandler\('run:requestStop'/)?.[0] || '';
 assert.ok(submit.indexOf("latestRunByType(DB_PATH, 'site_health')") < submit.indexOf('createRunSnapshot'), 'live portal gate must run before immutable snapshot creation');
 assert.match(submit, /if \(!options\.dryRun\)/, 'dry diagnostics may proceed without a live portal fingerprint');
+assert.match(submit, /!compatibilityGate\.ok && !options\.portalCompatibilityOverride/, 'an unverified live run must require an explicit override');
 
 const healthHandler = mainSource.match(/registerIpcHandler\('siteHealth:run'[\s\S]*?registerIpcHandler\('est:importHistory'/)?.[0] || '';
-assert.match(healthHandler, /await healthProcess/, 'automatic portal validation must await the worker result');
+assert.match(healthHandler, /await healthProcess/, 'explicit compatibility refresh must await the worker result');
 assert.match(healthHandler, /portalCompatibility\.evaluateHealthResult\(health\)/, 'portal validation must create a versioned compatibility fingerprint');
 assert.match(healthHandler, /ok: compatible/, 'only a compatible fingerprint may satisfy automatic validation');
 assert.match(preloadSource, /runSiteHealth: options => ipcRenderer\.invoke\('siteHealth:run', options\)/, 'the narrow Step 3 portal-validation bridge must remain');
 
 const startSubmit = rendererSource.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0] || '';
-assert.ok(startSubmit.indexOf('window.cpApp.runSiteHealth') >= 0, 'live Step 3 must automatically request portal validation');
-assert.ok(startSubmit.indexOf('if (!selected.length)') < startSubmit.indexOf('window.cpApp.runSiteHealth'), 'an empty queue must be rejected without launching portal validation');
+assert.doesNotMatch(startSubmit, /runSiteHealth/, 'opening or starting live Step 3 must not require the removed automatic health check');
 const finalPreflightIndex = startSubmit.indexOf('const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight');
-assert.ok(startSubmit.indexOf('window.cpApp.runSiteHealth') < finalPreflightIndex, 'automatic validation must precede the live preflight that consumes its fingerprint');
+assert.ok(startSubmit.indexOf('confirmPortalCompatibilityOverride') < finalPreflightIndex, 'an advisory override must precede the live preflight');
 assert.ok(finalPreflightIndex < startSubmit.indexOf('window.cpApp.runSubmit'), 'final preflight must still block before submission starts');
 assert.match(startSubmit, /if \(!dryRun\)/, 'dry runs must not launch the live portal validation worker');
+assert.ok(startSubmit.indexOf('confirmPortalCompatibilityOverride') < startSubmit.indexOf('confirmLiveSubmission'), 'Continue Anyway must proceed to the normal live acknowledgement');
+const refreshAdvisory = rendererSource.match(/async function refreshPortalCompatibilityStatus[\s\S]*?function dismissPortalCompatibilityWarning/)?.[0] || '';
+assert.match(refreshAdvisory, /if \(runCheck\)[\s\S]*?window\.cpApp\.runSiteHealth/, 'compatibility checks must be an explicit inline advisory action');
 
 process.stdout.write('Versioned portal compatibility fingerprint and live gate tests passed.\n');

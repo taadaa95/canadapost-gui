@@ -27,10 +27,11 @@ const liveWithoutPortalCheck = buildPreflightReport({
   reconciliationCount: 0, liveSubmissionRequested: true,
   portalCompatibility: { ok: false, reason: 'Automatic portal compatibility validation is required.' }
 });
-assert.strictEqual(liveWithoutPortalCheck.ready, false);
+assert.strictEqual(liveWithoutPortalCheck.ready, true);
 const portalCheck = liveWithoutPortalCheck.checks.find(item => item.id === 'portal-compatibility');
 assert.strictEqual(portalCheck.ok, false);
-assert.match(portalCheck.action, /portal compatibility validation runs before submission/i);
+assert.strictEqual(portalCheck.severity, 'warning');
+assert.match(portalCheck.action, /Continue Anyway/i);
 assert.doesNotMatch(portalCheck.action, /workflow health check/i);
 assert.strictEqual(ready.checks.some(item => item.id === 'portal-compatibility'), false, 'dry diagnostics must not require the live portal gate');
 

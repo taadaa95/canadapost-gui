@@ -18,7 +18,7 @@ const requiredIds = [
   'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
   'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
-  'dryRun', 'claimQueueList', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
+  'dryRun', 'claimQueueList', 'portalCompatibilityAdvisory', 'portalCompatibilityStatus', 'portalCompatibilityOverrideModal', 'continuePortalCompatibilityOverride', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
   'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
@@ -95,8 +95,10 @@ const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?
 assert.ok(historyMarkup.includes('id="refreshBrowserSession"'), 'Browser-session safety controls must remain after UI removal');
 assert.ok(!/<div class="history-toolbar"[^>]*>\s*<\/div>/.test(historyMarkup), 'Health-check removal must not leave an empty toolbar');
 assert.ok(preload.includes('runSiteHealth:'), 'Step 3 must retain the portal-validation IPC bridge');
-assert.ok(renderer.includes('await window.cpApp.runSiteHealth(collectUserSettingsOptions())'), 'Live Step 3 must automatically run portal validation');
+assert.ok(renderer.includes('await window.cpApp.runSiteHealth(collectUserSettingsOptions())'), 'The explicit inline compatibility refresh must retain its backend action');
+assert.ok(!renderer.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0].includes('runSiteHealth'), 'Live Step 3 must not automatically run a workflow health check');
 assert.ok(main.includes("registerIpcHandler('siteHealth:run'"), 'Portal compatibility validation backend must remain');
+assert.ok(!html.includes('id="step3PreflightModal"'), 'The blocking Step 3 preflight modal must be removed');
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
 assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
@@ -113,6 +115,7 @@ for (const [, tabMarkup] of stepTabs) {
 }
 assert.ok(/\.step-tab,[\s\S]*?\.step-tab\.active\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*gap:\s*4px\s*!important/s.test(styles), 'Workflow tab text must remain vertically centred with explicit title/subtitle spacing');
 console.log('UI contract tests passed.');
+require('./workflow-access-test');
 
 assert.ok(renderer.includes("$('openStep3Diagnostics')?.addEventListener"), 'Missing Step 3 diagnostics open action');
 

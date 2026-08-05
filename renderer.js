@@ -7,7 +7,6 @@ const LOG_BOTTOM_THRESHOLD_PX = 56;
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
 const DEFAULT_THEME = 'system';
 const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page: 1, offset: 0 });
-let setupWizardShown = false;
 let activeMessages = {};
 let preferredLocale = '';
 let localeRequestVersion = 0;
@@ -61,6 +60,8 @@ async function applyLocale(locale) {
   renderResultsList();
   renderNeedsReview();
   if (state.claimQueueLoaded) renderClaimQueue(state.claimQueueItems, true);
+  renderPortalCompatibilityAdvisory();
+  if (state.step3ActionReport) showStep3ActionIssues(state.step3ActionReport);
   if (!$('setupWizard')?.classList.contains('hidden')) renderSetupWizardReadiness(await window.cpApp.loadConfig());
   rendererEvents.emit('locale:changed', { locale: result.locale || 'en-CA' });
   return true;
@@ -132,6 +133,7 @@ function activateTab(tabId) {
   }
   if (target === 'step3') {
     if (!state.claimQueueLoaded) refreshClaimQueue().catch((error) => console.error(error));
+    refreshPortalCompatibilityStatus().catch((error) => console.error(error));
   }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
@@ -502,9 +504,13 @@ Object.assign(state, {
   trackingApiVersion: '1.0.0',
   isolatedTestMode: false,
   evidenceRetentionDays: 90,
-  dryRunDefault: false,
+  dryRunDefault: true,
   claimQueueItems: [],
   claimQueueLoaded: false,
+  portalCompatibility: { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' },
+  portalCompatibilityViewId: '',
+  portalCompatibilityWarningDismissed: false,
+  step3ActionReport: null,
   privacyPreview: null
 });
 
@@ -2280,12 +2286,65 @@ async function deletePrivacyData() {
 }
 
 async function refreshBrowserSessionStatus() {
-  const status = $('browserSessionStatus');
-  if (status) setLocalizedText(status, 'browserSession.checking', {}, 'Checking local browser session…');
+  const statuses = [$('browserSessionStatus'), $('step3BrowserSessionStatus')].filter(Boolean);
+  for (const status of statuses) setLocalizedText(status, 'browserSession.checking', {}, 'Checking local browser session…');
   const result = await window.cpApp.browserSessionStatus();
-  if (status) status.textContent = result.ok
-    ? (result.exists ? tr('browserSession.exists', 'A local Canada Post browser session exists on this device.') : tr('browserSession.none', 'No saved Canada Post browser session was detected.'))
-    : (result.error || tr('browserSession.inspectFailed', 'Could not inspect browser session state.'));
+  const key = result.ok
+    ? (result.exists ? 'browserSession.exists' : 'browserSession.none')
+    : 'browserSession.inspectFailed';
+  const fallback = result.ok
+    ? (result.exists ? 'A local Canada Post browser session exists on this device.' : 'No saved Canada Post browser session was detected.')
+    : (result.error || 'Could not inspect browser session state.');
+  for (const status of statuses) setLocalizedText(status, key, {}, fallback);
+  return result;
+}
+
+function renderPortalCompatibilityAdvisory(gate = state.portalCompatibility, { checking = false } = {}) {
+  const advisory = $('portalCompatibilityAdvisory');
+  const status = $('portalCompatibilityStatus');
+  const message = $('portalCompatibilityMessage');
+  if (!advisory || !status || !message) return;
+  const view = checking
+    ? { id: 'checking', kind: 'warn', requiresOverride: true }
+    : window.PortalAdvisory.describe(gate);
+  if (!checking && state.portalCompatibilityViewId && state.portalCompatibilityViewId !== view.id) {
+    state.portalCompatibilityWarningDismissed = false;
+  }
+  state.portalCompatibilityViewId = view.id;
+  advisory.classList.toggle('compatible', view.id === 'compatible');
+  advisory.classList.toggle('hidden', !checking && view.requiresOverride && state.portalCompatibilityWarningDismissed);
+  status.className = `pill ${view.kind}`;
+  setLocalizedText(status, `step3.compatibility.status.${view.id}`, {}, view.id);
+  setLocalizedText(message, `step3.compatibility.message.${view.id}`, {}, 'Portal compatibility status is advisory.');
+  $('portalCompatibilityRisk')?.classList.toggle('hidden', view.id === 'compatible');
+  $('dismissPortalCompatibility')?.classList.toggle('hidden', !view.requiresOverride || checking);
+}
+
+async function refreshPortalCompatibilityStatus({ runCheck = false } = {}) {
+  let validationResult = null;
+  if (runCheck) {
+    state.portalCompatibilityWarningDismissed = false;
+    renderPortalCompatibilityAdvisory(state.portalCompatibility, { checking: true });
+    validationResult = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
+    if (!validationResult?.ok) {
+      const values = { code: validationResult?.code || 'UNKNOWN' };
+      setActionLocalized('step3.compatibility.refreshFailed', values, 'Compatibility remains unverified ({code}). Review the warning before a live run.', 'step3');
+      log(trf('step3.compatibility.refreshFailed', values, 'Compatibility remains unverified ({code}). Review the warning before a live run.'), 'log-warning', 'step3');
+    }
+  }
+  const cfg = await window.cpApp.loadConfig();
+  state.portalCompatibility = runCheck && validationResult?.ok === false && !validationResult.portalCompatibility
+    ? { ok: false, code: 'PORTAL_COMPATIBILITY_WARNING', reason: validationResult.error || '' }
+    : (cfg?.portalCompatibility || { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' });
+  renderPortalCompatibilityAdvisory();
+  return state.portalCompatibility;
+}
+
+function dismissPortalCompatibilityWarning() {
+  if (window.PortalAdvisory.describe(state.portalCompatibility).requiresOverride) {
+    state.portalCompatibilityWarningDismissed = true;
+    renderPortalCompatibilityAdvisory();
+  }
 }
 
 async function clearBrowserSession() {
@@ -2713,15 +2772,16 @@ async function refreshClaimQueue() {
   return result;
 }
 
-function closeStep3PreflightModal() {
-  $('step3PreflightModal')?.classList.add('hidden');
-  $('step3PreflightModal')?.setAttribute('aria-hidden', 'true');
+function hideStep3ActionIssues() {
+  state.step3ActionReport = null;
+  $('step3ActionAdvisory')?.classList.add('hidden');
 }
 
-function showStep3PreflightFailures(report = {}) {
-  const modal = $('step3PreflightModal');
-  const target = $('step3PreflightFailures');
-  if (!modal || !target) return;
+function showStep3ActionIssues(report = {}) {
+  const advisory = $('step3ActionAdvisory');
+  const target = $('step3ActionIssues');
+  if (!advisory || !target) return;
+  state.step3ActionReport = report;
   target.textContent = '';
   for (const item of (report.checks || []).filter(check => !check.ok && check.severity === 'blocking')) {
     const row = document.createElement('div');
@@ -2731,14 +2791,16 @@ function showStep3PreflightFailures(report = {}) {
     row.append(label, action); target.appendChild(row);
   }
   const warningCount = Number(report.warningCount || 0);
-  if ($('step3PreflightWarningCount')) {
-    $('step3PreflightWarningCount').textContent = warningCount
-      ? trf('step3.preflight.warningCount', { count: warningCount }, '{count} advisory warning(s) remain.')
-      : '';
+  if ($('step3ActionWarningCount')) {
+    if (warningCount) {
+      setLocalizedText($('step3ActionWarningCount'), 'step3.preflight.warningCount', { count: warningCount }, '{count} advisory warning(s) remain.');
+    } else {
+      delete $('step3ActionWarningCount').dataset.i18nCurrent;
+      delete $('step3ActionWarningCount').dataset.i18nValues;
+      $('step3ActionWarningCount').textContent = '';
+    }
   }
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden', 'false');
-  $('cancelStep3Preflight')?.focus();
+  advisory.classList.remove('hidden');
 }
 
 async function runStep3Preflight(submitOptions) {
@@ -2747,8 +2809,33 @@ async function runStep3Preflight(submitOptions) {
     submitOptions: submitOptions || collectUserSettingsOptions()
   });
   if (!result?.ok) return null;
-  if (!result.report?.ready) showStep3PreflightFailures(result.report);
+  if (!result.report?.ready) showStep3ActionIssues(result.report);
+  else hideStep3ActionIssues();
   return result.report;
+}
+
+let portalCompatibilityOverrideResolver = null;
+
+function closePortalCompatibilityOverride(confirmed) {
+  const modal = $('portalCompatibilityOverrideModal');
+  modal?.classList.add('hidden');
+  modal?.setAttribute('aria-hidden', 'true');
+  const resolver = portalCompatibilityOverrideResolver;
+  portalCompatibilityOverrideResolver = null;
+  resolver?.(Boolean(confirmed));
+}
+
+function confirmPortalCompatibilityOverride() {
+  const modal = $('portalCompatibilityOverrideModal');
+  const status = $('portalCompatibilityOverrideStatus');
+  if (!modal || !status) return Promise.resolve(false);
+  const view = window.PortalAdvisory.describe(state.portalCompatibility);
+  status.className = `pill ${view.kind}`;
+  setLocalizedText(status, `step3.compatibility.status.${view.id}`, {}, view.id);
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  $('cancelPortalCompatibilityOverride')?.focus();
+  return new Promise(resolve => { portalCompatibilityOverrideResolver = resolve; });
 }
 
 let liveSubmitResolver = null;
@@ -2791,7 +2878,7 @@ function confirmLiveSubmission(selectedCount) {
   return new Promise(resolve => { liveSubmitResolver = resolve; });
 }
 
-function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false } = {}) {
+function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false, portalCompatibilityOverride = false } = {}) {
 
   return {
     ...collectUserSettingsOptions(),
@@ -2803,6 +2890,7 @@ function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = 
     expectedClaimCount: selectedClassificationRecords().length,
     canaryMode: Boolean(canaryMode),
     liveSubmissionConfirmed: Boolean(liveSubmissionConfirmed),
+    portalCompatibilityOverride: Boolean(portalCompatibilityOverride),
     developerMode: false
   };
 }
@@ -2941,6 +3029,7 @@ async function discardIncompleteTracking() {
 
 async function startSubmitOnly() {
   currentProcessStep = 'step3';
+  hideStep3ActionIssues();
   if (!state.claimQueueLoaded) await refreshClaimQueue();
   const selected = selectedClassificationRecords();
   const dryRun = Boolean($('dryRun')?.checked);
@@ -2965,21 +3054,29 @@ async function startSubmitOnly() {
     log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before starting a dry or live run.'), 'log-submit-error', 'step3');
     return;
   }
+  let portalCompatibilityOverride = false;
   if (!dryRun) {
-    setStatus('Validating', 'warn', 'step3');
-    setActionLocalized('step3.portalValidation.running', {}, 'Validating Canada Post portal compatibility before live submission.', 'step3');
-    const validation = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
-    if (!validation?.ok) {
-      const values = { code: validation?.code || 'UNKNOWN' };
-      setStatus('Blocked', 'bad', 'step3');
-      setActionLocalized('step3.portalValidation.failed', values, 'Step 3 portal compatibility validation did not pass ({code}).', 'step3');
-      log(trf('step3.portalValidation.failed', values, 'Step 3 portal compatibility validation did not pass ({code}).'), 'log-submit-error', 'step3');
-      return;
+    await refreshPortalCompatibilityStatus();
+    if (window.PortalAdvisory.describe(state.portalCompatibility).requiresOverride) {
+      portalCompatibilityOverride = await confirmPortalCompatibilityOverride();
+      if (!portalCompatibilityOverride) {
+        setStatus('Cancelled', '', 'step3');
+        setActionLocalized('step3.liveCancelledAction', {}, 'Live submission cancelled before the browser workflow started.', 'step3');
+        log(tr('step3.liveCancelledAction', 'Live submission cancelled before the browser workflow started.'), 'log-warning', 'step3');
+        return;
+      }
+      state.portalCompatibilityWarningDismissed = false;
+      renderPortalCompatibilityAdvisory();
+      log(tr('step3.compatibility.override.risk', 'This may fail because the Canada Post portal has not been verified in this session.'), 'log-warning', 'step3');
+    } else {
+      setActionLocalized('step3.portalValidation.passed', { code: 'HEALTHY' }, 'Step 3 portal compatibility validation passed ({code}).', 'step3');
     }
-    setStatus('Validating', 'warn', 'step3');
-    setActionLocalized('step3.portalValidation.passed', { code: validation.code || 'HEALTHY' }, 'Step 3 portal compatibility validation passed ({code}).', 'step3');
   }
-  const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight({ ...basePreflightOptions, dryRun: false });
+  const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight({
+    ...basePreflightOptions,
+    dryRun: false,
+    portalCompatibilityOverride
+  });
   if (!preflight?.ready) {
     setStatus('Blocked', 'bad', 'step3');
     setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
@@ -3010,10 +3107,10 @@ async function startSubmitOnly() {
 
   // The main process validates attempt state and creates an immutable snapshot
   // before it creates, attaches, or navigates the native browser.
-  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode }));
+  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode, portalCompatibilityOverride }));
   if (!res.ok) {
     if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
-      showStep3PreflightFailures({
+      showStep3ActionIssues({
         checks: (res.preflight.failedChecks || []).map(item => ({ ...item, ok: false, severity: 'blocking' })),
         warningCount: res.preflight.warningCount
       });
@@ -3063,6 +3160,7 @@ async function refreshConfig() {
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
   state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
+  state.portalCompatibility = cfg.portalCompatibility || { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' };
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
   await applyLocale(preferredLocale || cfg.locale || 'en-CA');
@@ -3101,7 +3199,7 @@ async function refreshConfig() {
   if ($('claimContactPhone')) $('claimContactPhone').value = cfg.claimContactPhone || '';
   if ($('claimContactEmail')) $('claimContactEmail').value = cfg.claimContactEmail || '';
   state.evidenceRetentionDays = Math.max(7, Math.min(3650, Number(cfg.evidenceRetentionDays || 90)));
-  state.dryRunDefault = Boolean(cfg.dryRunDefault);
+  state.dryRunDefault = Object.prototype.hasOwnProperty.call(cfg, 'dryRunDefault') ? Boolean(cfg.dryRunDefault) : true;
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
   if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
@@ -3134,12 +3232,11 @@ async function refreshConfig() {
       status.className = 'pill warn';
     }
   }
-  if (!cfg.setupCompleted && !setupWizardShown) showSetupWizard(cfg);
+  renderPortalCompatibilityAdvisory();
   $('resumeSetup')?.classList.toggle('hidden', Boolean(cfg.setupCompleted));
 }
 
 function showSetupWizard(config) {
-  setupWizardShown = true;
   const acknowledgement = $('setupSafetyAcknowledge');
   if (acknowledgement) acknowledgement.checked = config.setupSafetyAcknowledged === true;
   renderSetupWizardReadiness(config);
@@ -3233,12 +3330,16 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
   if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
 }
 $('refreshBrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
+$('checkStep3BrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('clearBrowserSession')?.addEventListener('click', clearBrowserSession);
+$('refreshPortalCompatibility')?.addEventListener('click', () => refreshPortalCompatibilityStatus({ runCheck: true }));
+$('openSettingsFromPortalAdvisory')?.addEventListener('click', () => activateTab('settingsTab'));
+$('dismissPortalCompatibility')?.addEventListener('click', dismissPortalCompatibilityWarning);
+$('cancelPortalCompatibilityOverride')?.addEventListener('click', () => closePortalCompatibilityOverride(false));
+$('continuePortalCompatibilityOverride')?.addEventListener('click', () => closePortalCompatibilityOverride(true));
 $('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
 $('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
 $('trackingDiagnosticRow')?.addEventListener('keydown', event => { if (event.key === 'Enter') confirmTrackingDiagnosticRow(); });
-$('cancelStep3Preflight')?.addEventListener('click', closeStep3PreflightModal);
-$('openSettingsFromPreflight')?.addEventListener('click', () => { closeStep3PreflightModal(); activateTab('settingsTab'); });
 $('cancelBackupPassword')?.addEventListener('click', () => closeBackupPasswordModal(''));
 $('confirmBackupPassword')?.addEventListener('click', submitBackupPassword);
 $('backupPassword')?.addEventListener('keydown', event => { if (event.key === 'Enter') submitBackupPassword(); if (event.key === 'Escape') closeBackupPasswordModal(''); });
@@ -3310,9 +3411,9 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (modal.id === 'warningModal') closeStep1Warnings();
     else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
+    else if (modal.id === 'portalCompatibilityOverrideModal') closePortalCompatibilityOverride(false);
     else if (modal.id === 'liveSubmitModal') closeLiveSubmitModal(false);
     else if (modal.id === 'trackingDiagnosticModal') closeTrackingDiagnosticModal(null);
-    else if (modal.id === 'step3PreflightModal') closeStep3PreflightModal();
     else if (modal.id === 'privacyDataModal') closePrivacyDataModal();
     event.preventDefault();
     return;

@@ -19,6 +19,16 @@ const { loadLocale } = require('../lib/i18n');
         });
       }
     }, loadLocale('en-CA').messages);
+    await page.evaluate(() => window.initStepTabs());
+    await page.locator('#tabSettings').focus();
+    const keyboardPanels = ['step1', 'step2', 'step3', 'historyTab', 'resultsTab'];
+    for (const panelId of keyboardPanels) {
+      await page.keyboard.press('ArrowRight');
+      assert.strictEqual(await page.locator(`#${panelId}`).isVisible(), true, `keyboard users must be able to open ${panelId}`);
+      assert.strictEqual(await page.locator(`#${panelId}`).getAttribute('hidden'), null, `${panelId} must not retain a readiness-driven hidden state`);
+    }
+    await page.keyboard.press('Home');
+    assert.strictEqual(await page.locator('#settingsTab').isVisible(), true, 'Home must return keyboard users to Settings');
     await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
     const results = await page.evaluate(async () => window.axe.run(document, {
       runOnly: { type: 'rule', values: ['button-name', 'document-title', 'duplicate-id', 'html-has-lang', 'label', 'landmark-one-main'] }

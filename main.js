@@ -2781,7 +2781,14 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   if (!initialPreflight.report.ready) return blockedStep3Preflight(initialPreflight);
   if (!options.dryRun) {
     const compatibilityGate = portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health'));
-    if (!compatibilityGate.ok) return { ok: false, error: compatibilityGate.reason, code: compatibilityGate.code };
+    if (!compatibilityGate.ok && !options.portalCompatibilityOverride) {
+      return {
+        ok: false,
+        error: localizedText('step3.compatibility.override.requiredError', {}, 'Portal compatibility is unverified. Review the inline warning and explicitly choose Continue Anyway before a live run.'),
+        code: 'PORTAL_COMPATIBILITY_OVERRIDE_REQUIRED',
+        portalCompatibility: compatibilityGate
+      };
+    }
   }
   const authoritativeTracking = claimDb.latestTrackingRun(DB_PATH);
   const trackingRunGate = validateTrackingRunForSubmission(authoritativeTracking);
@@ -2854,7 +2861,8 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
     dryRun: Boolean(options.dryRun),
     selectedClaimCount: selectedClassificationRecords.length,
     requestedSelectedClaimCount: requestedClassificationRecords.length,
-    canaryMode: Boolean(effectiveCanaryMode)
+    canaryMode: Boolean(effectiveCanaryMode),
+    portalCompatibilityOverride: Boolean(!options.dryRun && options.portalCompatibilityOverride)
   });
   const privateSnapshotDirectory = path.join(DATA_DIR, 'private-step3-snapshots', `run-${submitRunId}`);
   fs.mkdirSync(privateSnapshotDirectory, { recursive: true, mode: 0o700 });

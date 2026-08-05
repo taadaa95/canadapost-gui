@@ -2979,6 +2979,58 @@ main.tabbed-main > .app-shell,
   font-size: 12px;
 }
 
+.portal-compatibility-advisory,
+.step3-action-advisory {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--warning);
+  background: var(--warning-soft);
+}
+
+.portal-compatibility-advisory.compatible {
+  border-color: var(--success);
+  background: rgba(34, 197, 94, .1);
+}
+
+.portal-compatibility-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.portal-compatibility-head h3,
+.step3-action-advisory h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.portal-compatibility-advisory p {
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
+.portal-compatibility-risk {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.portal-compatibility-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.portal-browser-session-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.step3-action-advisory .blocking-check-list {
+  margin-top: 8px;
+}
+
 .preflight-list,
 .claim-queue-list {
   display: grid;

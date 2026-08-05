@@ -32,6 +32,23 @@ const { loadLocale } = require('../lib/i18n');
     await window.waitForLoadState('domcontentloaded');
     assert.strictEqual(await window.evaluate(() => typeof globalThis.require), 'undefined');
     assert.strictEqual(await window.evaluate(() => typeof globalThis.process), 'undefined');
+    await window.locator('#setupWizard').waitFor({ state: 'hidden' });
+    const primaryTabs = [
+      ['tabSettings', 'settingsTab'], ['tabStep1', 'step1'], ['tabStep2', 'step2'],
+      ['tabStep3', 'step3'], ['tabHistory', 'historyTab'], ['tabResults', 'resultsTab']
+    ];
+    for (const [tabId, panelId] of primaryTabs) {
+      await window.locator(`#${tabId}`).click();
+      assert.strictEqual(await window.locator(`#${panelId}`).isVisible(), true, `${panelId} must open before onboarding is complete`);
+      assert.strictEqual(await window.locator('#setupWizard').isVisible(), false, 'tab navigation must not trigger onboarding interception');
+    }
+    await window.locator('#tabSettings').focus();
+    for (const [, panelId] of primaryTabs.slice(1)) {
+      await window.keyboard.press('ArrowRight');
+      assert.strictEqual(await window.locator(`#${panelId}`).isVisible(), true, `keyboard navigation must open ${panelId}`);
+    }
+    await window.locator('#tabSettings').click();
+    await window.getByRole('button', { name: 'Resume setup' }).click();
     await window.locator('#setupWizard:not(.hidden)').waitFor({ state: 'visible' });
     assert.strictEqual(await window.getByRole('button', { name: 'Finish Setup' }).isDisabled(), true, 'incomplete readiness must not be marked finished');
     await window.getByRole('button', { name: 'Continue later' }).click();
@@ -183,6 +200,40 @@ const { loadLocale } = require('../lib/i18n');
 
     await window.evaluate(() => window.activateTab('step3'));
     await window.waitForTimeout(300);
+    assert.strictEqual(await window.locator('#step3').isVisible(), true, 'Step 3 must open with unchecked portal compatibility');
+    assert.strictEqual(await window.locator('#portalCompatibilityStatus').textContent(), 'Not checked');
+    assert.strictEqual(await window.locator('#step3PreflightModal').count(), 0, 'the blocking Step 3 modal must not be rendered');
+    for (const [code, expected] of [
+      ['PORTAL_COMPATIBILITY_STALE', 'Stale'],
+      ['PORTAL_COMPATIBILITY_FAILED', 'Incompatible']
+    ]) {
+      await window.evaluate(portalCode => {
+        window.RendererContext.state.portalCompatibility = { ok: false, code: portalCode };
+        window.renderPortalCompatibilityAdvisory();
+      }, code);
+      assert.strictEqual(await window.locator('#portalCompatibilityStatus').textContent(), expected);
+      assert.strictEqual(await window.locator('#step3').isVisible(), true, `${expected} compatibility must not close Step 3`);
+    }
+    await window.evaluate(() => {
+      window.__compatibilityConfirmationSequence = [];
+      void (async () => {
+        const override = await window.confirmPortalCompatibilityOverride();
+        window.__compatibilityConfirmationSequence.push(`override:${override}`);
+        if (override) {
+          const live = await window.confirmLiveSubmission(1);
+          window.__compatibilityConfirmationSequence.push(`live:${live.confirmed}`);
+        }
+      })();
+    });
+    await window.locator('#portalCompatibilityOverrideModal:not(.hidden)').waitFor({ state: 'visible' });
+    assert.strictEqual(await window.locator('#cancelPortalCompatibilityOverride').textContent(), 'Cancel');
+    assert.strictEqual(await window.locator('#continuePortalCompatibilityOverride').textContent(), 'Continue Anyway');
+    await window.locator('#continuePortalCompatibilityOverride').click();
+    await window.locator('#liveSubmitModal:not(.hidden)').waitFor({ state: 'visible' });
+    assert.deepStrictEqual(await window.evaluate(() => window.__compatibilityConfirmationSequence), ['override:true']);
+    await window.locator('#cancelLiveSubmit').click();
+    await window.waitForFunction(() => window.__compatibilityConfirmationSequence.length === 2);
+    assert.deepStrictEqual(await window.evaluate(() => window.__compatibilityConfirmationSequence), ['override:true', 'live:false']);
     const offscreenBeforePrepare = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(offscreenBeforePrepare.created, false, 'an offscreen browser slot should not be the only creation trigger');
     const preparedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());

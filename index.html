@@ -295,10 +295,30 @@
               <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked disabled /> <span data-i18n="step3.useBuiltinBrowser"></span> <span class="muted-inline" data-i18n="step3.browserLayout"></span></label>
             </div>
             <div class="field checkbox-field">
-              <label class="checkbox-label"><input id="dryRun" type="checkbox" /> <span data-i18n="step3.dryRun"></span></label>
+              <label class="checkbox-label"><input id="dryRun" type="checkbox" checked /> <span data-i18n="step3.dryRun"></span></label>
             </div>
           </div>
           <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
+          <section id="portalCompatibilityAdvisory" class="portal-compatibility-advisory" aria-labelledby="portalCompatibilityTitle">
+            <div class="portal-compatibility-head">
+              <h3 id="portalCompatibilityTitle" data-i18n="step3.compatibility.title"></h3>
+              <span id="portalCompatibilityStatus" class="pill warn" role="status" aria-live="polite" data-i18n="step3.compatibility.status.notChecked"></span>
+            </div>
+            <p id="portalCompatibilityMessage" data-i18n="step3.compatibility.message.notChecked"></p>
+            <p id="portalCompatibilityRisk" class="portal-compatibility-risk" data-i18n="step3.compatibility.risk"></p>
+            <div class="portal-compatibility-actions">
+              <button id="checkStep3BrowserSession" class="secondary compact-button" type="button" data-i18n="browserSession.check"></button>
+              <button id="refreshPortalCompatibility" class="secondary compact-button" type="button" data-i18n="step3.compatibility.refresh"></button>
+              <button id="openSettingsFromPortalAdvisory" class="secondary compact-button" type="button" data-i18n="action.openSettings"></button>
+              <button id="dismissPortalCompatibility" class="secondary compact-button" type="button" data-i18n="step3.compatibility.dismiss"></button>
+            </div>
+            <p id="step3BrowserSessionStatus" class="portal-browser-session-status" role="status" aria-live="polite" data-i18n="browserSession.notChecked"></p>
+          </section>
+          <section id="step3ActionAdvisory" class="step3-action-advisory hidden" aria-labelledby="step3ActionAdvisoryTitle" aria-live="assertive">
+            <h3 id="step3ActionAdvisoryTitle" data-i18n="step3.actionIssues.title"></h3>
+            <div id="step3ActionIssues" class="blocking-check-list"></div>
+            <div id="step3ActionWarningCount" class="modal-summary"></div>
+          </section>
           <input id="freshRun" type="checkbox" hidden />
           <div class="step-actions step-actions-3">
             <button id="runSubmitOnly" class="success" data-i18n="step3.submitSelected"></button>
@@ -505,6 +525,19 @@
   </main>
 
 
+  <div id="portalCompatibilityOverrideModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="portalCompatibilityOverrideTitle">
+      <div class="modal-head"><h2 id="portalCompatibilityOverrideTitle" data-i18n="step3.compatibility.override.title"></h2></div>
+      <div id="portalCompatibilityOverrideStatus" class="pill warn"></div>
+      <p class="live-submit-warning" data-i18n="step3.compatibility.override.risk"></p>
+      <p data-i18n="step3.compatibility.override.sequence"></p>
+      <div class="live-submit-modal-actions">
+        <button id="cancelPortalCompatibilityOverride" class="secondary" type="button" data-i18n="action.cancel"></button>
+        <button id="continuePortalCompatibilityOverride" class="warning" type="button" data-i18n="step3.compatibility.continueAnyway"></button>
+      </div>
+    </div>
+  </div>
+
   <div id="liveSubmitModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="liveSubmitModalTitle">
       <div class="modal-head">
@@ -528,15 +561,6 @@
       <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow" data-i18n="step2.diagnostic.rowLabel"></label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
       <div id="trackingDiagnosticError" class="live-submit-warning hidden" role="alert"></div>
       <div class="live-submit-modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmTrackingDiagnostic" class="success" type="button" data-i18n="action.continue"></button></div>
-    </div>
-  </div>
-
-  <div id="step3PreflightModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="step3PreflightDialogTitle">
-      <div class="modal-head"><h2 id="step3PreflightDialogTitle" data-i18n="step3.preflight.blockedTitle"></h2></div>
-      <div id="step3PreflightFailures" class="blocking-check-list" role="alert"></div>
-      <div id="step3PreflightWarningCount" class="modal-summary"></div>
-      <div class="live-submit-modal-actions"><button id="cancelStep3Preflight" class="secondary" type="button" data-i18n="action.cancel"></button><button id="openSettingsFromPreflight" class="secondary" type="button" data-i18n="action.openSettings"></button></div>
     </div>
   </div>
 
@@ -616,6 +640,7 @@
 
   <script src="renderer/shared-context.js"></script>
   <script src="renderer/onboarding.js"></script>
+  <script src="renderer/portal-advisory.js"></script>
   <script src="renderer/step2-copy.js"></script>
   <script src="renderer/step3-queue.js"></script>
   <script src="renderer/privacy-data-management.js"></script>
