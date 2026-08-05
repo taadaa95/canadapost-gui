@@ -49,7 +49,7 @@ for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
   .map(match => match[1].replace(/&amp;/g, '&').trim())
   .filter(text => /[A-Za-zÀ-ÿ]/.test(text));
-const intentionalTemplateText = new Set(['English (Canada)', 'Français (Canada)', '0.4.0-beta.1']);
+const intentionalTemplateText = new Set(['English (Canada)', 'Français (Canada)']);
 assert.deepStrictEqual([...new Set(visibleTextNodes)].sort(), [...intentionalTemplateText].sort(), 'HTML must not contain hard-coded interface copy');
 
 const rendererSource = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
@@ -88,7 +88,8 @@ for (const key of [
   'dialog.liveSubmit.title', 'dialog.liveSubmit.message', 'dialog.liveSubmit.canaryMessage',
   'dialog.liveSubmit.detail', 'dialog.liveSubmit.action', 'dialog.liveSubmit.canaryAction',
   'update.check', 'update.packagedOnly', 'update.none.title', 'update.none.message',
-  'update.available.title', 'update.available.message', 'update.available.download', 'update.available.openRelease'
+  'update.available.title', 'update.available.message', 'update.available.download', 'update.available.openRelease',
+  'update.manual.title', 'update.manual.unsignedBeta', 'update.manual.detail', 'update.manual.openReleases'
 ]) {
   assert(Object.hasOwn(french.messages, key), `French native-confirmation localization is missing: ${key}`);
   assert.notStrictEqual(french.messages[key], english[key], `French native-confirmation text remained English: ${key}`);

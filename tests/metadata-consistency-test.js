@@ -17,8 +17,11 @@ assert.strictEqual(require('../package.json').version, PRODUCT_METADATA.applicat
 for (const document of [guide, readme]) {
   assert.ok(document.includes(PRODUCT_METADATA.applicationVersion), 'Current documentation must identify the package version.');
 }
-assert.ok(html.includes(`id="appVersion">${PRODUCT_METADATA.applicationVersion}<`));
-assert.ok(renderer.includes(`cfg.appVersion || '${PRODUCT_METADATA.applicationVersion}'`));
+assert.ok(html.includes('id="appVersion"></strong>'));
+assert.ok(renderer.includes("$('appVersion').textContent = cfg.appVersion || ''"));
+assert.doesNotMatch(html, /id="appVersion">[^<]+</, 'the footer version must not be hard-coded in the HTML template');
+assert.doesNotMatch(renderer, /cfg\.appVersion \|\| '\d+\.\d+\.\d+/, 'the footer version must not have a stale hard-coded fallback');
+assert.match(read('main.js'), /const APP_VERSION = app\.getVersion\(\);/, 'the displayed application version must come from Electron runtime identity');
 
 const currentValues = [
   PRODUCT_METADATA.databaseSchemaVersion,

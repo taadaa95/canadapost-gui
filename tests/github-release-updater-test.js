@@ -80,6 +80,14 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
 assert.strictEqual(updater.version('v0.4.1'), '0.4.1');
 assert.strictEqual(updater.channelFor('0.4.0-beta.1'), 'beta');
 assert.strictEqual(updater.channelFor('0.4.0'), 'stable');
+assert(security.compareVersions('0.4.0-dev.10', '0.4.0-beta.1') < 0);
+assert(security.compareVersions('0.4.0-dev.99', '0.4.0-alpha.1') < 0);
+assert(security.compareVersions('0.4.0-alpha.9', '0.4.0-beta.1') < 0);
+assert(security.compareVersions('0.4.0-beta.1', '0.4.0-beta.2') < 0);
+assert(security.compareVersions('0.4.0-beta.10', '0.4.0-beta.2') > 0);
+assert(security.compareVersions('0.4.0-beta.99', '0.4.0-rc.1') < 0);
+assert(security.compareVersions('0.4.0-rc.1', '0.4.0') < 0);
+assert(security.compareVersions('0.5.0-dev.1', '0.4.99') > 0);
 assert.throws(() => updater.version('latest'), /invalid/i);
 assert.throws(() => updater.githubUrl('http://github.com/file'), /approved/i);
 assert.throws(() => updater.githubUrl('https://example.com/file'), /approved/i);
@@ -106,6 +114,12 @@ const beta = updater.selectRelease([
   release('v0.4.1')
 ], '0.4.0-beta.1', 'beta');
 assert.strictEqual(beta.version, '0.4.2-beta.1');
+
+const dev10ToBeta1 = updater.selectRelease([
+  release('v0.4.0-beta.1', { prerelease: true }),
+  release('v0.4.0-dev.9', { prerelease: true })
+], '0.4.0-dev.10', 'beta');
+assert.strictEqual(dev10ToBeta1.version, '0.4.0-beta.1');
 
 const keys = crypto.generateKeyPairSync('ed25519');
 const wrongKeys = crypto.generateKeyPairSync('ed25519');
@@ -171,6 +185,32 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
     assert.match(frenchDialogs[0].message, /version empaquetée/);
     assert.strictEqual(frenchDialogs[0].buttons[0], 'OK');
 
+    const unsignedHandlers = new Map();
+    const unsignedDialogs = [];
+    const openedReleasePages = [];
+    updater.registerGithubReleaseUpdater({
+      app: { isPackaged: true, getVersion: () => '0.4.0-dev.10' },
+      registerIpcHandler: (channel, handler) => unsignedHandlers.set(channel, handler),
+      dialog: { showMessageBox: async options => { unsignedDialogs.push(options); return { response: 0 }; } },
+      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
+      shell: { openExternal: async value => { openedReleasePages.push(value); } },
+      source: {
+        owner: 'taadaa95',
+        repository: 'canadapost-claim-runner-releases',
+        trustedPublicKeyEd25519: '',
+        manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
+      }
+    });
+    const unsignedResult = await unsignedHandlers.get('updates:open')();
+    assert.strictEqual(unsignedResult.code, 'UPDATE_TRUST_NOT_CONFIGURED');
+    assert.strictEqual(unsignedResult.automaticUpdatesAvailable, false);
+    assert.strictEqual(unsignedResult.manualDownload, true);
+    assert.strictEqual(unsignedDialogs[0].title, 'Automatic updates unavailable');
+    assert.match(unsignedDialogs[0].message, /unsigned beta build \(version 0\.4\.0-dev\.10\)/i);
+    assert.doesNotMatch(unsignedDialogs[0].title, /No update available/i);
+    assert.strictEqual(unsignedDialogs[0].buttons[0], 'Open Releases Page');
+    assert.deepStrictEqual(openedReleasePages, ['https://github.com/taadaa95/canadapost-claim-runner-releases/releases']);
+
     const artifactPath = path.join(root, manifest.artifact.file);
     fs.writeFileSync(artifactPath, artifactBytes);
     assert.strictEqual(security.verifyArtifact(artifactPath, manifest.artifact), true);
@@ -202,6 +242,27 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
     assert.strictEqual(result.available, true);
     assert.strictEqual(result.version, '0.4.1-beta.1');
     assert.strictEqual(result.artifact.sha256, manifest.artifact.sha256);
+
+    await assert.rejects(() => updater.resolveUpdate({
+      source,
+      publicKey: keys.publicKey,
+      currentVersion: '0.4.0-beta.1',
+      channel: 'beta',
+      platform: 'linux',
+      arch: 'x64',
+      fetchImpl: async url => {
+        const value = String(url);
+        if (value.includes('/releases?')) {
+          return new Response(JSON.stringify([{
+            ...candidate,
+            assets: candidate.assets.map(item => item.name === 'package-manifest-linux.json'
+              ? { ...item, name: 'package-manifest-linux.unsigned.json' }
+              : item)
+          }]), { status: 200 });
+        }
+        throw new Error(`Unsigned manifest must not be fetched: ${value}`);
+      }
+    }), error => error.code === 'UPDATE_MANIFEST_MISSING');
 
     const redirectCalls = [];
     await assert.rejects(() => updater.resolveUpdate({
