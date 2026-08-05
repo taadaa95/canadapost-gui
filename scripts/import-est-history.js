@@ -295,7 +295,14 @@ async function main() {
     : [fileTypes];
   const credentials = await readRuntimeSecrets(); if (!credentials.username || !credentials.password) throw new Error('Missing protected Canada Post web credentials.');
   const mockBase = String(process.env.CANADAPOST_MOCK_BASE_URL || '').replace(/\/$/, ''); const origin = mockBase || 'https://ws.postescanada-canadapost.ca'; const allowMock = Boolean(mockBase) && process.env.NODE_ENV === 'test';
-  const call = async (method, url, accept, body, contentType) => request({ method, url, accept, body, contentType, username: credentials.username, password: credentials.password, allowMock, retries: method === 'GET' ? 2 : 0 });
+  const call = async (method, url, accept, body, contentType) => request({
+    method, url, accept, body, contentType,
+    username: credentials.username,
+    password: credentials.password,
+    sensitiveValues: [customer, mobo],
+    allowMock,
+    retries: method === 'GET' ? 2 : 0
+  });
   const connect = await call('GET', `${origin}/dop/connect`, 'application/vnd.cpc.dop-v1+xml');
   parseXmlOrThrow(connect.body, 'EST connection response');
   emit('est_connect', { status: connect.status, responseType: 'xml', byteLength: Buffer.byteLength(connect.body) });

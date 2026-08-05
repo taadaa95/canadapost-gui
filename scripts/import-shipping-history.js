@@ -27,7 +27,14 @@ async function main() {
   const mockBase = String(process.env.CANADAPOST_MOCK_BASE_URL || '').replace(/\/$/, '');
   const base = mockBase || 'https://soa-gw.canadapost.ca';
   const allowMock = Boolean(mockBase) && process.env.NODE_ENV === 'test';
-  const getXml = async (url, accept) => (await request({ url, accept, username: credentials.username, password: credentials.password, allowMock, retries: 2 })).body;
+  const getXml = async (url, accept) => (await request({
+    url, accept,
+    username: credentials.username,
+    password: credentials.password,
+    sensitiveValues: [customer],
+    allowMock,
+    retries: 2
+  })).body;
   let mobos = [];
   if (String(process.env.HISTORY_AUTO_MOBO || 'true') === 'true') {
     try {
@@ -46,7 +53,7 @@ async function main() {
     try {
       const listXml = await getXml(`${base}/rs/${encodeURIComponent(customer)}/${encodeURIComponent(mobo)}/manifest?start=${from}&end=${to}`, 'application/vnd.cpc.manifest-v8+xml');
       const manifests = parseLinks(listXml, 'manifest list').filter(link => /^manifest$/i.test(link.rel));
-      emit('history_manifest_list', { count: manifests.length, mobo });
+      emit('history_manifest_list', { count: manifests.length });
       for (const manifestLink of manifests) {
         const manifestId = idFromUrl(manifestLink.href, 'manifest');
         const manifestXml = await getXml(manifestLink.href, manifestLink.mediaType || 'application/vnd.cpc.manifest-v8+xml');

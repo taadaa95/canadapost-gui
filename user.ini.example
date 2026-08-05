@@ -8,5 +8,4 @@ apiEnvironment=production
 ; Save the current Tracking API client ID / API Key and client secret / API Secret
 ; in the app Settings screen so they use encrypted secret storage. They are not
 ; accepted from this plaintext file. Select trackingApiEnvironment=test or production in Settings.
-customerNumber=YOUR_CUSTOMER_NUMBER
 ; mobo=OPTIONAL_MAILED_ON_BEHALF_OF_NUMBER

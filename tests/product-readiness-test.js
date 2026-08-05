@@ -19,14 +19,15 @@ const updateSecurity = require('../lib/update-security');
   try {
     const crash = createLocalCrashReport({
       directory: root, appVersion: 'test',
-      error: new Error('password=synthetic-secret tracking SYNTHETIC000001 user@example.test'),
-      context: { cookie: 'synthetic-cookie', address: '1 Example Street' },
-      sensitiveValues: ['synthetic-secret', 'synthetic-cookie', '1 Example Street']
+      error: new Error('password=synthetic-secret tracking SYNTHETIC000001 customer 9000000042 user@example.test'),
+      context: { cookie: 'synthetic-cookie', address: '1 Example Street', customerNumber: '9000000042' },
+      sensitiveValues: ['synthetic-secret', 'synthetic-cookie', '1 Example Street', '9000000042']
     });
     const crashText = fs.readFileSync(crash.destination, 'utf8');
     assert.ok(!crashText.includes('synthetic-secret'));
     assert.ok(!crashText.includes('synthetic-cookie'));
     assert.ok(!crashText.includes('SYNTHETIC000001'));
+    assert.ok(!crashText.includes('9000000042'));
     await assert.rejects(() => new DisabledCrashProvider().send(), /disabled/);
 
     const keys = crypto.generateKeyPairSync('ed25519');

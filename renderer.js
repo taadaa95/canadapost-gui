@@ -1347,7 +1347,7 @@ function describeEvent(stage, event) {
       operations.runStartedAt ||= Date.now();
       updateCurrentItem({ step: 'Exporting EST Desktop history', result: 'In progress', kind: '' });
       setActionLocalized('event.est.exportingRange', { from: event.from, to: event.to }, 'Exporting EST Desktop history from {from} to {to}.', 'step1');
-      return trf('event.est.started', { from: event.from, to: event.to, customer: event.customerNumber || '—', workgroup: event.workgroup || tr('common.auto', 'auto'), mobo: event.mobo || '-2', category: event.categoryGroup || 'SHP' }, 'EST Desktop export started: {from} to {to}. Customer {customer}, workgroup {workgroup}, MOBO {mobo}, category {category}.');
+      return trf('event.est.started', { from: event.from, to: event.to, workgroup: event.workgroup || tr('common.auto', 'auto'), mobo: event.mobo || '-2', category: event.categoryGroup || 'SHP' }, 'EST Desktop export started: {from} to {to}. Workgroup {workgroup}, MOBO {mobo}, category {category}.');
     }
     if (type === 'est_connect') return trf('event.est.connected', { bytes: event.byteLength || 0 }, 'EST connect succeeded. Response validated as XML ({bytes} bytes).');
     if (type === 'est_workgroups') {
@@ -2474,7 +2474,7 @@ function validateSettingsForStep(stepId) {
     if (!settings.webUsername) missing.push(tr('settings.website.username', 'Canada Post Web Username'));
     if (!settings.webPassword && !state.passwordStored) missing.push(tr('settings.website.password', 'Canada Post Web Password'));
   }
-  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'EST customer number'));
+  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'Customer Number'));
   if (stepId === 'step3') {
     if (!settings.claimStreetNumber) missing.push(tr('settings.sender.streetNumberShort', 'Claim sender street number'));
     if (!settings.claimStreetName) missing.push(tr('settings.sender.streetNameShort', 'Claim sender street name dropdown option'));
@@ -2537,12 +2537,13 @@ function buildEstHistoryOptions() {
 }
 
 function buildHistoryOptions() {
-  const customerNumber = ($('historyCustomerNumber')?.value || '').trim();
+  const customerNumber = getFieldValue('estCustomerNumber');
   const autoMobo = $('historyAutoMobo') ? $('historyAutoMobo').checked : true;
   const moboRaw = autoMobo ? '' : (($('historyMobo')?.value || '').trim());
   return {
     historyFrom: $('historyFrom')?.value || '',
     historyTo: $('historyTo')?.value || '',
+    estCustomerNumber: customerNumber,
     historyCustomerNumber: customerNumber,
     historyAutoMobo: autoMobo,
     historyMobo: moboRaw,
@@ -3182,7 +3183,7 @@ async function refreshConfig() {
 
   if ($('estFrom') && !$('estFrom').value) $('estFrom').value = cfg.estFrom || cfg.historyFrom || isoDateFromOffset(-14);
   if ($('estTo') && !$('estTo').value) $('estTo').value = cfg.estTo || cfg.historyTo || isoDateFromOffset(0);
-  if ($('estCustomerNumber') && !$('estCustomerNumber').value) $('estCustomerNumber').value = cfg.estCustomerNumber || cfg.historyCustomerNumber || cfg.customerNumber || '';
+  if ($('estCustomerNumber') && !$('estCustomerNumber').value) $('estCustomerNumber').value = cfg.estCustomerNumber || '';
   if ($('estWorkgroup')) $('estWorkgroup').value = '';
   if ($('estMobo')) $('estMobo').value = '-2';
   if ($('estCategoryGroup')) $('estCategoryGroup').value = 'SHP';
@@ -3210,7 +3211,7 @@ async function refreshConfig() {
   }
   updateReconciliationCount(Number(cfg.reconciliationCount || 0));
 
-  const configuredCustomer = cfg.estCustomerNumber || cfg.historyCustomerNumber || cfg.customerNumber || '';
+  const configuredCustomer = cfg.estCustomerNumber || '';
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = configuredCustomer;
   if ($('historyAutoMobo')) $('historyAutoMobo').checked = true;
   if ($('historyMobo')) $('historyMobo').value = '';
@@ -3287,6 +3288,10 @@ async function finishSetupWizard() {
 
 $('saveUserSettings')?.addEventListener('click', async () => {
   await saveUserSettings(true);
+});
+
+$('estCustomerNumber')?.addEventListener('input', () => {
+  if ($('historyCustomerNumber')) $('historyCustomerNumber').value = getFieldValue('estCustomerNumber');
 });
 
 $('selectCsv')?.addEventListener('click', async () => {

@@ -83,12 +83,12 @@ const archiveTools = require('../lib/archive-tools');
     archiveTools.createDiagnosticPackage({
       destination: diagnostics,
       appVersion: '0.3.2',
-      config: { webUsername: 'user@example.com' },
+      config: { webUsername: 'user@example.com', estCustomerNumber: '9000000042' },
       credentialStatus: { passwordStored: true },
       logDir,
       dbPath: sourceDb,
       dependencyStatus: { phpAvailable: true },
-      sensitiveValues: ['supersecret', 'user@example.com'],
+      sensitiveValues: ['supersecret', 'user@example.com', '9000000042'],
       components: ['system', 'settings', 'history', 'logs', 'step3Diagnostics'],
       supportManifest: { format: 'canadapost-claim-runner-support-bundle', version: 1, supportReferenceId: 'CPCR-TEST' }
     });
@@ -99,7 +99,7 @@ const archiveTools = require('../lib/archive-tools');
     const diagnosticText = Object.values(diagnosticEntries).map(value => strFromU8(value)).join('\n');
     const diagnosticInventory = JSON.parse(strFromU8(diagnosticEntries['step3-diagnostics/inventory.json']));
     assert(diagnosticInventory.files.length <= 100, 'malicious diagnostic trees must produce a bounded inventory');
-    for (const secret of ['supersecret', 'user@example.com', '1234567890123456', 'Jane Example', '77 Private Avenue', 'outside symlink secret', 'oversized private prefix']) {
+    for (const secret of ['supersecret', 'user@example.com', '9000000042', '1234567890123456', 'Jane Example', '77 Private Avenue', 'outside symlink secret', 'oversized private prefix']) {
       assert.ok(!diagnosticText.includes(secret), `support bundle leaked free-form value: ${secret}`);
     }
     const recentAttempts = JSON.parse(strFromU8(diagnosticEntries['history/recent-attempts.json']));

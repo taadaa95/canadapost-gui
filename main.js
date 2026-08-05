@@ -66,7 +66,7 @@ function setupReadiness(saved, trackingApiEnvironment) {
     accountFields: Boolean(saved.webUsername),
     apiCredentials: storage.trackingApiCredentialsStored(),
     apiDiagnostic: trackingDiagnosticGateSatisfied(saved, trackingApiEnvironment),
-    customerNumber: Boolean(saved.estCustomerNumber || saved.historyCustomerNumber),
+    customerNumber: Boolean(saved.estCustomerNumber),
     senderInformation: Boolean(saved.claimStreetNumber && saved.claimStreetName && saved.claimPostalCode),
     contactInformation: Boolean(saved.claimContactName && (saved.claimContactEmail || saved.claimContactPhone)),
     browserAvailable,
@@ -958,7 +958,6 @@ function readUserIniPublicFields() {
     : parseSimpleIni(userIniRoot);
 
   return {
-    customerNumber: parsed.customerNumber || parsed.customer_number || '',
     mobo: parsed.mobo || parsed.mailedOnBehalfOf || parsed.mailed_on_behalf_of || ''
   };
 }
@@ -1005,6 +1004,7 @@ function ensureApiCredentialFiles(selectedEnvironment = 'production') {
   const userIniData = path.join(DATA_DIR, 'user.ini');
   if (!fs.existsSync(userIniData) && fs.existsSync(userIniRoot)) {
     fs.copyFileSync(userIniRoot, userIniData);
+    storage.removeLegacyCustomerNumberLines(userIniData);
     try { fs.chmodSync(userIniData, 0o600); } catch (_) {}
   }
 
@@ -1079,8 +1079,7 @@ function pickOptionString(options, config, optionKey, configKey, fallback = '') 
 }
 
 function buildHistoryEnv(options = {}, config = {}) {
-  const publicIni = readUserIniPublicFields();
-  const customerNumber = pickOptionString(options, config, 'historyCustomerNumber', 'historyCustomerNumber', publicIni.customerNumber);
+  const customerNumber = pickOptionString(options, config, 'estCustomerNumber', 'estCustomerNumber', '');
   const autoMobo = Object.prototype.hasOwnProperty.call(options, 'historyAutoMobo')
     ? boolFromOption(options.historyAutoMobo)
     : (Object.prototype.hasOwnProperty.call(config, 'historyAutoMobo') ? boolFromOption(config.historyAutoMobo) : true);
@@ -1104,7 +1103,6 @@ function buildHistoryEnv(options = {}, config = {}) {
 
 
 function buildEstHistoryEnv(options = {}, config = {}) {
-  const publicIni = readUserIniPublicFields();
   const developerMode = Object.prototype.hasOwnProperty.call(options, 'developerMode')
     ? boolFromOption(options.developerMode)
     : boolFromOption(config.developerMode);
@@ -1112,7 +1110,7 @@ function buildEstHistoryEnv(options = {}, config = {}) {
   return {
     EST_FROM: pickOptionString(options, config, 'estFrom', 'estFrom', config.historyFrom || ''),
     EST_TO: pickOptionString(options, config, 'estTo', 'estTo', config.historyTo || ''),
-    EST_CUSTOMER_NUMBER: pickOptionString(options, config, 'estCustomerNumber', 'estCustomerNumber', publicIni.customerNumber),
+    EST_CUSTOMER_NUMBER: pickOptionString(options, config, 'estCustomerNumber', 'estCustomerNumber', ''),
     EST_WORKGROUP: pickOptionString(options, config, 'estWorkgroup', 'estWorkgroup', ''),
     EST_MOBO: pickOptionString(options, config, 'estMobo', 'estMobo', '-2'),
     EST_CATEGORY_GROUP: pickOptionString(options, config, 'estCategoryGroup', 'estCategoryGroup', 'SHP').toUpperCase(),
@@ -1252,9 +1250,10 @@ function spawnJsonProcess(workerName, options, stage, logPath, hooks = {}) {
     const lastEventsByType = {};
     const eventCounts = {};
     let settled = false;
+    const customerNumbers = [options.env?.EST_CUSTOMER_NUMBER, options.env?.HISTORY_CUSTOMER_NUMBER];
 
     const handleRawLine = (_source, raw) => {
-      appendLog(logPath, raw);
+      appendLog(logPath, storage.redactCustomerNumbers(raw, customerNumbers));
     };
 
     const handleEvent = rawEvent => {
@@ -1419,6 +1418,8 @@ function localizedStep3Error(error) {
 
 function diagnosticSensitiveValues(config = {}) {
   return [
+    config.estCustomerNumber,
+    config.historyCustomerNumber,
     config.webUsername,
     config.claimStreetNumber,
     config.claimStreetName,
@@ -2233,7 +2234,7 @@ registerIpcHandler('est:importHistory', async (_event, options = {}) => {
     return { ok: false, error: 'Missing EST history date range.' };
   }
   if (!estEnv.EST_CUSTOMER_NUMBER) {
-    return { ok: false, error: 'Missing Canada Post customer number. Add customerNumber=... to user.ini or enter it in the app.' };
+    return { ok: false, error: 'Missing Canada Post customer number. Enter it in User Settings.' };
   }
   if (!credentials.username || !credentials.password) {
     return { ok: false, error: 'Missing Canada Post web username/password. The EST Desktop export endpoints use the web/EST login, not the developer API key.' };
@@ -2328,7 +2329,7 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
     return { ok: false, error: 'Missing shipping history date range.' };
   }
   if (!historyEnv.HISTORY_CUSTOMER_NUMBER) {
-    return { ok: false, error: 'Missing Canada Post customer number. Add customerNumber=... to user.ini or enter it in the app.' };
+    return { ok: false, error: 'Missing Canada Post customer number. Enter it in User Settings.' };
   }
 
   writeConfig({
@@ -2442,7 +2443,7 @@ registerIpcHandler('run:start', async (_event, options = {}) => {
       return { ok: false, error: 'Missing shipping history date range.' };
     }
     if (!historyEnv.HISTORY_CUSTOMER_NUMBER) {
-      return { ok: false, error: 'Missing Canada Post customer number. Add customerNumber=... to user.ini or enter it in the app.' };
+      return { ok: false, error: 'Missing Canada Post customer number. Enter it in User Settings.' };
     }
   }
 

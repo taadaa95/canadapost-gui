@@ -27,8 +27,12 @@ for (const forbidden of [
   'app.asar/data/claims.csv',
   'app.asar/logs/runtime.log',
   'app.asar/main.js.map',
-  'app.asar/config.local.json'
+  'app.asar/config.local.json',
+  'app.asar/user.ini'
 ]) assert.ok(prohibitedPackagePath(forbidden), `expected ${forbidden} to be rejected`);
+for (const exclusion of ['!**/data/**', '!**/logs/**', '!**/user.ini', '!**/config.local.json']) {
+  assert.ok(builder.includes(exclusion), `package configuration must exclude ${exclusion}`);
+}
 assert.deepStrictEqual(auditPackagePaths(['app.asar/main.js', 'app.asar.unpacked/node_modules/playwright-core/package.json']), []);
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-package-content-'));
 try {
