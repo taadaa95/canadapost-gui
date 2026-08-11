@@ -18,7 +18,7 @@ const requiredIds = [
   'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
   'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
-  'dryRun', 'claimQueueList', 'portalCompatibilityAdvisory', 'portalCompatibilityStatus', 'portalCompatibilityOverrideModal', 'continuePortalCompatibilityOverride', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
+  'dryRun', 'claimQueueList', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'checkStep3BrowserSession', 'step3BrowserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
   'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
@@ -84,20 +84,15 @@ assert.ok(englishLocale['settings.website.remember'].includes('save password sec
 assert.ok(englishLocale['settings.website.securityNote'].includes('AES-256-GCM device-local encryption'));
 assert.ok(englishLocale['settings.website.passwordSavedPlaceholder'].includes('Saved password available — leave blank to reuse'));
 
-assert.ok(!html.includes('id="runSiteHealth"'), 'The redundant manual workflow health-check button must be absent');
-assert.ok(!html.includes('id="siteHealthResult"'), 'The standalone manual health-check result panel must be absent');
-assert.ok(!html.includes('Run Canada Post Workflow Health Check'));
-assert.ok(!html.includes('Not checked in this session.'));
-assert.ok(!renderer.includes("$('runSiteHealth')"), 'Removed health-check UI must not retain a renderer binding');
-assert.ok(!renderer.includes("$('siteHealthResult')"), 'Removed health-check result panel must not retain renderer state');
-assert.ok(!renderer.includes('function setSiteHealthRunning'), 'Removed health-check UI must not retain its state helper');
+assert.doesNotMatch(`${html}\n${renderer}\n${preload}\n${main}`, /runSiteHealth|siteHealth:run|portalCompatibility|portal-compatibility/,
+  'health-check and portal-compatibility plumbing must be absent');
+assert.doesNotMatch(html, /manualReviewList|manualReviewCountPill|Eligibility Manual Review/,
+  'eligibility manual-review panel must be absent');
+assert.doesNotMatch(`${renderer}\n${preload}\n${main}`, /listManualReviews|updateManualReview|manualReview:list|manualReview:update/,
+  'eligibility manual-review renderer and IPC APIs must be absent');
 const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?.[0] || '';
 assert.ok(historyMarkup.includes('id="refreshBrowserSession"'), 'Browser-session safety controls must remain after UI removal');
 assert.ok(!/<div class="history-toolbar"[^>]*>\s*<\/div>/.test(historyMarkup), 'Health-check removal must not leave an empty toolbar');
-assert.ok(preload.includes('runSiteHealth:'), 'Step 3 must retain the portal-validation IPC bridge');
-assert.ok(renderer.includes('await window.cpApp.runSiteHealth(collectUserSettingsOptions())'), 'The explicit inline compatibility refresh must retain its backend action');
-assert.ok(!renderer.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0].includes('runSiteHealth'), 'Live Step 3 must not automatically run a workflow health check');
-assert.ok(main.includes("registerIpcHandler('siteHealth:run'"), 'Portal compatibility validation backend must remain');
 assert.ok(!html.includes('id="step3PreflightModal"'), 'The blocking Step 3 preflight modal must be removed');
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');

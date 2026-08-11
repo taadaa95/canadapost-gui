@@ -22,7 +22,6 @@
     "get-tracking.js",
     "import-est-history.js",
     "import-shipping-history.js",
-    "site-health-check.js",
     "submit-claims.js"
   ],
   "excludedProductionRoots": ["tests", "mock-portal", "docs", "coverage"],

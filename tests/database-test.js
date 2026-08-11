@@ -136,6 +136,12 @@ try {
   assert.strictEqual(claimDb.currentClassification(dbPath, policyClaim.trackingNumber).classification, 'LATE_CANDIDATE');
   assert.strictEqual(claimDb.classificationHistory(dbPath, policyClaim.trackingNumber).length, 1);
   assert.throws(() => claimDb.withDatabase(dbPath, db => db.prepare('UPDATE classification_records SET classification = ? WHERE id = ?').run('ON_TIME', recorded.id)), /immutable/);
+  const dashboardBeforeLegacyReview = claimDb.dashboard(dbPath);
+  claimDb.withDatabase(dbPath, db => db.prepare(`INSERT INTO manual_reviews
+    (shipment_id, classification_id, status, opened_at, created_at, updated_at) VALUES (?, ?, 'open', ?, ?, ?)`)
+    .run(recorded.shipmentId, recorded.id, '2026-06-10T12:05:00Z', '2026-06-10T12:05:00Z', '2026-06-10T12:05:00Z'));
+  assert.deepStrictEqual(claimDb.dashboard(dbPath), dashboardBeforeLegacyReview,
+    'dormant legacy manual-review rows must not affect application readiness or dashboard counts');
 
   const rejectedAttemptId = claimDb.beginClaimAttempt(dbPath, {
     trackingNumber: 'REJECTED-BUSINESS-OUTCOME',
@@ -175,11 +181,10 @@ try {
 
   const needsReview = classifyEligibility({ ...policyClaim, expectedDeliveryDate: '' }, { asOf: '2026-06-10', classificationTimestamp: '2026-06-10T13:00:00Z' });
   assert.strictEqual(needsReview.classification, 'REVIEW_REQUIRED');
+  const legacyReviewCount = claimDb.withDatabase(dbPath, db => Number(db.prepare('SELECT COUNT(*) AS n FROM manual_reviews').get().n));
   claimDb.recordClassification(dbPath, policyClaim.trackingNumber, needsReview, { ...policyClaim, contact: {} });
-  const review = claimDb.listManualReviews(dbPath, { search: 'POLICY1' })[0];
-  assert.ok(review);
-  claimDb.updateManualReview(dbPath, review.id, 'resolved_eligible', 'Synthetic evidence reviewed.');
-  assert.strictEqual(claimDb.listManualReviews(dbPath, { status: 'resolved', search: 'POLICY1' }).length, 1);
+  assert.strictEqual(claimDb.withDatabase(dbPath, db => Number(db.prepare('SELECT COUNT(*) AS n FROM manual_reviews').get().n)), legacyReviewCount,
+    'REVIEW_REQUIRED must remain conservative without creating eligibility-review workflow rows');
   assert.strictEqual(claimDb.classificationHistory(dbPath, policyClaim.trackingNumber).length, 2);
   assert.strictEqual(claimDb.currentClassification(dbPath, policyClaim.trackingNumber).classification, 'REVIEW_REQUIRED');
 

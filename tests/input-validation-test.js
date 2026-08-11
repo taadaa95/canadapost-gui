@@ -19,7 +19,6 @@ const validated = validateSubmitOptions({
   browserMode: 'external',
   dryRun: false,
   liveSubmissionConfirmed: true,
-  portalCompatibilityOverride: true,
   selectedTrackingNumbers: [' 123 ', '456'],
   selectedClassificationRecords: [
     { recordId: 7, evidenceHash: 'A'.repeat(64) },
@@ -35,9 +34,7 @@ assert.strictEqual(validated.betweenClaimsMs, 60000);
 assert.deepStrictEqual(validated.selectedTrackingNumbers, ['123', '456']);
 assert.deepStrictEqual(validated.selectedClassificationRecords, [{ recordId: 7, evidenceHash: 'a'.repeat(64) }]);
 assert.strictEqual(validated.liveSubmissionConfirmed, true);
-assert.strictEqual(validated.portalCompatibilityOverride, true);
 assert.throws(() => validateSubmitOptions({ dryRun: 'false' }), error => error.code === 'SUBMIT_DRY_RUN_INVALID');
 assert.throws(() => validateSubmitOptions({ liveSubmissionConfirmed: 'true' }), error => error.code === 'SUBMIT_CONFIRMATION_INVALID');
-assert.throws(() => validateSubmitOptions({ portalCompatibilityOverride: 'true' }), error => error.code === 'PORTAL_COMPATIBILITY_OVERRIDE_INVALID');
 
 console.log('IPC input validation tests passed.');

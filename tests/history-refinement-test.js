@@ -43,10 +43,8 @@ const { chromium } = require('playwright');
       listReconciliation: async () => ({ ok: true, items: [] }),
       getDashboard: async () => ({ ok: true, dashboard: { shipments: 500, submitted: 333, reconciliation: 0, failed: 167 }, integrity: { ok: true } }),
       listManualShipments: async () => ({ ok: true, items: [] }),
-      listManualReviews: async () => ({ ok: true, items: [] }),
       getFinancialReport: async () => ({ ok: true, report: { currency: 'CAD', totalsMinor: {}, pendingMinor: 0, recoveryRateBasisPoints: null } }),
       reconcileAttempt: async value => { window.__mutationCalls.push(['reconcileAttempt', value]); return { ok: true }; },
-      updateManualReview: async value => { window.__mutationCalls.push(['updateManualReview', value]); return { ok: true }; },
       addManualShipment: async value => { window.__mutationCalls.push(['addManualShipment', value]); return { ok: true }; }
     }, { get: (target, property) => property in target ? target[property] : ok });
   });

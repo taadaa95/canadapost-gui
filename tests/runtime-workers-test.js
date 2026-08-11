@@ -112,9 +112,11 @@ const failedLaunch = spawnResolvedWorker(devResolution, {}, { spawnImpl: () => n
   assert.notStrictEqual(started.error.message, 'No active process.', 'start failure must remain actionable');
 
   const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
-  for (const required of ['scripts/import-est-history.js', 'scripts/get-tracking.js', 'scripts/site-health-check.js', 'scripts/submit-claims.js', 'lib/**/*.js']) {
+  for (const required of ['scripts/import-est-history.js', 'scripts/get-tracking.js', 'scripts/submit-claims.js', 'lib/**/*.js']) {
     assert.ok(builder.includes(`- ${required}`), `electron-builder must unpack ${required}`);
   }
+  assert.ok(!builder.includes('site-health-check.js'), 'obsolete site-health worker must not be packaged');
+  assert.ok(!Object.hasOwn(WORKERS, 'siteHealth'), 'siteHealth must not be a registered production worker');
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.ok(!/spawnJsonProcess\(process\.execPath/.test(mainSource), 'workers must use the centralized named launcher');
   assert.ok(!/spawn\([^)]*,[^)]*,\s*\{\s*cwd:\s*ROOT/.test(mainSource), 'ROOT must never be a spawned process cwd');

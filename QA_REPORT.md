@@ -2,7 +2,7 @@
 
 ## History refinement — 2026-07-29
 
-History claim-attempt, reconciliation and manual-review record boxes now use a 260 px CSS minimum and responsive `min(60vh, 640px)` maximum when populated, with independent vertical/horizontal scrolling, comfortable wrapping and opaque sticky table headers. Compact empty/loading/error states use a 180–220 px range. The page remains vertically scrollable and has no application-level horizontal overflow.
+History claim-attempt, reconciliation and Step 2 classification record boxes now use a 260 px CSS minimum and responsive `min(60vh, 640px)` maximum when populated, with independent vertical/horizontal scrolling, comfortable wrapping and opaque sticky table headers. Compact empty/loading/error states use a 180–220 px range. The page remains vertically scrollable and has no application-level horizontal overflow.
 
 The new non-destructive Clear filters action resets search, status, and transient page/offset to the default first-page state, refreshes immediately, and disables itself at defaults. UI tests prove that no mutation IPC path is called, 500 synthetic records remain present, and an evidence sentinel remains byte-identical. Database tests prove pagination reads do not mutate records. The purely visual History-tab reconciliation badge and both renderer update paths were removed; the reconciliation data, dashboard, in-page count, refresh behavior and separate Results notification badge remain intact.
 
@@ -103,7 +103,7 @@ The packaged entry point is now `bootstrap.js`, not `main.js`. Electron's origin
 
 Validation fails closed for a missing/wrong confirmation, relative/nonexistent/file/root/home/default/default-child/repository-overlap path, root or escaping symlink, wrong owner, world-writable directory, or ASAR/AppImage executable/mount/resources overlap. Central startup validation covers the root; SQLite/WAL/SHM; database and migration backup directories; config, credential and key files; data/CSV/stop/selected-claim/queue/run files; logs, diagnostics and evidence; Chromium session/partition/profile state; worker runtime; cache/crash data; and backup/restore temporary files.
 
-Isolated mode has the exact persistent banner, canonical path, `[ISOLATED TEST DATA]` title, and main-process blocks for live claim/browser/site-health, update, restore, external diagnostic/history export and publishing actions. Normal Step 1/2 actions remain deliberate; no action starts automatically. Isolated legacy-data migration reads only the supplied copied profile and never reads or copies back to the default profile.
+Isolated mode has the exact persistent banner, canonical path, `[ISOLATED TEST DATA]` title, and main-process blocks for live claim/browser, update, restore, external diagnostic/history export and publishing actions. Normal Step 1/2 actions remain deliberate; no action starts automatically. Isolated legacy-data migration reads only the supplied copied profile and never reads or copies back to the default profile.
 
 Exact results:
 
@@ -192,7 +192,7 @@ Verified artifact: `dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86
 
 ## Autonomous productization update — 2026-07-26
 
-Repository validation now covers the versioned first-attempt policy engine, bilingual tracking normalization, holiday/peak/deadline boundaries, immutable classification evidence, manual review, stale queue blocking, Node EST/REST XML parity, encrypted backup attacks, local portal scenarios, fault points, renderer/IPC/browser isolation, `WebContentsView`, session clearing, onboarding, localization keys, accessibility rules, financial integer arithmetic, crash redaction, signed-update metadata, release content, packaging and SBOM/licence output.
+Repository validation now covers the versioned first-attempt policy engine, bilingual tracking normalization, holiday/peak/deadline boundaries, immutable classification evidence, conservative `REVIEW_REQUIRED` exclusion, stale queue blocking, Node EST/REST XML parity, encrypted backup attacks, local portal scenarios, fault points, renderer/IPC/browser isolation, `WebContentsView`, session clearing, onboarding, localization keys, accessibility rules, financial integer arithmetic, crash redaction, signed-update metadata, release content, packaging and SBOM/licence output.
 
 Linux unpacked packaging and its content/browser-runtime audit passed locally. The Electron first-launch/sandbox E2E passed against the loopback mock portal. No live account action, real claim, real customer data, signed artifact, physical Windows/Linux clean install or real pilot was performed.
 
@@ -229,7 +229,7 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 ## Validation
 
 - JavaScript and PHP syntax checks passed.
-- Existing eligibility, database, backup, claim-selection, site-health, Step 3 hardening, navigation, diagnostics, and UI tests passed.
+- Existing eligibility, database, backup, claim-selection, Step 3 hardening, navigation, diagnostics, and UI tests passed.
 - New IPC validation tests passed.
 - New claim queue CSV snapshot tests passed.
 - New preflight tests passed.

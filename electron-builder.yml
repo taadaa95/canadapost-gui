@@ -6,7 +6,6 @@ asarUnpack:
   - scripts/import-shipping-history.js
   - scripts/get-tracking.js
   - scripts/database-startup-probe.js
-  - scripts/site-health-check.js
   - scripts/submit-claims.js
   - lib/**/*.js
   - config/*.json
@@ -35,7 +34,6 @@ files:
   - scripts/import-shipping-history.js
   - scripts/get-tracking.js
   - scripts/database-startup-probe.js
-  - scripts/site-health-check.js
   - scripts/submit-claims.js
   - cacert.pem
   - wsdl/**

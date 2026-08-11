@@ -20,20 +20,15 @@ const ready = buildPreflightReport({
 assert.strictEqual(ready.ready, true);
 assert.strictEqual(ready.blockingCount, 0);
 
-const liveWithoutPortalCheck = buildPreflightReport({
+const liveWithoutHealthCheck = buildPreflightReport({
   scope: 'step3', storageWritable: true, databaseIntegrity: { ok: true },
   webUsernameAvailable: true, webPasswordAvailable: true, claimAddressAvailable: true,
   claimCount: 1, builtinBrowserRequired: true, step3WorkersAvailable: true,
-  reconciliationCount: 0, liveSubmissionRequested: true,
-  portalCompatibility: { ok: false, reason: 'Automatic portal compatibility validation is required.' }
+  reconciliationCount: 0, liveSubmissionRequested: true
 });
-assert.strictEqual(liveWithoutPortalCheck.ready, true);
-const portalCheck = liveWithoutPortalCheck.checks.find(item => item.id === 'portal-compatibility');
-assert.strictEqual(portalCheck.ok, false);
-assert.strictEqual(portalCheck.severity, 'warning');
-assert.match(portalCheck.action, /Continue Anyway/i);
-assert.doesNotMatch(portalCheck.action, /workflow health check/i);
-assert.strictEqual(ready.checks.some(item => item.id === 'portal-compatibility'), false, 'dry diagnostics must not require the live portal gate');
+assert.strictEqual(liveWithoutHealthCheck.ready, true);
+assert.strictEqual(liveWithoutHealthCheck.checks.some(item => /health|compatib/i.test(item.id)), false,
+  'live Step 3 readiness must not include a health or portal compatibility check');
 
 const blocked = buildPreflightReport({
   scope: 'step3',

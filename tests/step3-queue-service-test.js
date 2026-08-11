@@ -40,7 +40,22 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     await claimDb.initializeDatabase(dbPath, { backupDirectory: path.join(root, 'migration-backups') });
     const run1 = claimDb.startRun(dbPath, 'tracking', { synthetic: true });
     candidate(run1, '1111111111111111');
-    claimDb.finishRun(dbPath, run1, 'complete', { total: 1, success: 1 });
+    const excludedBase = {
+      trackingNumber: 'REVIEW-EXCLUDED', serviceCode: 'DOM.XP', destinationProvince: 'ON',
+      actualDeliveryDate: '2026-06-03', exclusionSignals: [], conflictCodes: [], normalizedEvents: []
+    };
+    const reviewRequired = classifyEligibility(excludedBase, { asOf: '2026-06-05', classificationTimestamp: '2026-06-05T12:00:00.000Z' });
+    assert.strictEqual(reviewRequired.classification, 'REVIEW_REQUIRED');
+    claimDb.recordClassification(dbPath, excludedBase.trackingNumber, reviewRequired, excludedBase, { runId: run1 });
+    const trackingError = { ...reviewRequired, classification: 'TRACKING_ERROR', explanation: 'Synthetic tracking failure.' };
+    claimDb.recordClassification(dbPath, 'TRACKING-ERROR-EXCLUDED', trackingError, { ...excludedBase, trackingNumber: 'TRACKING-ERROR-EXCLUDED' }, { runId: run1 });
+    const onTimeInput = { ...excludedBase, trackingNumber: 'ON-TIME-EXCLUDED', expectedDeliveryDate: '2026-06-03', originalExpectedDeliveryDate: '2026-06-03' };
+    const onTime = classifyEligibility(onTimeInput, { asOf: '2026-06-05', classificationTimestamp: '2026-06-05T12:00:00.000Z' });
+    assert.strictEqual(onTime.classification, 'ON_TIME');
+    claimDb.recordClassification(dbPath, onTimeInput.trackingNumber, onTime, onTimeInput, { runId: run1 });
+    assert.strictEqual(claimDb.withDatabase(dbPath, db => Number(db.prepare('SELECT COUNT(*) AS n FROM manual_reviews').get().n)), 0,
+      'excluded Step 2 classifications must not create eligibility-review records');
+    claimDb.finishRun(dbPath, run1, 'complete', { total: 4, success: 4 });
 
     const csvExport = path.join(root, 'claims.csv');
     fs.writeFileSync(csvExport, 'Tracking PIN\n9999999999999999\n');

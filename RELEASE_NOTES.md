@@ -125,7 +125,7 @@ Rebuilt unsigned Linux beta AppImage: `dist/packages/Canada Post Claim Runner-0.
 
 - Replaces the import-time-only storage decision with a packaged `bootstrap.js` entry point that captures the normal Electron `userData` path, validates the two-variable isolated migration guard, calls `app.setPath` for user/session/cache/crash/log paths, and only then imports normal application startup.
 - Rejects relative, missing, file, root, home, default-profile, repository-overlap, symlink-escape, wrong-owner, world-writable, ASAR, AppImage executable/mount and packaged-resources targets. A centralized manifest checks the database/WAL/SHM, backups, configuration/secrets, CSVs, logs/diagnostics/evidence, Chromium state, workers, run staging, queue files, cache/crash files, and backup/restore temporary paths.
-- Isolated mode displays a persistent warning banner with canonical path and a `[ISOLATED TEST DATA]` title suffix. Live claim/browser/site-health, update, restore and external publish/export actions are blocked in the main process.
+- Isolated mode displays a persistent warning banner with canonical path and a `[ISOLATED TEST DATA]` title suffix. Live claim/browser, update, restore and external publish/export actions are blocked in the main process.
 - Isolated profiles use the normal transactional schema-7 migrator. Synthetic and packaged headless tests verify one pre-migration backup, row preservation, a second-startup no-op with no second backup, a byte-identical independent default-profile sentinel, and fail-closed path rejection without opening the GUI.
 
 Rebuilt unsigned Linux beta AppImage: `dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_64-beta.AppImage`, 387,168,744 bytes, SHA-256 `399c4cba3d7ef6a47494c8d2460881133d75f6632024c91ae6eeb02846d67a8f`.
@@ -159,7 +159,7 @@ Superseded SQLite-only checkpoint AppImage: 387,160,506 bytes, SHA-256 `75382a23
 - Documents the official version distinction: portal catalog generation 2.0.0; Tracking OpenAPI operation contract 1.0.0.
 - Adds separate encrypted current client ID/API Key and client secret/API Secret fields plus test/production selection. Website/EST and deprecated legacy credentials are never copied, removed or used by current Step 2.
 - Keeps OAuth tokens in memory only, refreshes before expiry, invalidates on failures/shutdown, and retries a resource request only once after 401.
-- Validates current JSON detail/error schemas and maps expected delivery, service/archive state and full event timing/location evidence into the conservative normalized model. Unknown fields are tolerated; missing evidence remains manual review.
+- Validates current JSON detail/error schemas and maps expected delivery, service/archive state and full event timing/location evidence into the conservative normalized model. Unknown fields are tolerated; missing evidence remains `REVIEW_REQUIRED` and is excluded from Step 3.
 - Isolates and disables the deprecated Basic/XML client with no automatic fallback.
 - Requires the one-shipment no-state-change diagnostic to succeed for the current credential revision, environment and API version before normal Step 2 is enabled.
 - Prioritizes status semantics: HTML-bodied 502/503/504 responses are transient gateway/service failures, and 504 reports **Canada Post API gateway timed out (HTTP 504)**.
@@ -186,13 +186,13 @@ Rebuilt unsigned Linux beta AppImage: `dist/packages/Canada Post Claim Runner-0.
 - Adds sanitized legacy EST parity fixtures and actual-AppImage headless smokes for empty/populated Step 1 plus success/systemic-500 Step 2.
 - Fixes packaged AppImage Step 1 `spawn ENOTDIR`: Node workers now use one validated runtime resolver, Electron's packaged executable in Node mode, a real private working directory, and external ASAR-unpacked worker resources. Step 1 reports “started” only after a successful OS spawn.
 - Adds Linux/Windows worker-path regressions, package-content enforcement, and a loopback-only packaged EST smoke test that imports synthetic data without launching the GUI or contacting Canada Post.
-- Replaces actual-delivery shortcuts with a versioned first-attempt policy engine, explicit holiday/peak/service data, deterministic evidence and conservative manual review.
+- Replaces actual-delivery shortcuts with a versioned first-attempt policy engine, explicit holiday/peak/service data, deterministic evidence and conservative `REVIEW_REQUIRED` classification.
 - Persists immutable classifications/tracking events, claim details, queue hashes and immediate worker revalidation in SQLite schema 6.
 - Replaces PHP Steps 1–2 with Node EST/REST XML implementations and synthetic parity fixtures.
 - Adds clean allowlisted releases, redacting secret scans, manifests/checksums, SBOM/licences, AppImage/NSIS builds and Linux/Windows CI.
 - Adds a deterministic local mock portal and fault points without contacting or imitating bypass of Canada Post protections.
 - Migrates `BrowserView` to sandboxed `WebContentsView`, sandboxes the main renderer, blocks arbitrary navigation/permissions/downloads, and adds session-clearing controls.
-- Adds scrypt/AES-256-GCM backups with authenticated metadata and malicious-archive limits, a first-run readiness wizard, richer queue deadlines/manual review, Canadian French resources and accessibility checks.
+- Adds scrypt/AES-256-GCM backups with authenticated metadata and malicious-archive limits, a first-run readiness wizard, richer queue deadlines, Canadian French resources and accessibility checks.
 - Adds append-only integer-cent recovery reporting, local-only redacted crash reports, signed update metadata/channel/downgrade verification and commercial-readiness documentation.
 
 This remains an unsigned development build and is a public-beta candidate only. No real Canada Post login, claim, canary, customer pilot or physical clean-install test was performed. See `MANUAL_RELEASE_GATES.md`.

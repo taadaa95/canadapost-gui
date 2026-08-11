@@ -34,7 +34,6 @@ const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/brows
 const { createFocusedRegistrar } = require('./main/ipc');
 const { validateWorkerEvent } = require('./lib/ipc-contracts');
 const supportBundle = require('./lib/support-bundle');
-const portalCompatibility = require('./lib/portal-compatibility');
 const { resolveOwnedRegularFile } = require('./lib/path-confinement');
 const { requestNativeAuthorization } = require('./lib/live-submission-authorization');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
@@ -1459,7 +1458,6 @@ function runPreflight(rawOptions = {}) {
   const reconciliationCount = claimDb.listReconciliation(DB_PATH, 10000).length;
   const workerReady = name => preflightWorkerLaunch(name).ok;
   const trackingEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
-  const currentPortalCompatibility = portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health'));
   const report = buildPreflightReport({
     scope: options.scope,
     storageWritable: applicationStorageWritable(),
@@ -1468,7 +1466,7 @@ function runPreflight(rawOptions = {}) {
     nodeVersion: dependencies.nodeVersion,
     step1WorkersAvailable: workerReady('estHistory') && workerReady('shippingHistory'),
     step2WorkerAvailable: workerReady('tracking'),
-    step3WorkersAvailable: workerReady('siteHealth') && workerReady('submitClaims'),
+    step3WorkersAvailable: workerReady('submitClaims'),
     apiCredentialsAvailable: storage.trackingApiCredentialsStored(),
     apiCredentialMetadata: trackingApiCredentialStatus(trackingEnvironment),
     trackingDiagnosticGateSatisfied: trackingDiagnosticGateSatisfied(config, trackingEnvironment),
@@ -1478,8 +1476,6 @@ function runPreflight(rawOptions = {}) {
     claimAddressAvailable: Boolean(String(submitted.claimStreetNumber || config.claimStreetNumber || '').trim() && String(submitted.claimStreetName || config.claimStreetName || '').trim()),
     claimCount: Number(preview.executableCount ?? preview.count ?? 0),
     builtinBrowserRequired: true,
-    liveSubmissionRequested: submitted.dryRun === false,
-    portalCompatibility: currentPortalCompatibility,
     reconciliationCount
   });
   return { ok: true, report, claimPreview: preview };
@@ -1689,7 +1685,6 @@ registerIpcHandler('config:load', () => {
     liveSubmissionEnabled: !USER_DATA_PROFILE.active,
     updateActionsEnabled: !USER_DATA_PROFILE.active,
     updateRecovery,
-    portalCompatibility: portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health')),
     setupReadiness: setupReadiness(storage.publicConfig(), trackingApiEnvironment),
     ...readUserIniPublicFields()
   };
@@ -1882,36 +1877,9 @@ registerIpcHandler('reconciliation:update', async (_event, payload = {}) => {
   }
 });
 
-registerIpcHandler('manualReview:list', (_event, options = {}) => {
-  ensureDirs();
-  try {
-    return { ok: true, items: claimDb.listManualReviews(DB_PATH, {
-      status: String(options.status || 'open').slice(0, 32),
-      search: String(options.search || '').slice(0, 256),
-      limit: Math.max(1, Math.min(1000, Number(options.limit || 250)))
-    }) };
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
-});
-
 registerIpcHandler('classification:list', (_event, payload = {}) => {
   try { return { ok: true, items: claimDb.listClassificationQueue(DB_PATH, String(payload.classification || ''), payload) }; }
   catch (error) { return { ok: false, error: error.message, items: [] }; }
-});
-
-registerIpcHandler('manualReview:update', async (_event, payload = {}) => {
-  try {
-    const reviewId = Number(payload.reviewId);
-    if (!Number.isSafeInteger(reviewId) || reviewId < 1) throw new Error('Invalid manual-review identifier.');
-    const action = String(payload.action || '').slice(0, 64);
-    const note = String(payload.note || '').slice(0, 4096);
-    return await operationCoordinator.run('authoritative_data_mutation', async () => (
-      { ok: true, item: claimDb.updateManualReview(DB_PATH, reviewId, action, note) }
-    ));
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
 });
 
 registerIpcHandler('shipment:listManual', (_event, options = {}) => {
@@ -2121,95 +2089,6 @@ registerIpcHandler('diagnostics:create', async (_event, payload = {}) => {
     return { ok: true, path: result.filePath, supportReferenceId: preview.supportReferenceId };
   } catch (error) {
     return { ok: false, error: error.message };
-  }
-});
-
-registerIpcHandler('siteHealth:run', async (_event, options = {}) => {
-  if (USER_DATA_PROFILE.active) return { ok: false, error: 'Step 3 browser and site-health actions are disabled while isolated test data is active.' };
-  ensureDirs();
-  if (activeChild) return { ok: false, error: 'A process is already active.' };
-  const workerPreflight = preflightWorkerLaunch('siteHealth');
-  if (!workerPreflight.ok) return workerPreflight;
-  let browserHandshake;
-  try {
-    browserHandshake = await prepareBuiltinBrowserForWorker({ reason: 'site-health' });
-    await requestBuiltinBrowserVisibility({
-      reason: 'site-health-handshake-complete',
-      requireVisible: true,
-      scrollIntoView: true,
-      timeoutMs: 6000
-    });
-    const display = browserVisibilityWatchdog();
-    if (!display.ready) {
-      const error = new Error('The built-in browser target is ready, but its native view cannot be displayed for the site-health check.');
-      error.code = 'BROWSER_VISIBILITY_REQUIRED';
-      throw error;
-    }
-  } catch (error) {
-    return { ok: false, error: error.message, code: error.code || 'BROWSER_HANDSHAKE_FAILED' };
-  }
-  const config = readConfig();
-  const credentials = resolveWebCredentials(options, config);
-  const logPath = path.join(LOG_DIR, `site-health-${timestamp()}.log`);
-  const runId = claimDb.startRun(DB_PATH, 'site_health', { appVersion: APP_VERSION });
-  const healthProcess = spawnJsonProcess('siteHealth', {
-    resolution: workerPreflight.resolution,
-    env: {
-      ELECTRON_RUN_AS_NODE: '1',
-      ELECTRON_CDP_URL: browserHandshake.endpoint,
-      ELECTRON_TARGET_ID: browserHandshake.targetId,
-      ELECTRON_TARGET_NONCE: browserHandshake.targetNonce,
-      CANADAPOST_SECRETS_STDIN: '1'
-    },
-    stdinJson: { username: credentials.username, password: credentials.password }
-  }, 'health', logPath, {
-    onSpawn: () => emit('run', { status: 'started', logPath }),
-    stopOnEvent: event => event?.type === 'health_complete'
-  });
-  const started = await healthProcess.started;
-  if (!started.ok) {
-    const failed = await healthProcess;
-    claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: failed.error?.message || 'Worker spawn failed.' });
-    return { ok: false, error: failed.error?.message || 'Site-health worker could not be started.' };
-  }
-  try {
-    const result = await healthProcess;
-    const health = result.lastEventsByType?.health_complete || result.lastEvent || {};
-    const compatibility = portalCompatibility.evaluateHealthResult(health);
-    const compatible = compatibility.compatible === true;
-    const code = String(health.code || (compatible ? 'HEALTHY' : 'UNKNOWN'));
-    claimDb.finishRun(DB_PATH, runId, compatible ? 'complete' : 'failed', {
-      total: 1,
-      success: compatible ? 1 : 0,
-      warning: health.status === 'warning' ? 1 : 0,
-      failure: compatible ? 0 : 1
-    }, { ...health, portalCompatibility: compatibility });
-    emit('run', {
-      status: compatible ? 'complete' : 'blocked',
-      messageKey: compatible ? 'step3.portalValidation.passed' : 'step3.portalValidation.failed',
-      messageValues: { code },
-      message: compatible
-        ? `Step 3 portal compatibility validation passed (${code}).`
-        : `Step 3 portal compatibility validation did not pass (${code}).`,
-      logPath
-    });
-    return {
-      ok: compatible,
-      code,
-      error: compatible ? undefined : (health.message || `Portal compatibility validation did not pass (${code}).`),
-      portalCompatibility: compatibility,
-      logPath
-    };
-  } catch (error) {
-    claimDb.finishRun(DB_PATH, runId, 'failed', { total: 1, failure: 1 }, { error: error.message });
-    emit('run', {
-      status: 'blocked',
-      messageKey: 'step3.portalValidation.failed',
-      messageValues: { code: error.code || 'WORKER_FAILED' },
-      message: error.message,
-      logPath
-    });
-    return { ok: false, error: error.message, code: error.code || 'WORKER_FAILED', logPath };
   }
 });
 
@@ -2780,17 +2659,6 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   }
   const initialPreflight = runPreflight({ scope: 'step3', submitOptions: options });
   if (!initialPreflight.report.ready) return blockedStep3Preflight(initialPreflight);
-  if (!options.dryRun) {
-    const compatibilityGate = portalCompatibility.gate(claimDb.latestRunByType(DB_PATH, 'site_health'));
-    if (!compatibilityGate.ok && !options.portalCompatibilityOverride) {
-      return {
-        ok: false,
-        error: localizedText('step3.compatibility.override.requiredError', {}, 'Portal compatibility is unverified. Review the inline warning and explicitly choose Continue Anyway before a live run.'),
-        code: 'PORTAL_COMPATIBILITY_OVERRIDE_REQUIRED',
-        portalCompatibility: compatibilityGate
-      };
-    }
-  }
   const authoritativeTracking = claimDb.latestTrackingRun(DB_PATH);
   const trackingRunGate = validateTrackingRunForSubmission(authoritativeTracking);
   if (!trackingRunGate.ok) {
@@ -2863,7 +2731,6 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
     selectedClaimCount: selectedClassificationRecords.length,
     requestedSelectedClaimCount: requestedClassificationRecords.length,
     canaryMode: Boolean(effectiveCanaryMode),
-    portalCompatibilityOverride: Boolean(!options.dryRun && options.portalCompatibilityOverride)
   });
   const privateSnapshotDirectory = path.join(DATA_DIR, 'private-step3-snapshots', `run-${submitRunId}`);
   fs.mkdirSync(privateSnapshotDirectory, { recursive: true, mode: 0o700 });

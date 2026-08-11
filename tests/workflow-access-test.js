@@ -3,14 +3,12 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 const html = source('index.html');
 const renderer = source('renderer.js');
 const main = source('main.js');
-const preflight = source('lib/preflight.js');
 const queueService = source('lib/step3-queue-service.js');
 const submitWorker = source('scripts/submit-claims.js');
 const english = require('../locales/en-CA.json');
@@ -40,52 +38,25 @@ assert.match(html, /id="step3ActionAdvisory"[^>]*class="step3-action-advisory hi
   'action-specific prerequisite failures must render inline');
 assert.match(renderer, /function showStep3ActionIssues/);
 
-const sandbox = { window: {} };
-vm.runInNewContext(source('renderer/portal-advisory.js'), sandbox);
-const describe = sandbox.window.PortalAdvisory.describe;
-assert.deepStrictEqual({ ...describe({ ok: true }) }, { id: 'compatible', kind: 'good', requiresOverride: false });
-assert.strictEqual(describe({ ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' }).id, 'notChecked');
-assert.strictEqual(describe({ ok: false, code: 'PORTAL_COMPATIBILITY_STALE' }).id, 'stale');
-assert.strictEqual(describe({ ok: false, code: 'PORTAL_COMPATIBILITY_FAILED' }).id, 'incompatible');
-assert.strictEqual(describe({ ok: false, code: 'UNEXPECTED' }).id, 'warning');
-assert.match(html, /id="portalCompatibilityAdvisory"/);
-for (const id of ['checkStep3BrowserSession', 'refreshPortalCompatibility', 'openSettingsFromPortalAdvisory', 'dismissPortalCompatibility']) {
-  assert(html.includes(`id="${id}"`), `inline compatibility action ${id} must be available`);
-}
-
 assert.match(html, /id="dryRun"[^>]*checked/, 'dry run must remain the default');
-assert.doesNotMatch(renderer.match(/function updateClaimQueueCount\(\)[\s\S]*?function queueCell/)?.[0] || '', /compatib/i,
-  'compatibility state must never disable dry-run or queue actions');
-assert.match(html, /id="portalCompatibilityOverrideModal"/);
-assert.match(html, /id="cancelPortalCompatibilityOverride"[^>]*data-i18n="action.cancel"/);
-assert.match(html, /id="continuePortalCompatibilityOverride"[^>]*data-i18n="step3.compatibility.continueAnyway"/);
 const startSubmit = renderer.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0] || '';
-assert.ok(startSubmit.indexOf('confirmPortalCompatibilityOverride') < startSubmit.indexOf('confirmLiveSubmission'),
-  'Continue Anyway must lead to the normal live acknowledgement flow');
-assert.match(startSubmit, /portalCompatibilityOverride = await confirmPortalCompatibilityOverride\(\)/);
-assert.match(startSubmit, /buildSubmitOnlyOptions\(\{ liveSubmissionConfirmed, canaryMode, portalCompatibilityOverride \}\)/);
-assert.doesNotMatch(startSubmit, /runSiteHealth/, 'live mode must not require an automatic workflow health check');
-assert.match(main, /!compatibilityGate\.ok && !options\.portalCompatibilityOverride/,
-  'main process must require a validated explicit override for an unverified live run');
-assert.match(preflight, /'portal-compatibility'[\s\S]*?severity: 'warning'/,
-  'portal compatibility must be advisory rather than a blocking preflight check');
+assert.doesNotMatch(`${html}\n${renderer}\n${main}`, /portalCompatibility|portal-compatibility|runSiteHealth|siteHealth:run/,
+  'health and portal-compatibility systems must be absent');
+assert.doesNotMatch(html, /manualReviewList|manualReviewCountPill|Eligibility Manual Review/,
+  'eligibility manual-review UI must be absent');
+assert.match(html, /id="checkStep3BrowserSession"/, 'browser-session inspection must remain independent');
+assert.match(startSubmit, /confirmLiveSubmission/);
+assert.match(startSubmit, /buildSubmitOnlyOptions\(\{ liveSubmissionConfirmed, canaryMode \}\)/);
 
 assert.match(html, /id="claimQueueList"[^>]*aria-live="polite"[\s\S]*?step3\.queue\.refreshEmpty/,
   'missing candidates must remain an inline queue state');
 assert.match(renderer, /runButton\.disabled = executable < 1 \|\| state\.isolatedTestMode === true/,
   'submission may be disabled only when no executable candidate exists or isolated test mode is active');
 
-for (const key of [
-  'step3.compatibility.message.notChecked', 'step3.compatibility.message.stale',
-  'step3.compatibility.message.incompatible', 'step3.compatibility.override.risk',
-  'step3.compatibility.continueAnyway'
-]) {
-  assert.ok(english[key]);
-  assert.ok(french[key]);
-  assert.notStrictEqual(english[key], french[key], `${key} must switch dynamically between English and French`);
+for (const locale of [english, french]) {
+  assert.strictEqual(Object.keys(locale).some(key => key.startsWith('step3.compatibility.') || key.startsWith('step3.portalValidation.')), false);
+  assert.strictEqual(Object.keys(locale).some(key => key.startsWith('history.review.') || key.startsWith('history.manualReview')), false);
 }
-assert.strictEqual(french['step3.compatibility.message.notChecked'], 'La compatibilité du portail n’a pas été vérifiée.');
-assert.strictEqual(french['step3.compatibility.continueAnyway'], 'Continuer quand même');
 
 for (const [sourceText, pattern, safeguard] of [
   [queueService, /already_submitted|submitted/, 'submitted-record and duplicate blocking'],
@@ -100,4 +71,4 @@ for (const [sourceText, pattern, safeguard] of [
   [main, /persist:canadapost-claims-builtin/, 'browser-session isolation']
 ]) assert.match(sourceText, pattern, `${safeguard} must remain intact`);
 
-process.stdout.write('Workflow navigation and advisory-only compatibility tests passed.\n');
+process.stdout.write('Workflow navigation and removed-feature safety tests passed.\n');

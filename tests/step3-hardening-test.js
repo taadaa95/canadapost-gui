@@ -64,7 +64,6 @@ async function main() {
   const root = path.resolve(__dirname, '..');
   const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
   const submitSource = fs.readFileSync(path.join(root, 'scripts', 'submit-claims.js'), 'utf8');
-  const healthSource = fs.readFileSync(path.join(root, 'scripts', 'site-health-check.js'), 'utf8');
 
   assert.match(mainSource, /setPermissionRequestHandler/);
   assert.match(mainSource, /setPermissionCheckHandler/);
@@ -86,9 +85,7 @@ async function main() {
   assert.match(submitSource, /Raw HTML can/);
   assert.doesNotMatch(submitSource.match(/async function collectVisibleText[\s\S]*?\n}/)?.[0] || '', /page\.content\(/);
   assert.match(submitSource, /Never retry the financially significant action/);
-  assert.match(healthSource, /readRuntimeSecrets/);
-  assert.match(healthSource, /TARGET_ID/);
-  assert.match(healthSource, /waitForExactPageTarget/);
+  assert.strictEqual(fs.existsSync(path.join(root, 'scripts', 'site-health-check.js')), false);
 
   console.log('Step 3 browser hardening tests passed.');
 }

@@ -60,7 +60,6 @@ async function applyLocale(locale) {
   renderResultsList();
   renderNeedsReview();
   if (state.claimQueueLoaded) renderClaimQueue(state.claimQueueItems, true);
-  renderPortalCompatibilityAdvisory();
   if (state.step3ActionReport) showStep3ActionIssues(state.step3ActionReport);
   if (!$('setupWizard')?.classList.contains('hidden')) renderSetupWizardReadiness(await window.cpApp.loadConfig());
   rendererEvents.emit('locale:changed', { locale: result.locale || 'en-CA' });
@@ -133,7 +132,7 @@ function activateTab(tabId) {
   }
   if (target === 'step3') {
     if (!state.claimQueueLoaded) refreshClaimQueue().catch((error) => console.error(error));
-    refreshPortalCompatibilityStatus().catch((error) => console.error(error));
+    refreshBrowserSessionStatus('step3BrowserSessionStatus').catch((error) => console.error(error));
   }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
@@ -143,7 +142,7 @@ function activateTab(tabId) {
 function stepForStage(stage) {
   if (stage === 'est-history' || stage === 'history') return 'step1';
   if (stage === 'tracking') return 'step2';
-  if (stage === 'submit' || stage === 'health') return 'step3';
+  if (stage === 'submit') return 'step3';
   return currentProcessStep || activeTabId || 'step1';
 }
 
@@ -507,9 +506,6 @@ Object.assign(state, {
   dryRunDefault: true,
   claimQueueItems: [],
   claimQueueLoaded: false,
-  portalCompatibility: { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' },
-  portalCompatibilityViewId: '',
-  portalCompatibilityWarningDismissed: false,
   step3ActionReport: null,
   privacyPreview: null
 });
@@ -823,7 +819,7 @@ function resultDetailText(item) {
   if (item.issue) return localizedInterfaceValue(item.issue);
   if (item.kind === 'submitted') return tr('results.confirmedByCanadaPost', 'Confirmed by Canada Post success page');
   if (item.kind === 'already') return tr('results.duplicateDetected', 'Duplicate claim detected by Canada Post');
-  if (item.kind === 'failed') return item.message || tr('results.needsManualReview', 'Needs manual review');
+  if (item.kind === 'failed') return item.message || tr('results.needsAttention', 'Needs attention');
   if (item.kind === 'captcha') return item.message || tr('results.captchaCaptured', 'CAPTCHA screenshot captured; solve manually in browser');
   return item.message || '—';
 }
@@ -1328,18 +1324,6 @@ function describeEvent(stage, event) {
     return formatDeveloperRaw(stage, event);
   }
 
-  if (stage === 'health') {
-    if (type === 'health_start') {
-      return tr('step3.portalValidation.started', 'Step 3 portal compatibility validation started.');
-    }
-    if (type === 'health_progress') return tr('step3.portalValidation.progress', 'Step 3 portal compatibility validation is checking the current Canada Post page.');
-    if (type === 'health_complete') {
-      refreshHistory().catch(() => {});
-      return trf(event.status === 'healthy' ? 'step3.portalValidation.passed' : 'step3.portalValidation.failed', {
-        code: event.code || 'UNKNOWN'
-      }, event.status === 'healthy' ? 'Step 3 portal compatibility validation passed ({code}).' : 'Step 3 portal compatibility validation did not pass ({code}).');
-    }
-  }
 
   if (stage === 'est-history') {
     if (type === 'est_endpoint') return localizedEventMessage || trf('event.est.endpoint', { host: event.host || '' }, 'EST Desktop API endpoint: {host}');
@@ -2006,47 +1990,6 @@ function renderReconciliation(items = []) {
   }
 }
 
-function renderManualReviews(items = []) {
-  const root = $('manualReviewList');
-  if (!root) return;
-  setHistoryRecordState(root, items.length ? '' : 'empty');
-  root.textContent = '';
-  setLocalizedText($('manualReviewCountPill'), 'history.openCount', { count: items.length }, '{count} open');
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'history-empty';
-    empty.textContent = tr('history.manualReviewEmpty', 'No classification records require manual review.');
-    root.appendChild(empty);
-    return;
-  }
-  for (const item of items) {
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    row.appendChild(historyCell(item.tracking_number || '—'));
-    row.appendChild(historyCell(item.service_code || tr('history.unknownService', 'Unknown service')));
-    row.appendChild(historyCell([item.expected_date, item.first_attempt_date, item.delivery_date].filter(Boolean).join(' → ')));
-    row.appendChild(historyCell(item.reason_codes_json || item.automated_classification || tr('history.manualReviewShort', 'Manual review')));
-    const actions = document.createElement('div');
-    actions.className = 'history-actions';
-    for (const [label, action, className] of [[tr('history.review.addNote', 'Add note'), 'note', 'secondary'], [tr('history.review.resolveCandidate', 'Resolve as candidate'), 'resolved_eligible', 'success'], [tr('history.review.resolveNotCandidate', 'Resolve as not a late candidate'), 'resolved_not_eligible', 'warning'], [tr('history.review.defer', 'Defer'), 'resolved_deferred', 'secondary']]) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = className;
-      button.textContent = label;
-      button.addEventListener('click', async () => {
-        const note = window.prompt(trf('history.review.notePrompt', { action: label }, '{action} — the note is retained in the audit history:'), item.note || '');
-        if (note === null) return;
-        const result = await window.cpApp.updateManualReview({ reviewId: item.id, action, note });
-        if (!result.ok) window.alert(result.error || tr('history.review.updateFailed', 'Could not update manual review.'));
-        await refreshHistory();
-      });
-      actions.appendChild(button);
-    }
-    row.appendChild(actions);
-    root.appendChild(row);
-  }
-}
-
 function renderHistoryClassifications(items = []) {
   const target = $('historyClassificationList');
   if (!target) return;
@@ -2081,13 +2024,11 @@ async function refreshHistory(options = {}) {
   updateClearHistoryFiltersButton();
   renderHistoryRecordMessage('historyList', 'Loading claim attempts…', 'loading');
   renderHistoryRecordMessage('reconciliationList', 'Loading reconciliation records…', 'loading');
-  renderHistoryRecordMessage('manualReviewList', 'Loading manual reviews…', 'loading');
-  const [history, reconciliation, dashboard, manualShipments, manualReviews, reviewClassifications, trackingErrors, onTimeClassifications] = await Promise.all([
+  const [history, reconciliation, dashboard, manualShipments, reviewClassifications, trackingErrors, onTimeClassifications] = await Promise.all([
     window.cpApp.listHistory({ search, status, limit: 500, page: historyViewState.page, offset: historyViewState.offset }),
     window.cpApp.listReconciliation(),
     window.cpApp.getDashboard(),
     window.cpApp.listManualShipments({ search, limit: 250 }),
-    window.cpApp.listManualReviews({ search, status: 'open', limit: 250 }),
     window.cpApp.listClassificationQueue({ classification: 'REVIEW_REQUIRED', search, limit: 250 }),
     window.cpApp.listClassificationQueue({ classification: 'TRACKING_ERROR', search, limit: 250 }),
     window.cpApp.listClassificationQueue({ classification: 'ON_TIME', search, limit: 250 })
@@ -2098,8 +2039,6 @@ async function refreshHistory(options = {}) {
     renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
   }
   if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
-  if (manualReviews.ok) renderManualReviews(manualReviews.items || []);
-  else renderHistoryRecordMessage('manualReviewList', manualReviews.error || tr('history.loadReviewsFailed', 'Could not load manual reviews.'));
   renderHistoryClassifications([
     ...(reviewClassifications.items || []),
     ...(trackingErrors.items || []),
@@ -2297,54 +2236,6 @@ async function refreshBrowserSessionStatus() {
     : (result.error || 'Could not inspect browser session state.');
   for (const status of statuses) setLocalizedText(status, key, {}, fallback);
   return result;
-}
-
-function renderPortalCompatibilityAdvisory(gate = state.portalCompatibility, { checking = false } = {}) {
-  const advisory = $('portalCompatibilityAdvisory');
-  const status = $('portalCompatibilityStatus');
-  const message = $('portalCompatibilityMessage');
-  if (!advisory || !status || !message) return;
-  const view = checking
-    ? { id: 'checking', kind: 'warn', requiresOverride: true }
-    : window.PortalAdvisory.describe(gate);
-  if (!checking && state.portalCompatibilityViewId && state.portalCompatibilityViewId !== view.id) {
-    state.portalCompatibilityWarningDismissed = false;
-  }
-  state.portalCompatibilityViewId = view.id;
-  advisory.classList.toggle('compatible', view.id === 'compatible');
-  advisory.classList.toggle('hidden', !checking && view.requiresOverride && state.portalCompatibilityWarningDismissed);
-  status.className = `pill ${view.kind}`;
-  setLocalizedText(status, `step3.compatibility.status.${view.id}`, {}, view.id);
-  setLocalizedText(message, `step3.compatibility.message.${view.id}`, {}, 'Portal compatibility status is advisory.');
-  $('portalCompatibilityRisk')?.classList.toggle('hidden', view.id === 'compatible');
-  $('dismissPortalCompatibility')?.classList.toggle('hidden', !view.requiresOverride || checking);
-}
-
-async function refreshPortalCompatibilityStatus({ runCheck = false } = {}) {
-  let validationResult = null;
-  if (runCheck) {
-    state.portalCompatibilityWarningDismissed = false;
-    renderPortalCompatibilityAdvisory(state.portalCompatibility, { checking: true });
-    validationResult = await window.cpApp.runSiteHealth(collectUserSettingsOptions());
-    if (!validationResult?.ok) {
-      const values = { code: validationResult?.code || 'UNKNOWN' };
-      setActionLocalized('step3.compatibility.refreshFailed', values, 'Compatibility remains unverified ({code}). Review the warning before a live run.', 'step3');
-      log(trf('step3.compatibility.refreshFailed', values, 'Compatibility remains unverified ({code}). Review the warning before a live run.'), 'log-warning', 'step3');
-    }
-  }
-  const cfg = await window.cpApp.loadConfig();
-  state.portalCompatibility = runCheck && validationResult?.ok === false && !validationResult.portalCompatibility
-    ? { ok: false, code: 'PORTAL_COMPATIBILITY_WARNING', reason: validationResult.error || '' }
-    : (cfg?.portalCompatibility || { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' });
-  renderPortalCompatibilityAdvisory();
-  return state.portalCompatibility;
-}
-
-function dismissPortalCompatibilityWarning() {
-  if (window.PortalAdvisory.describe(state.portalCompatibility).requiresOverride) {
-    state.portalCompatibilityWarningDismissed = true;
-    renderPortalCompatibilityAdvisory();
-  }
 }
 
 async function clearBrowserSession() {
@@ -2815,30 +2706,6 @@ async function runStep3Preflight(submitOptions) {
   return result.report;
 }
 
-let portalCompatibilityOverrideResolver = null;
-
-function closePortalCompatibilityOverride(confirmed) {
-  const modal = $('portalCompatibilityOverrideModal');
-  modal?.classList.add('hidden');
-  modal?.setAttribute('aria-hidden', 'true');
-  const resolver = portalCompatibilityOverrideResolver;
-  portalCompatibilityOverrideResolver = null;
-  resolver?.(Boolean(confirmed));
-}
-
-function confirmPortalCompatibilityOverride() {
-  const modal = $('portalCompatibilityOverrideModal');
-  const status = $('portalCompatibilityOverrideStatus');
-  if (!modal || !status) return Promise.resolve(false);
-  const view = window.PortalAdvisory.describe(state.portalCompatibility);
-  status.className = `pill ${view.kind}`;
-  setLocalizedText(status, `step3.compatibility.status.${view.id}`, {}, view.id);
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden', 'false');
-  $('cancelPortalCompatibilityOverride')?.focus();
-  return new Promise(resolve => { portalCompatibilityOverrideResolver = resolve; });
-}
-
 let liveSubmitResolver = null;
 
 function closeLiveSubmitModal(confirmed) {
@@ -2879,7 +2746,7 @@ function confirmLiveSubmission(selectedCount) {
   return new Promise(resolve => { liveSubmitResolver = resolve; });
 }
 
-function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false, portalCompatibilityOverride = false } = {}) {
+function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false } = {}) {
 
   return {
     ...collectUserSettingsOptions(),
@@ -2891,7 +2758,6 @@ function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = 
     expectedClaimCount: selectedClassificationRecords().length,
     canaryMode: Boolean(canaryMode),
     liveSubmissionConfirmed: Boolean(liveSubmissionConfirmed),
-    portalCompatibilityOverride: Boolean(portalCompatibilityOverride),
     developerMode: false
   };
 }
@@ -3055,28 +2921,9 @@ async function startSubmitOnly() {
     log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before starting a dry or live run.'), 'log-submit-error', 'step3');
     return;
   }
-  let portalCompatibilityOverride = false;
-  if (!dryRun) {
-    await refreshPortalCompatibilityStatus();
-    if (window.PortalAdvisory.describe(state.portalCompatibility).requiresOverride) {
-      portalCompatibilityOverride = await confirmPortalCompatibilityOverride();
-      if (!portalCompatibilityOverride) {
-        setStatus('Cancelled', '', 'step3');
-        setActionLocalized('step3.liveCancelledAction', {}, 'Live submission cancelled before the browser workflow started.', 'step3');
-        log(tr('step3.liveCancelledAction', 'Live submission cancelled before the browser workflow started.'), 'log-warning', 'step3');
-        return;
-      }
-      state.portalCompatibilityWarningDismissed = false;
-      renderPortalCompatibilityAdvisory();
-      log(tr('step3.compatibility.override.risk', 'This may fail because the Canada Post portal has not been verified in this session.'), 'log-warning', 'step3');
-    } else {
-      setActionLocalized('step3.portalValidation.passed', { code: 'HEALTHY' }, 'Step 3 portal compatibility validation passed ({code}).', 'step3');
-    }
-  }
   const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight({
     ...basePreflightOptions,
-    dryRun: false,
-    portalCompatibilityOverride
+    dryRun: false
   });
   if (!preflight?.ready) {
     setStatus('Blocked', 'bad', 'step3');
@@ -3108,7 +2955,7 @@ async function startSubmitOnly() {
 
   // The main process validates attempt state and creates an immutable snapshot
   // before it creates, attaches, or navigates the native browser.
-  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode, portalCompatibilityOverride }));
+  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode }));
   if (!res.ok) {
     if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
       showStep3ActionIssues({
@@ -3161,7 +3008,6 @@ async function refreshConfig() {
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
   state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
-  state.portalCompatibility = cfg.portalCompatibility || { ok: false, code: 'PORTAL_COMPATIBILITY_REQUIRED' };
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
   await applyLocale(preferredLocale || cfg.locale || 'en-CA');
@@ -3233,7 +3079,6 @@ async function refreshConfig() {
       status.className = 'pill warn';
     }
   }
-  renderPortalCompatibilityAdvisory();
   $('resumeSetup')?.classList.toggle('hidden', Boolean(cfg.setupCompleted));
 }
 
@@ -3337,11 +3182,6 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
 $('refreshBrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('checkStep3BrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('clearBrowserSession')?.addEventListener('click', clearBrowserSession);
-$('refreshPortalCompatibility')?.addEventListener('click', () => refreshPortalCompatibilityStatus({ runCheck: true }));
-$('openSettingsFromPortalAdvisory')?.addEventListener('click', () => activateTab('settingsTab'));
-$('dismissPortalCompatibility')?.addEventListener('click', dismissPortalCompatibilityWarning);
-$('cancelPortalCompatibilityOverride')?.addEventListener('click', () => closePortalCompatibilityOverride(false));
-$('continuePortalCompatibilityOverride')?.addEventListener('click', () => closePortalCompatibilityOverride(true));
 $('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
 $('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
 $('trackingDiagnosticRow')?.addEventListener('keydown', event => { if (event.key === 'Enter') confirmTrackingDiagnosticRow(); });
@@ -3416,7 +3256,6 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (modal.id === 'warningModal') closeStep1Warnings();
     else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
-    else if (modal.id === 'portalCompatibilityOverrideModal') closePortalCompatibilityOverride(false);
     else if (modal.id === 'liveSubmitModal') closeLiveSubmitModal(false);
     else if (modal.id === 'trackingDiagnosticModal') closeTrackingDiagnosticModal(null);
     else if (modal.id === 'privacyDataModal') closePrivacyDataModal();

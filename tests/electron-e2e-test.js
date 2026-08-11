@@ -200,40 +200,22 @@ const { loadLocale } = require('../lib/i18n');
 
     await window.evaluate(() => window.activateTab('step3'));
     await window.waitForTimeout(300);
-    assert.strictEqual(await window.locator('#step3').isVisible(), true, 'Step 3 must open with unchecked portal compatibility');
-    assert.strictEqual(await window.locator('#portalCompatibilityStatus').textContent(), 'Not checked');
+    assert.strictEqual(await window.locator('#step3').isVisible(), true, 'Step 3 must remain directly accessible');
+    assert.strictEqual(await window.locator('#portalCompatibilityStatus').count(), 0);
+    assert.strictEqual(await window.locator('#portalCompatibilityAdvisory').count(), 0);
+    assert.strictEqual(await window.locator('#portalCompatibilityOverrideModal').count(), 0);
     assert.strictEqual(await window.locator('#step3PreflightModal').count(), 0, 'the blocking Step 3 modal must not be rendered');
-    for (const [code, expected] of [
-      ['PORTAL_COMPATIBILITY_STALE', 'Stale'],
-      ['PORTAL_COMPATIBILITY_FAILED', 'Incompatible']
-    ]) {
-      await window.evaluate(portalCode => {
-        window.RendererContext.state.portalCompatibility = { ok: false, code: portalCode };
-        window.renderPortalCompatibilityAdvisory();
-      }, code);
-      assert.strictEqual(await window.locator('#portalCompatibilityStatus').textContent(), expected);
-      assert.strictEqual(await window.locator('#step3').isVisible(), true, `${expected} compatibility must not close Step 3`);
-    }
     await window.evaluate(() => {
-      window.__compatibilityConfirmationSequence = [];
+      window.__liveConfirmationSequence = [];
       void (async () => {
-        const override = await window.confirmPortalCompatibilityOverride();
-        window.__compatibilityConfirmationSequence.push(`override:${override}`);
-        if (override) {
-          const live = await window.confirmLiveSubmission(1);
-          window.__compatibilityConfirmationSequence.push(`live:${live.confirmed}`);
-        }
+        const live = await window.confirmLiveSubmission(1);
+        window.__liveConfirmationSequence.push(`live:${live.confirmed}`);
       })();
     });
-    await window.locator('#portalCompatibilityOverrideModal:not(.hidden)').waitFor({ state: 'visible' });
-    assert.strictEqual(await window.locator('#cancelPortalCompatibilityOverride').textContent(), 'Cancel');
-    assert.strictEqual(await window.locator('#continuePortalCompatibilityOverride').textContent(), 'Continue Anyway');
-    await window.locator('#continuePortalCompatibilityOverride').click();
     await window.locator('#liveSubmitModal:not(.hidden)').waitFor({ state: 'visible' });
-    assert.deepStrictEqual(await window.evaluate(() => window.__compatibilityConfirmationSequence), ['override:true']);
     await window.locator('#cancelLiveSubmit').click();
-    await window.waitForFunction(() => window.__compatibilityConfirmationSequence.length === 2);
-    assert.deepStrictEqual(await window.evaluate(() => window.__compatibilityConfirmationSequence), ['override:true', 'live:false']);
+    await window.waitForFunction(() => window.__liveConfirmationSequence.length === 1);
+    assert.deepStrictEqual(await window.evaluate(() => window.__liveConfirmationSequence), ['live:false']);
     const offscreenBeforePrepare = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(offscreenBeforePrepare.created, false, 'an offscreen browser slot should not be the only creation trigger');
     const preparedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());

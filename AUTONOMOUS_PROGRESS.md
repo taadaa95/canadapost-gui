@@ -66,10 +66,10 @@ All feasible repository work for Phases 0–2 is implemented and validated. The 
 
 - Added an explicit release allowlist, prohibited-path audit, redacting repository-native secret scanner, clean-worktree staging builder, content manifest, SHA-256 checksums, extracted-artifact rescan, and release-content tests.
 - Researched and documented official Canada Post policy sources retrieved July 26, 2026. The current guide confirms that guarantee performance is measured to first delivery attempt. The 2025 peak notice requires domestic covered items mailed November 3, 2025 through January 11, 2026 to be at least two business days late.
-- Added versioned policy/service/peak data and an explicit Canada Post holiday calendar covering 2024–2026. Dates outside policy/calendar coverage and regional-holiday ambiguity enter manual review.
+- Added versioned policy/service/peak data and an explicit Canada Post holiday calendar covering 2024–2026. Dates outside policy/calendar coverage and regional-holiday ambiguity remain `REVIEW_REQUIRED`.
 - Added bilingual deterministic event normalization, distinct expected/first-attempt/actual dates, duplicate handling, conflict detection, timezone normalization, exclusion signals, raw hashes, and unknown-event handling.
-- Added schema version 5 with immutable historical classifications and normalized tracking events, current pointers, structured claim details, manual reviews, audit events, reviewed queue snapshots, and worker revalidation records.
-- Added manual-review queue IPC/UI with notes and explicit resolutions that do not overwrite automated classification.
+- Added schema version 5 with immutable historical classifications and normalized tracking events, current pointers, structured claim details, a legacy review table retained for compatibility, audit events, reviewed queue snapshots, and worker revalidation records.
+- Step 2 retains immutable `REVIEW_REQUIRED` and `TRACKING_ERROR` classifications as read-only history; neither classification can enter Step 3.
 - Step 3 now classifies the selected queue from current evidence, writes and persists a cryptographic reviewed snapshot, and revalidates immediately before each worker claim. Any evidence/classification/policy/deadline change blocks processing before a claim attempt is created.
 - Queue previews now carry first-attempt, deadline, lateness, remaining-business-day, policy, calendar, and reason fields with tracking/service/urgency filters.
 
@@ -89,7 +89,7 @@ Phase 0 validation: `npm test` PASS; `npm run secret-scan` PASS; `npm run releas
 
 Command: `npm test`
 
-Result: PASS (exit 0). JavaScript and PHP syntax checks passed. The following existing test programs reported success: eligibility, storage, IPC input validation, claim queue, preflight, Step 3 operator controls, database, archive, claim selection, site health, Step 3 browser hardening, Step 3 regression, Step 3 diagnostics, Step 3 navigation, and UI contract.
+Result: PASS (exit 0). JavaScript and PHP syntax checks passed. The following existing test programs reported success: eligibility, storage, IPC input validation, claim queue, preflight, Step 3 operator controls, database, archive, claim selection, Step 3 browser hardening, Step 3 regression, Step 3 diagnostics, Step 3 navigation, and UI contract.
 
 Command: `npm audit --omit=dev --json`
 
@@ -136,7 +136,7 @@ Result: PASS (exit 0). npm reported 0 production dependency vulnerabilities.
 
 - Changed the package entry point to `bootstrap.js`, so the original Electron default profile is captured and the guarded override is validated/set before `app-storage`, database, configuration, log, browser or worker paths are computed.
 - Added exact two-variable activation, canonical ownership/permission/default/home/repository/AppImage/ASAR/symlink validation and a centralized manifest for every application-owned mutable path.
-- Added the persistent isolated-data banner/path/title plus main-process blocks for claims, claim browser/site health, updates, restore and external export/publishing actions. The normal profile is never imported or copied back in isolated mode.
+- Added the persistent isolated-data banner/path/title plus main-process blocks for claims, claim browser actions, updates, restore and external export/publishing actions. The normal profile is never imported or copied back in isolated mode.
 - Added strict bootstrap/path tests and packaged first/second-startup smokes. Source, unpacked package and headlessly extracted final AppImage all migrated a copied synthetic v4 profile to schema 7, preserved its row, made exactly one verified backup, made the second startup a no-op, left a separate synthetic default profile byte-for-byte unchanged and failed closed for unsafe targets.
 - Complete `npm test`, lint (four warnings, zero errors), formatting, typecheck, 92.89/70.05/97.29 coverage, accessibility, loopback mock portal, secret scan, 164-file release audit, zero-vulnerability production/full dependency audits, 509-package SBOM, Linux build, 1,035-entry/six-worker package audit and legacy/advanced packaged database smokes passed.
 - Final AppImage: `dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_64-beta.AppImage`, 387,168,744 bytes, SHA-256 `399c4cba3d7ef6a47494c8d2460881133d75f6632024c91ae6eeb02846d67a8f`.
@@ -159,7 +159,7 @@ Only external/manual gates remain: reviewed commits/clean source archive, produc
 - Root cause: `lib/app-storage.js` defines `ROOT` from `__dirname`; in a packaged build that resolves to `resources/app.asar`. The former `spawnJsonProcess` used `cwd: ROOT`, so Linux attempted to use the ASAR archive file as a directory and emitted `spawn ENOTDIR`.
 - The former Step 1 launch resolved to Electron's packaged `process.execPath`, `resources/app.asar/scripts/import-est-history.js`, and `cwd=resources/app.asar`. The executable was valid; the working directory was not, and workers also lacked a guaranteed real filesystem location.
 - Added `lib/runtime-workers.js` as the sole named Node-worker resolver/launcher. Development workers resolve from the source app path; Linux/Windows packaged workers resolve from `process.resourcesPath/app.asar.unpacked`; all use Electron's executable with `ELECTRON_RUN_AS_NODE=1` and a validated private `USER_DATA_ROOT/worker-runtime` directory.
-- Step 1, alternate shipping-history Step 1, Step 2 tracking, site health and submission use the same resolver. Missing executable/resource/cwd failures are actionable and occur before spawn. Step 1 waits for the child `spawn` event before its IPC call succeeds or its “started” event/log is emitted; spawn error immediately clears active state.
+- Step 1, alternate shipping-history Step 1, Step 2 tracking and submission use the same resolver. Missing executable/resource/cwd failures are actionable and occur before spawn. Step 1 waits for the child `spawn` event before its IPC call succeeds or its “started” event/log is emitted; spawn error immediately clears active state.
 - Electron Builder now narrowly unpacks the five workers, worker libraries/configuration, CA bundle, WSDL, Playwright packages, secure XML parser and bundled Chromium without disabling ASAR.
 - `tests/runtime-workers-test.js` covers development, packaged Linux, packaged Windows, ASAR/AppImage cwd rejection, directory validation, missing workers, spawn-state cleanup, start reporting and shared Step 1/Step 2 routing.
 - `scripts/smoke-packaged-est-worker.js` launched the packaged Electron executable in Node mode against a loopback-only synthetic EST service, imported one synthetic shipment to a temporary directory, exited 0 and confirmed `ENOTDIR=false`. No GUI or live Canada Post endpoint was used.

@@ -56,7 +56,7 @@
       "name": "Flat rate box",
       "scope": "DOMESTIC",
       "guaranteed": true,
-      "manualReview": true
+      "reviewRequired": true
     },
     "USA.XP": { "name": "Xpresspost USA", "scope": "USA", "guaranteed": true },
     "INT.XP": {

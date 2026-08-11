@@ -40,7 +40,7 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Source effective date: May 29, 2026
 - Rules derived: a business day excludes Saturday, Sunday, statutory holidays, and days normally observed as holidays by Canada Post; the guarantee is measured from acceptance (first physical item-level scan) to the time delivery was first attempted; domestic peak-period claims require delivery at least two business days after the standard; delay claims must be initiated within 30 business days from the delivery-standard date; specified services, air-stage limitations, Return to Sender, customer non-compliance, special handling, events beyond Canada Post's control, and other exclusions apply.
 - Ambiguities: customer-specific agreements and notices may alter or suspend the guarantee; many packaging, label, route, and cause facts cannot be inferred from tracking alone.
-- Implementation decision: first attempt is a distinct mandatory evidence field populated by the earliest qualifying attempt event. Successful delivery is itself a delivery attempt, so the same documented event may populate both first-attempt and actual-delivery fields with an explicit shared-event provenance flag. Earlier failed attempts remain authoritative over later delivery or pickup. Observable confirmed exclusions can be `NOT_ELIGIBLE`; possible exclusions enter `MANUAL_REVIEW`.
+- Implementation decision: first attempt is a distinct mandatory evidence field populated by the earliest qualifying attempt event. Successful delivery is itself a delivery attempt, so the same documented event may populate both first-attempt and actual-delivery fields with an explicit shared-event provenance flag. Earlier failed attempts remain authoritative over later delivery or pickup. Observable confirmed exclusions can be `NOT_ELIGIBLE`; possible exclusions remain `REVIEW_REQUIRED` and cannot enter Step 3.
 
 ### CP-GUIDE-2025-12-05 — Parcel Services Customer Guide
 
@@ -49,7 +49,7 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Source effective date: December 5, 2025
 - Rules derived: same first-attempt, business-day, peak-period, service, exclusion, and 30-business-day claim-window structure used by the current guide.
 - Ambiguities: the stable URL now resolves to the newer guide, so this version is retained only for the bounded period supported by the official indexed metadata and the specific 2025 peak notice.
-- Implementation decision: version boundary is explicit; uncertain differences require manual review.
+- Implementation decision: version boundary is explicit; uncertain differences remain `REVIEW_REQUIRED`.
 
 ### CP-LATE-PACKAGES-2026-07-26 — Claims: Late packages
 
@@ -58,7 +58,7 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Retrieved: July 26, 2026
 - Rules derived: only the sender may request a refund; listed guaranteed services are domestic Priority, Xpresspost, and Expedited Parcel, and outbound Priority Worldwide, Xpresspost USA, and Xpresspost International; the package must be delivered after its guaranteed time; the request window is 30 business days; customs delays are excluded for outbound shipments.
 - Ambiguities: the support page is a summary and does not establish every contract or route-specific exception.
-- Implementation decision: service table is versioned; unknown service codes and incomplete sender/claim data require manual review.
+- Implementation decision: service table is versioned; unknown service codes and incomplete sender/claim data remain `REVIEW_REQUIRED`.
 
 ### CP-DELIVERY-STANDARDS-2026-07-26 — Delivery standards and On-Time Delivery Guarantee
 
@@ -67,7 +67,7 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Retrieved: July 26, 2026
 - Rules derived: delivery standards use business days; returned/redirected items and multiple service/external-cause conditions are excluded; guarantees can be modified for peak periods or suspended for causes outside Canada Post's reasonable control.
 - Ambiguities: public notices and shipment-specific evidence are required to determine many suspensions.
-- Implementation decision: recognized signals for weather, labour, operational disruption, customs, standard adjustments, and possible suspension route to manual review unless a specific verified rule proves ineligibility.
+- Implementation decision: recognized signals for weather, labour, operational disruption, customs, standard adjustments, and possible suspension remain `REVIEW_REQUIRED` unless a specific verified rule proves ineligibility.
 
 ### CP-HOLIDAYS-2025-2026 — Official holiday schedule
 
@@ -76,7 +76,7 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Published coverage: 2025 and 2026; the predecessor official schedule supplied 2024 dates at https://www.canadapost-postescanada.ca/holidays
 - Rules derived: no regular collection or delivery occurs on the listed national, provincial, territorial, and observed holidays; explicit calendar dates are stored rather than calculated.
 - Ambiguities: provincial holidays require the applicable province/territory; Canada Post says a weekend holiday may be observed on the next business day, so only explicitly published observed dates are used.
-- Implementation decision: the calendar covers 2024–2026. Regional-holiday intervals without a route province and all dates outside coverage enter manual review.
+- Implementation decision: the calendar covers 2024–2026. Regional-holiday intervals without a route province and all dates outside coverage remain `REVIEW_REQUIRED`.
 
 ### CP-PEAK-2025 — Modifications to delivery guarantees during peak season
 
@@ -94,9 +94,9 @@ Eligibility sources were retrieved 2026-07-26; Developer Portal sources were ret
 - Published: January 7, 2025; effective for items inducted January 6, 2025
 - Rule derived: domestic on-time guarantees resumed for items inducted on or after January 6, 2025, with the then-current peak modification through January 12, 2025.
 - Ambiguities: this source does not define the full preceding suspension interval.
-- Implementation decision: automatic policy coverage begins January 6, 2025. Earlier shipments are manual review rather than assumed eligible or ineligible.
+- Implementation decision: automatic policy coverage begins January 6, 2025. Earlier shipments remain `REVIEW_REQUIRED` rather than assumed eligible or ineligible.
 
-## Manual-review fallback
+## Conservative fallback
 
-Manual review is mandatory for missing first-attempt evidence, conflicting events, unknown services/events, regional-holiday ambiguity, policy/calendar dates outside coverage, possible suspension or exclusion signals, and incomplete claim data. A human resolution is stored separately and never replaces the immutable automated classification.
+Missing first-attempt evidence, conflicting events, unknown services/events, regional-holiday ambiguity, policy/calendar dates outside coverage, possible suspension or exclusion signals, and incomplete claim data remain `REVIEW_REQUIRED`. These records are read-only in classification history and cannot enter Step 3; there is no eligibility-override workflow.
 > Operational-model update (2026-07-29): this document is retained as historical research and provenance only. The application no longer attempts to reproduce these complete policy rules. Step 2 identifies a delivered `LATE_CANDIDATE` when authoritative tracking shows successful delivery after the original/public Delivery Standard. First attempt is informational and revised estimates do not suppress that result. Canada Post makes the final eligibility decision.

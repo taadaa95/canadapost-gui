@@ -959,7 +959,7 @@ main.tabbed-main > .results-short {
 .history-toolbar .field { min-width: 0; }
 .history-toolbar button { white-space: nowrap; }
 
-.health-result {
+.browser-session-status {
   min-height: 36px;
   padding: 8px 10px;
   background: var(--field);
@@ -967,9 +967,9 @@ main.tabbed-main > .results-short {
   color: var(--muted);
   line-height: 1.35;
 }
-.health-result.good { border-color: var(--success); color: var(--success-text); background: var(--success-soft); }
-.health-result.warn { border-color: var(--warning); color: var(--warning-text); background: var(--warning-soft); }
-.health-result.bad { border-color: var(--danger); color: var(--danger-text); background: var(--danger-soft); }
+.browser-session-status.good { border-color: var(--success); color: var(--success-text); background: var(--success-soft); }
+.browser-session-status.warn { border-color: var(--warning); color: var(--warning-text); background: var(--warning-soft); }
+.browser-session-status.bad { border-color: var(--danger); color: var(--danger-text); background: var(--danger-soft); }
 
 .history-content {
   min-height: 0;
@@ -2067,7 +2067,7 @@ main.tabbed-main {
 .step-checks,
 .step-copy-box,
 .current-action,
-.health-result,
+.browser-session-status,
 .log,
 .history-list,
 .ops-table,
@@ -2434,7 +2434,7 @@ progress {
 .current-action,
 .settings-note,
 .step-copy-box,
-.health-result,
+.browser-session-status,
 .history-row > div,
 .reconciliation-row > div,
 .pill,
@@ -2979,7 +2979,6 @@ main.tabbed-main > .app-shell,
   font-size: 12px;
 }
 
-.portal-compatibility-advisory,
 .step3-action-advisory {
   margin-top: 10px;
   padding: 12px;
@@ -2987,44 +2986,22 @@ main.tabbed-main > .app-shell,
   background: var(--warning-soft);
 }
 
-.portal-compatibility-advisory.compatible {
-  border-color: var(--success);
-  background: rgba(34, 197, 94, .1);
-}
-
-.portal-compatibility-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.portal-compatibility-head h3,
 .step3-action-advisory h3 {
   margin: 0;
   font-size: 15px;
 }
 
-.portal-compatibility-advisory p {
-  margin: 8px 0 0;
-  line-height: 1.45;
-}
-
-.portal-compatibility-risk {
-  color: var(--warning-text);
-  font-weight: 700;
-}
-
-.portal-compatibility-actions {
+.step3-browser-session-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 10px;
 }
 
-.portal-browser-session-status {
-  color: var(--muted);
-  font-size: 12px;
+.step3-browser-session-row .browser-session-status {
+  flex: 1 1 260px;
+  margin: 0;
 }
 
 .step3-action-advisory .blocking-check-list {

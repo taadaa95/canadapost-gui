@@ -40,7 +40,7 @@ Bootstrap order changed from Electron loading `main.js`, which immediately impor
 
 The exact isolated inventory covers `database/app.sqlite` plus WAL/SHM; `database-backups` and `database/migration-backups`; `config.json`, `credentials.json`, `credential-key.bin`; the `data` root, tracking/claims/overdue/review CSVs, stop file, selected-claims/queue-snapshot prefixes, evidence and tracking-run staging; logs and Step 3 diagnostics; Chromium session data, persistent partition, profile and temporary profile prefix; worker runtime; cache/crash dumps; and `tmp/backup-restore`. Archive/encrypted-backup scratch files now accept the contained temporary directory.
 
-When active, the renderer shows the exact permanent warning and canonical path and Electron uses a title suffix. Main-process IPC rejects live claim submission, claim browser/site health, updates, restore, external backups/diagnostics/history exports and publishing-type actions. `app-storage` suppresses repository legacy-data copying in isolated mode, so the copied profile migrates normally but nothing is read from or written back to the default profile.
+When active, the renderer shows the exact permanent warning and canonical path and Electron uses a title suffix. Main-process IPC rejects live claim submission, claim browser actions, updates, restore, external backups/diagnostics/history exports and publishing-type actions. `app-storage` suppresses repository legacy-data copying in isolated mode, so the copied profile migrates normally but nothing is read from or written back to the default profile.
 
 New coverage is in `tests/user-data-bootstrap-test.js` and `scripts/smoke-packaged-isolated-profile.js`; packaging now starts from `bootstrap.js` and audits the new bootstrap/path/probe modules. The final unpacked package and headlessly extracted AppImage each passed first migration, schema/row checks, second-startup no-op, one-backup-only, byte-identical synthetic default-profile and unsafe-path rejection smokes without opening the GUI.
 
@@ -50,7 +50,7 @@ Final artifact: `dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_64
 
 The exact crash was the former `lib/claim-database.js:304` statement `ALTER TABLE classification_records ADD COLUMN run_id INTEGER REFERENCES runs(id) ON DELETE SET NULL;`. The old order was: unconditional version-1 table declarations; version-5 classification creation only when `user_version < 5`; then version-7 `run_id` alteration whenever `user_version < 7`. A partially migrated or falsely advanced version-5/6 database therefore skipped creation but still reached the `ALTER`.
 
-The new order is an explicit manifest in `lib/database-migrations.js`: core parents; legacy claim columns; shipment/tracking/classification objects (with `classification_records` before manual reviews and worker revalidations); finance; classification run scope; all dependent indexes; immutable triggers; schema version promotion. Actual `sqlite_master`, `table_info`, and index definitions are checked regardless of `user_version`. Supported additive missing columns are repaired explicitly; incompatible identity/relationship definitions fail closed.
+The new order is an explicit manifest in `lib/database-migrations.js`: core parents; legacy claim columns; shipment/tracking/classification objects (with `classification_records` before the retained legacy review table and worker revalidations); finance; classification run scope; all dependent indexes; immutable triggers; schema version promotion. Actual `sqlite_master`, `table_info`, and index definitions are checked regardless of `user_version`. Supported additive missing columns are repaired explicitly; incompatible identity/relationship definitions fail closed.
 
 One `BEGIN IMMEDIATE` transaction contains every schema change, validation, and `PRAGMA user_version = 7`. Failure rolls back all DDL/data effects and retains the incoming version. Successful migration requires `PRAGMA integrity_check = ok` and zero `foreign_key_check` rows. Existing runtime databases are first copied with SQLite's backup API to a unique timestamped owner-only path and the copy's integrity is verified. Backup names are never overwritten. Corrupt input is not replaced and receives a size-checked path explicitly labeled `unverified` when a verified SQLite backup is impossible.
 
@@ -82,7 +82,7 @@ Production token and tracking traffic is pinned to `api.canadapost-postescanada.
 
 The current client ID/secret are distinct encrypted fields from website/EST and deprecated legacy Developer Program credentials. Tokens are never persisted. A worker caches them using a monotonic expiry, refreshes early, clears them on authentication failure/shutdown, and allows exactly one token refresh/resource retry after a 401. Credential or environment changes invalidate the one-shipment diagnostic gate; the API version is part of that gate.
 
-Current JSON parsing validates required detail/event fields, rejects a mismatched response PIN, ignores unknown properties, and preserves expected/changed expected delivery, canonical service provenance, active/archive flags, delivery/attempt/notice/exception categories, and event time/timezone. Persisted evidence omits raw response fragments, locations, references, and free-form descriptions. Incomplete evidence routes to manual review. Safe diagnostics prioritize status semantics, so an HTML 504 is a gateway timeout, and preserve no response body or recoverable secret metadata.
+Current JSON parsing validates required detail/event fields, rejects a mismatched response PIN, ignores unknown properties, and preserves expected/changed expected delivery, canonical service provenance, active/archive flags, delivery/attempt/notice/exception categories, and event time/timezone. Persisted evidence omits raw response fragments, locations, references, and free-form descriptions. Incomplete evidence remains `REVIEW_REQUIRED` and cannot enter Step 3. Safe diagnostics prioritize status semantics, so an HTML 504 is a gateway timeout, and preserve no response body or recoverable secret metadata.
 
 Migration-specific files: `index.html`, `renderer.js`, `preload.js`, `main.js`, `package.json`, `package-lock.json`, `eslint.config.js`, `user.ini.example`; `lib/app-storage.js`, `lib/runtime-secrets.js`, `lib/preflight.js`, `lib/canadapost-api.js`, `lib/canadapost-errors.js`, `lib/tracking-client.js`, `lib/tracking-contract.js`, `lib/tracking-oauth.js`, `lib/tracking-json.js`, `lib/tracking-diagnostic-gate.js`, `lib/legacy-tracking-client.js`, `lib/tracking-normalizer.js`; `scripts/get-tracking.js`, `scripts/smoke-packaged-tracking-worker.js`; `tests/tracking-api-v2-test.js`, `tests/integration-failure-handling-test.js`, `tests/node-migration-test.js`, `tests/storage-test.js`, `tests/preflight-test.js`, `tests/ui-contract-test.js`, `tests/fixtures/tracking-api-1.0.0.contract.json`; and the requested documentation/status files.
 
@@ -111,10 +111,10 @@ Major new or extracted systems include:
 - policy/calendar/domain: `config/policy-rules.json`, `config/holiday-calendar.json`, `lib/policy-engine.js`, `lib/business-calendar.js`, `lib/claim-domain.js`;
 - tracking/import: `lib/tracking-normalizer.js`, `lib/canadapost-api.js`, `lib/secure-xml.js`, parsers/CSV/output modules and three Node CLI scripts;
 - packaged manual-test fixes: `lib/canadapost-errors.js` and `lib/tracking-client.js`; revised EST/tracking workers, main/renderer result handling, legacy EST fixtures, systemic-failure integration tests and four package-level worker smokes;
-- submission safety: `lib/eligibility-revalidation.js`, reviewed queue hashes, worker revalidation, manual-review UI/IPC and fault points;
+- submission safety: `lib/eligibility-revalidation.js`, reviewed queue hashes, worker revalidation, conservative `REVIEW_REQUIRED` exclusion and fault points;
 - persistence: SQLite schema 6, immutable evidence/classifications, queue snapshots, audits, structured claim data and financial entries;
 - release/package: explicit allowlist, redacting scanner, safe staging, artifact/content audits, manifests/checksums, CycloneDX/licences, Electron Builder and Linux/Windows CI;
-- packaged workers: `lib/runtime-workers.js` provides the single validated Node-worker map, development/Linux/Windows resolution, real-directory preflight and Electron-as-Node spawning for EST history, shipping history, tracking, site health and submission;
+- packaged workers: `lib/runtime-workers.js` provides the single validated Node-worker map, development/Linux/Windows resolution, real-directory preflight and Electron-as-Node spawning for EST history, shipping history, tracking and submission;
 - browser/security: `WebContentsView`, explicit renderer sandbox, production/test origin policy, navigation/permission/download blocking and session reset controls;
 - recovery/product: encrypted backups, first-run wizard, queue filters, separated eligibility queues, money reporting, localization, accessibility, local crash reports and signed-update verification;
 - documentation: policy sources, threat model, migrations, privacy/retention, backup, support, incident, legal, lifecycle, signing, accessibility, French support/release, pilot and manual gates.
@@ -130,7 +130,7 @@ Official sources retrieved July 26, 2026 are registered in `docs/POLICY_SOURCES.
 - uses explicit service/effective-date rules and a versioned 2024–2026 Canada Post holiday calendar;
 - applies the official 2025 peak period to domestic covered services mailed November 3, 2025 through January 11, 2026, requiring at least two business days late;
 - calculates the 30-business-day submission deadline and remaining verified business days;
-- treats unknown service/events, missing attempt evidence, ambiguous regional holidays, policy/calendar gaps, conflicting events and possible exclusions/suspensions as manual review or insufficient data;
+- treats unknown service/events, missing attempt evidence, ambiguous regional holidays, policy/calendar gaps, conflicting events and possible exclusions/suspensions as `REVIEW_REQUIRED` or insufficient data;
 - preserves raw/normalized evidence hashes and returns deterministic classifications, reason codes, source IDs and explanations.
 
 ## 5. Security changes
@@ -145,7 +145,7 @@ Official sources retrieved July 26, 2026 are registered in `docs/POLICY_SOURCES.
 
 ## 6. Database migrations
 
-Schema 5 adds first-attempt fields, immutable normalized events/classifications, current pointers, manual reviews, audit events, claim details, queue snapshots/items and worker revalidations. Schema 6 adds append-only currency-aware financial entries using integer minor units. Schema 7 links classifications to the Step 2 run that promoted them so incomplete-run discard can restore preceding completed pointers without deleting immutable history. Migrations are forward-only, transactional and additive; integrity, representative upgrades, idempotency and historical preservation are tested. Restore preserves rollback copies and validates the candidate database before replacement.
+Schema 5 adds first-attempt fields, immutable normalized events/classifications, current pointers, the now-dormant legacy review table, audit events, claim details, queue snapshots/items and worker revalidations. Schema 6 adds append-only currency-aware financial entries using integer minor units. Schema 7 links classifications to the Step 2 run that promoted them so incomplete-run discard can restore preceding completed pointers without deleting immutable history. Migrations are forward-only, transactional and additive; integrity, representative upgrades, idempotency and historical preservation are tested. Restore preserves rollback copies and validates the candidate database before replacement.
 
 ## 7. Packaging changes
 
@@ -254,7 +254,7 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 
 - Main/renderer and submit-worker orchestrators remain large; major domain/security responsibilities were extracted, but two complexity warnings document follow-up refactoring targets.
 - Canadian French catalog infrastructure, primary navigation/readiness/financial terminology and French support/release documents exist, but legacy UI and dynamic messages require a complete human language review before calling localization complete.
-- Automated Electron coverage does not yet drive the entire import → classification → manual review → queue → dry-run → crash/restore lifecycle inside one GUI process. Unit/integration/mock coverage exists; human end-to-end validation is required by user direction.
+- Automated Electron coverage does not yet drive the entire import → classification → queue → dry-run → crash/restore lifecycle inside one GUI process. Unit/integration/mock coverage exists; human end-to-end validation is required by user direction.
 - Fault points and duplicate/reconciliation invariants are tested at module/worker-contract level; platform crash behavior still needs supervised packaged rehearsal.
 - Linux AppImage uses the default Electron icon.
 - Policy/calendar auto-classification coverage ends in 2026 and must be updated from official sources.

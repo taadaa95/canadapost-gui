@@ -17,7 +17,7 @@
 5. Architecture decomposition: `fd04aa7`
 6. IPC/worker boundaries: `96454b6`
 7. Resumable onboarding and supported themes: `a9219f8`
-8. Support bundle and portal compatibility: `283dd12`
+8. Support bundle: `283dd12`
 9. Release guard, CI canonicalization, provenance, and this report: final PR-head commit
 
 ## Architecture and security summary
@@ -28,11 +28,11 @@ Stale policy is advisory and cannot expire or block an otherwise valid late cand
 
 The GitHub Releases updater accepts only a fixed repository/allowlisted hosts and fails closed without a configured Ed25519 public key, canonical signed manifest, exact release/tag/channel/platform/architecture/version/size/hash agreement, user confirmation, operation lock, and pre-update database backup. No private signing key is present.
 
-Live batches additionally require a healthy portal-controls-v1 fingerprint no older than seven days. Unknown stages or missing controls block live work while dry diagnostics remain available. Support exports require preview/acknowledgment; logs, masked history, and Step 3 diagnostics are opt-in, while credentials, tokens, cookies, browser profiles, raw API bodies, screenshots, full tracking numbers, and contact/address data are excluded.
+Support exports require preview/acknowledgment; logs, masked history, and Step 3 diagnostics are opt-in, while credentials, tokens, cookies, browser profiles, raw API bodies, screenshots, full tracking numbers, and contact/address data are excluded.
 
 ## Data and migration impact
 
-There is no new Dev 11 database schema migration. Schema version remains `8`. Existing startup backup, structural reconciliation, transactional migration, rollback, privacy deletion, and isolated-profile protections remain in force. Portal compatibility reuses the existing `runs` table metadata and support bundles are user-selected local ZIP exports.
+There is no new Dev 11 database schema migration. Schema version remains `8`. Existing startup backup, structural reconciliation, transactional migration, rollback, privacy deletion, and isolated-profile protections remain in force. The dormant legacy `manual_reviews` table and `manual_review_state` column remain for upgrade compatibility, but the application no longer creates, displays, counts, or resolves those records. Support bundles are user-selected local ZIP exports.
 
 ## Package result
 
@@ -56,7 +56,7 @@ Do not publish or merge when a required check fails. Stop live operations, prese
 - Supply and protect the offline production Ed25519 private key; configure its reviewed public key in source; sign/verify exact post-signing manifests outside the repository.
 - Obtain legal, privacy, EULA, trademark, policy, holiday-calendar, and support/lifecycle approval.
 - Perform human physical clean-install, launch, visual/keyboard, upgrade/migration, backup/restore, rollback, uninstall, and residue checks on supported Windows and Linux machines.
-- With authorized real credentials only, perform the website/API diagnostic, CAPTCHA/text verification, supervised Step 1/Step 2 procedure, automatic live Step 3 portal-compatibility validation, dry run, one-claim canary, and reconciliation. No automated session may do this.
+- With authorized real credentials only, perform the website/API diagnostic, CAPTCHA/text verification, supervised Step 1/Step 2 procedure, dry run, one-claim canary, and reconciliation. Confirm that only `LATE_CANDIDATE` reaches Step 3 and that `REVIEW_REQUIRED`/`TRACKING_ERROR` stay excluded. No automated session may do this.
 - Execute and review the customer pilot with staffed support and deletion/incident rehearsals.
 
 Until every gate is signed off, this is an unsigned public-beta candidate, not a production-signed or stable release.

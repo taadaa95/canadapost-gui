@@ -3,7 +3,6 @@
 const assert = require('assert');
 const { chromium } = require('playwright');
 const { createMockPortal, SCENARIOS } = require('../mock-portal/server');
-const portalCompatibility = require('../lib/portal-compatibility');
 
 const TEST_TIMEOUT_MS = 120000;
 const CLEANUP_TIMEOUT_MS = 10000;
@@ -52,12 +51,6 @@ const watchdog = setTimeout(() => {
     await page.getByLabel('Street Number').fill('1');
     await page.getByLabel('Street Name').selectOption({ label: 'Example Street' });
     assert.strictEqual(await page.getByLabel('Street Number').inputValue(), '1');
-    const fingerprint = portalCompatibility.evaluateHealthResult({
-      ok: true, status: 'healthy', code: 'HEALTHY', navigationVisited: ['support', 'late', 'ticket'],
-      checks: { domain: true, authenticated: true, claimNavigation: true, latePackageControl: true, ticketLauncher: true }
-    });
-    assert.strictEqual(fingerprint.compatible, true, 'the synthetic expected stages and controls must produce a compatible fingerprint');
-
     const changed = await page.goto(`${origin}/cpc/en/support/kb/claims/late-packages.page?scenario=changed-selector`);
     assert.strictEqual(changed.status(), 200);
     assert.strictEqual(await page.locator('#ticket_open').count(), 0);

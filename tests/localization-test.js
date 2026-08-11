@@ -33,8 +33,6 @@ const identicalFrenchAllowlist = new Map([
   ['history.message', 'Message is the natural French cognate.'],
   ['history.actions', 'Actions is the natural French cognate.'],
   ['runStatus.captcha', 'CAPTCHA is an international technical acronym.'],
-  ['step3.compatibility.status.compatible', 'Compatible is the same French cognate.'],
-  ['step3.compatibility.status.incompatible', 'Incompatible is the same French cognate.'],
   ['common.absent', 'Absent is the natural French cognate.'],
   ['common.date', 'Date is the natural French cognate.']
 ]);
