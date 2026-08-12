@@ -46,7 +46,8 @@ class SyntheticChild extends EventEmitter {
       ...layout,
       userDataPath: userData,
       isPackaged: true,
-      platform: 'darwin'
+      platform: 'darwin',
+      pathApi: path
     });
     let spawnCall;
     const launch = spawnResolvedWorker(resolution, {}, {
