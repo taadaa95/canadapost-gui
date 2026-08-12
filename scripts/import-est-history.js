@@ -11,6 +11,14 @@ const { parseEstManifestItems } = require('../lib/canadapost-parsers');
 const { parseManifestItemRows, parseEstExportBlocks, assessEstImportQuality } = require('../lib/est-import-schema');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
 const { writeTrackingCsvAtomic } = require('../lib/import-output');
+const {
+  dateVariants,
+  splitDateRange,
+  resolveOrderRange,
+  unresolvedRangeError,
+  cancellationError,
+  SEGMENT_STATES
+} = require('../lib/est-order-ranges');
 const { looksHtml, redactedText } = (() => {
   const errors = require('../lib/canadapost-errors');
   return { looksHtml: errors.looksHtml, redactedText: errors.redactText };
@@ -34,14 +42,6 @@ function isoDate(value) {
 }
 function numeric(value, label) { const text = String(value || '').trim(); if (!/^-?\d{1,30}$/.test(text)) throw new Error(`${label} must be numeric.`); return text; }
 function uniqueScalars(parsed, names) { return [...new Set(names.flatMap(name => findAll(parsed, name).map(scalar)).map(value => value.trim()).filter(value => value && value.length <= 128 && !/^(?:true|false|null)$/i.test(value)))]; }
-function dateVariants(from, to) {
-  const fromIso = isoDate(from); const toIso = isoDate(to);
-  if (fromIso > toIso) throw new Error('EST start date must not be after end date.');
-  return [
-    { label: 'iso', from: fromIso, to: toIso },
-    { label: 'yyyymmdd', from: fromIso.replace(/-/g, ''), to: toIso.replace(/-/g, '') }
-  ];
-}
 function leafScalars(value, output = []) {
   if (Array.isArray(value)) { for (const item of value) leafScalars(item, output); return output; }
   if (value && typeof value === 'object') {
@@ -285,7 +285,9 @@ async function main() {
   const exportDir = path.join(dataDir, 'est-export');
   fs.mkdirSync(exportDir, { recursive: true, mode: 0o700 });
   const customer = numeric(process.env.EST_CUSTOMER_NUMBER, 'EST customer number');
-  const variants = dateVariants(process.env.EST_FROM, process.env.EST_TO);
+  const requestedFrom = isoDate(process.env.EST_FROM);
+  const requestedTo = isoDate(process.env.EST_TO);
+  const segments = splitDateRange(requestedFrom, requestedTo);
   const category = String(process.env.EST_CATEGORY_GROUP || 'SHP').toUpperCase(); if (!['SHP', 'OSS'].includes(category)) throw new Error('EST category group must be SHP or OSS.');
   const mobo = numeric(process.env.EST_MOBO || '-2', 'EST MOBO');
   const fileTypes = requiredEstFileTypes(process.env.EST_FILETYPES || '1,2');
@@ -303,6 +305,8 @@ async function main() {
     allowMock,
     retries: method === 'GET' ? 2 : 0
   });
+  const shouldStop = () => Boolean(process.env.STOP_FILE && fs.existsSync(process.env.STOP_FILE));
+  const assertNotStopped = () => { if (shouldStop()) throw cancellationError(); };
   const connect = await call('GET', `${origin}/dop/connect`, 'application/vnd.cpc.dop-v1+xml');
   parseXmlOrThrow(connect.body, 'EST connection response');
   emit('est_connect', { status: connect.status, responseType: 'xml', byteLength: Buffer.byteLength(connect.body) });
@@ -323,29 +327,59 @@ async function main() {
     }
   }
   if (!workgroups.length) workgroups = [customer];
-  const all = []; const seen = new Set(); let totalOrders = 0; let exports = 0; let successfulOrderProbes = 0; let failedOrderProbes = 0;
-  const structuralTotals = { requests: 0, rejectionCounts: {} };
-  const filetypeResults = Object.fromEntries(diagnosticFileTypes.map(combination => [combination, { requests: 0, manifestResponses: 0, manifestItemsResponses: 0, combinedResponses: 0 }]));
+  if (segments.length > 1) emit('est_range_segmented', {
+    segmentCount: segments.length,
+    message: `Shipment History range will be checked in ${segments.length} date segments.`
+  });
+  const resolvedWorkgroups = [];
+  let adaptiveSplitLogged = false;
   for (let workgroupIndex = 0; workgroupIndex < workgroups.length; workgroupIndex += 1) {
     const workgroup = workgroups[workgroupIndex];
-    if (process.env.STOP_FILE && fs.existsSync(process.env.STOP_FILE)) break;
-    let orderIds = [];
-    for (const dates of variants) {
-      try {
-        const response = await call('GET', `${origin}/ship/desktop/${customer}/${workgroup}/${category}/order/${dates.from}/${dates.to}/${mobo}`, 'application/vnd.cpc.ship-v1+xml');
-        const parsedOrders = extractOrderIds(response.body);
-        successfulOrderProbes += 1;
-        orderIds = parsedOrders.ids;
-        emit('est_orders', { count: orderIds.length, dateFormat: dates.label, responseType: parsedOrders.format, byteLength: Buffer.byteLength(response.body) });
-        if (orderIds.length) break;
-      } catch (error) {
-        if (error.code === 'EST_UNEXPECTED_LOGIN_HTML') throw error;
-        failedOrderProbes += 1;
-        emit('est_warning', { message: `An EST order lookup failed: ${error.message}`, reasonCode: error.code || 'EST_ORDER_LOOKUP_FAILED' });
+    const orderIds = new Set();
+    for (const segment of segments) {
+      const result = await resolveOrderRange({
+        segment,
+        shouldStop,
+        lookup: dates => call('GET', `${origin}/ship/desktop/${customer}/${workgroup}/${category}/order/${dates.from}/${dates.to}/${mobo}`, 'application/vnd.cpc.ship-v1+xml'),
+        parseOrders: response => extractOrderIds(response.body),
+        onAdaptiveSplit: () => {
+          if (adaptiveSplitLogged) return;
+          adaptiveSplitLogged = true;
+          emit('est_range_adaptive_split', {
+            message: 'Canada Post rejected a broad history range; retrying it in smaller date segments.'
+          });
+        }
+      });
+      if (result.state === SEGMENT_STATES.FAILURE) {
+        throw unresolvedRangeError(result, { workgroupOrdinal: workgroupIndex + 1 });
+      }
+      for (const orderId of result.orderIds) orderIds.add(orderId);
+      if (segments.length === 1 && result.state !== SEGMENT_STATES.SPLIT_AND_RESOLVED) {
+        emit('est_orders', {
+          count: result.orderIds.length,
+          dateFormat: result.dateFormat,
+          responseType: result.responseType,
+          byteLength: Buffer.byteLength(result.response?.body || '')
+        });
       }
     }
+    if (segments.length > 1 || adaptiveSplitLogged) emit('est_orders', {
+      count: orderIds.size,
+      dateFormat: 'segmented',
+      responseType: 'aggregated'
+    });
+    resolvedWorkgroups.push({ workgroup, workgroupIndex, orderIds: [...orderIds] });
+  }
+
+  assertNotStopped();
+  const all = []; const seen = new Set(); let totalOrders = 0; let exports = 0;
+  const structuralTotals = { requests: 0, rejectionCounts: {} };
+  const filetypeResults = Object.fromEntries(diagnosticFileTypes.map(combination => [combination, { requests: 0, manifestResponses: 0, manifestItemsResponses: 0, combinedResponses: 0 }]));
+  for (const { workgroup, workgroupIndex, orderIds } of resolvedWorkgroups) {
+    assertNotStopped();
     totalOrders += orderIds.length;
     for (let offset = 0; offset < orderIds.length; offset += 200) {
+      assertNotStopped();
       const chunk = orderIds.slice(offset, offset + 200);
       const body = `<?xml version="1.0" encoding="UTF-8"?><list>${chunk.map(id => `<string>${escapeXml(id)}</string>`).join('')}</list>`;
       for (const requestedFileTypes of diagnosticFileTypes) {
@@ -385,7 +419,6 @@ async function main() {
       }
     }
   }
-  if (!successfulOrderProbes && failedOrderProbes) throw Object.assign(new Error('All EST order lookups failed; no empty-result conclusion was recorded.'), { code: 'EST_ORDER_LOOKUP_SYSTEMIC_FAILURE' });
   if (totalOrders === 0) {
     emit('est_complete', { outcome: 'EMPTY', reasonCode: 'EST_NO_ORDERS', message: 'Completed — no EST orders found for the selected date range.', imported: 0, orders: 0, exports: 0, trackingCsvPreserved: true });
     return;
@@ -428,5 +461,5 @@ async function main() {
   emit('est_complete', { outcome: quality.optionalMetadataWarnings ? 'IMPORTED_WITH_WARNINGS' : 'IMPORTED', reasonCode: quality.optionalMetadataWarnings ? 'EST_ORDERS_IMPORTED_WITH_OPTIONAL_METADATA_WARNINGS' : 'EST_ORDERS_IMPORTED', message: quality.optionalMetadataWarnings ? 'EST Desktop history export completed. Rows with valid Tracking PINs were retained and optional metadata warnings were reported.' : 'EST Desktop history export complete.', imported: promotable.length, excluded: quality.incompleteRows, optionalMetadataWarnings: quality.optionalMetadataWarnings, orders: totalOrders, exports, trackingCsvPreserved: false });
 }
 
-if (require.main === module) main().catch(error => { emit('error', { message: error.message, reasonCode: error.code || 'EST_IMPORT_FAILED', trackingCsvPreserved: true }); process.exitCode = 1; });
+if (require.main === module) main().catch(error => { emit('error', { message: error.message, reasonCode: error.code || 'EST_IMPORT_FAILED', diagnostic: error.diagnostic, trackingCsvPreserved: true }); process.exitCode = 1; });
 module.exports = { main, isoDate, numeric, requiredEstFileTypes, dateVariants, leafScalars, numericLeafIds, extractOrderIds, exportBlocks, analyzeExportResponse };

@@ -707,6 +707,8 @@
   "event.est.mobos": "Diagnostic MOBO EST pour le groupe de travail {workgroup} : {count} valeur(s).",
   "event.est.probe": "Sonde EST : {url}",
   "event.est.orders": "Identifiants de commandes EST trouvés avec le format de date {format} : {count}.",
+  "event.est.rangeSegmented": "La plage de l’historique des envois sera vérifiée en {count} segments de dates.",
+  "event.est.rangeAdaptiveSplit": "Postes Canada a rejeté une vaste plage d’historique; nouvel essai avec des segments de dates plus courts.",
   "event.est.chunkParsed": "Lot d’exportation EST {chunk} analysé. Commandes : {orders}; lignes ManifestItems : {rows}.",
   "event.est.chunkStarted": "Lot d’exportation EST {chunk} démarré. Commandes : {orders}; filetypes={fileTypes}.",
   "event.est.exportDiagnostic": "Exportation EST reconnue comme {format}; lignes analysées : {rows}.",

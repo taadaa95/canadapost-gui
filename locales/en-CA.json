@@ -707,6 +707,8 @@
   "event.est.mobos": "EST MOBO diagnostic for workgroup {workgroup}: {count} values.",
   "event.est.probe": "EST probe: {url}",
   "event.est.orders": "EST order IDs found using {format} dates: {count}.",
+  "event.est.rangeSegmented": "Shipment History range will be checked in {count} date segments.",
+  "event.est.rangeAdaptiveSplit": "Canada Post rejected a broad history range; retrying it in smaller date segments.",
   "event.est.chunkParsed": "EST export chunk {chunk} parsed. Orders: {orders}; ManifestItems rows: {rows}.",
   "event.est.chunkStarted": "EST export chunk {chunk} started. Orders: {orders}; filetypes={fileTypes}.",
   "event.est.exportDiagnostic": "EST export recognized as {format}; parsed rows: {rows}.",

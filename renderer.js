@@ -1327,6 +1327,8 @@ function describeEvent(stage, event) {
     }
     if (type === 'est_mobos') return trf('event.est.mobos', { workgroup: event.workgroup || '—', count: event.count || 0 }, 'EST MOBO diagnostic for workgroup {workgroup}: {count} values.');
     if (type === 'est_probe') return localizedEventMessage || trf('event.est.probe', { url: event.url || '' }, 'EST probe: {url}');
+    if (type === 'est_range_segmented') return trf('event.est.rangeSegmented', { count: event.segmentCount || 0 }, 'Shipment History range will be checked in {count} date segments.');
+    if (type === 'est_range_adaptive_split') return tr('event.est.rangeAdaptiveSplit', 'Canada Post rejected a broad history range; retrying it in smaller date segments.');
     if (type === 'est_orders') {
       state.step1Orders += event.count || 0;
       return trf('event.est.orders', { format: event.dateFormat || tr('common.date', 'date'), count: event.count || 0 }, 'EST order IDs found using {format} dates: {count}.');

@@ -8,6 +8,16 @@ const os = require('os');
 const path = require('path');
 const { analyzeExportResponse, extractOrderIds } = require('../scripts/import-est-history');
 const { parseCanadaPostError, htmlPageClassification } = require('../lib/canadapost-errors');
+const {
+  SEGMENT_STATES,
+  addCalendarDays,
+  dateSpanDays,
+  splitDateRange,
+  bisectDateRange,
+  lookupOrdersForSegment,
+  resolveOrderRange,
+  unresolvedRangeError
+} = require('../lib/est-order-ranges');
 const { SystemicCircuitBreaker } = require('../lib/tracking-client');
 const { rowsAsObjects } = require('../lib/csv');
 
@@ -19,6 +29,19 @@ function startServer(handler) {
   return new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve({ server, baseUrl: `http://127.0.0.1:${server.address().port}` })); });
 }
 function stopServer(server) { return new Promise(resolve => server.close(resolve)); }
+
+function syntheticServiceError(status, applicationCode = `SYNTHETIC_${status}`) {
+  return Object.assign(new Error(`Synthetic HTTP ${status}`), {
+    status,
+    code: applicationCode,
+    diagnostic: {
+      status,
+      applicationCode,
+      message: `Sanitized synthetic HTTP ${status}`,
+      category: 'request'
+    }
+  });
+}
 
 function runWorker(script, env, stdin = { clientId: 'synthetic-client', clientSecret: 'synthetic-secret', environment: 'test' }) {
   return new Promise(resolve => {
@@ -52,6 +75,139 @@ function trackingCsv(count) {
   return `Tracking PIN,Destination Postal Code,Reference #,Service Code,Shipment Date\n${rows}\n`;
 }
 
+async function testEstDateRangesAndResolution() {
+  assert.deepStrictEqual(splitDateRange('2026-07-01', '2026-07-01'), [{ from: '2026-07-01', to: '2026-07-01' }]);
+  assert.deepStrictEqual(splitDateRange('2026-07-01', '2026-07-30'), [{ from: '2026-07-01', to: '2026-07-30' }]);
+  assert.deepStrictEqual(splitDateRange('2026-07-01', '2026-07-31'), [
+    { from: '2026-07-01', to: '2026-07-30' },
+    { from: '2026-07-31', to: '2026-07-31' }
+  ]);
+  assert.deepStrictEqual(splitDateRange('2026-07-01', '2026-08-12'), [
+    { from: '2026-07-01', to: '2026-07-30' },
+    { from: '2026-07-31', to: '2026-08-12' }
+  ]);
+  assert.deepStrictEqual(splitDateRange('2026-12-20', '2027-01-20'), [
+    { from: '2026-12-20', to: '2027-01-18' },
+    { from: '2027-01-19', to: '2027-01-20' }
+  ]);
+  assert.deepStrictEqual(splitDateRange('2028-02-28', '2028-03-01', 1), [
+    { from: '2028-02-28', to: '2028-02-28' },
+    { from: '2028-02-29', to: '2028-02-29' },
+    { from: '2028-03-01', to: '2028-03-01' }
+  ]);
+  const rollover = splitDateRange('2026-01-25', '2026-03-03', 7);
+  assert.strictEqual(rollover.reduce((total, segment) => total + dateSpanDays(segment.from, segment.to), 0), 38);
+  for (let index = 1; index < rollover.length; index += 1) {
+    assert.strictEqual(rollover[index].from, addCalendarDays(rollover[index - 1].to, 1), 'segments must have neither gaps nor overlaps');
+  }
+  assert.deepStrictEqual(bisectDateRange('2026-07-01', '2026-07-30'), [
+    { from: '2026-07-01', to: '2026-07-15' },
+    { from: '2026-07-16', to: '2026-07-30' }
+  ]);
+
+  const parser = response => ({ ids: response.ids, format: 'synthetic' });
+  let lookups = 0;
+  const normal = await lookupOrdersForSegment({
+    segment: { from: '2026-07-01', to: '2026-07-10' },
+    lookup: async dates => { lookups += 1; return { status: 200, ids: [`ORDER-${dates.label}`] }; },
+    parseOrders: parser
+  });
+  assert.strictEqual(normal.state, SEGMENT_STATES.SUCCESS_WITH_ORDERS);
+  assert.deepStrictEqual(normal.orderIds, ['ORDER-iso']);
+  assert.strictEqual(lookups, 1, 'a normal successful lookup must retain the existing first-format behavior');
+
+  lookups = 0;
+  const empty = await lookupOrdersForSegment({
+    segment: { from: '2026-07-01', to: '2026-07-10' },
+    lookup: async () => { lookups += 1; return { status: 200, ids: [] }; },
+    parseOrders: parser
+  });
+  assert.strictEqual(empty.state, SEGMENT_STATES.SUCCESS_EMPTY);
+  assert.strictEqual(lookups, 2, 'both established encodings remain supported for an empty result');
+
+  const requestedFormats = [];
+  const secondEncoding = await lookupOrdersForSegment({
+    segment: { from: '2026-07-01', to: '2026-07-10' },
+    lookup: async dates => {
+      requestedFormats.push(dates);
+      if (dates.label === 'iso') throw syntheticServiceError(400);
+      return { status: 200, ids: ['ORDER-COMPACT'] };
+    },
+    parseOrders: parser
+  });
+  assert.strictEqual(secondEncoding.state, SEGMENT_STATES.SUCCESS_WITH_ORDERS);
+  assert.deepStrictEqual(requestedFormats.map(item => [item.from, item.to]), [
+    ['2026-07-01', '2026-07-10'],
+    ['20260701', '20260710']
+  ]);
+
+  let splitNotices = 0;
+  lookups = 0;
+  const bisected = await resolveOrderRange({
+    segment: { from: '2026-07-01', to: '2026-07-30' },
+    lookup: async dates => {
+      lookups += 1;
+      const normalizedFrom = dates.from.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      const normalizedTo = dates.to.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      if (dateSpanDays(normalizedFrom, normalizedTo) > 15) throw syntheticServiceError(409, 'RANGE_TOO_BROAD');
+      return { status: 200, ids: [`ORDER-${normalizedFrom}`, 'ORDER-DUPLICATE'] };
+    },
+    parseOrders: parser,
+    onAdaptiveSplit: () => { splitNotices += 1; }
+  });
+  assert.strictEqual(bisected.state, SEGMENT_STATES.SPLIT_AND_RESOLVED);
+  assert.deepStrictEqual(bisected.orderIds, ['ORDER-2026-07-01', 'ORDER-DUPLICATE', 'ORDER-2026-07-16']);
+  assert.strictEqual(lookups, 4, 'the rejected parent uses two formats and successful children use one each');
+  assert.strictEqual(splitNotices, 1);
+
+  const recursive = await resolveOrderRange({
+    segment: { from: '2026-01-01', to: '2026-01-16' },
+    lookup: async dates => {
+      const from = dates.from.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      const to = dates.to.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      if (dateSpanDays(from, to) > 2) throw syntheticServiceError(409);
+      return { status: 200, ids: [`ORDER-${from}`] };
+    },
+    parseOrders: parser
+  });
+  assert.strictEqual(recursive.state, SEGMENT_STATES.SPLIT_AND_RESOLVED);
+  assert.strictEqual(recursive.orderIds.length, 8, 'recursive 409 splitting must terminate and combine every child');
+
+  const oneDay = await resolveOrderRange({
+    segment: { from: '2026-07-01', to: '2026-07-01' },
+    lookup: async () => { throw syntheticServiceError(409, 'XML_RANGE_CODE'); },
+    parseOrders: parser
+  });
+  assert.strictEqual(oneDay.state, SEGMENT_STATES.FAILURE);
+  assert.strictEqual(oneDay.allAttemptsConflict, true);
+  const oneDayError = unresolvedRangeError(oneDay, { workgroupOrdinal: 2 });
+  assert.strictEqual(oneDayError.diagnostic.status, 409);
+  assert.strictEqual(oneDayError.diagnostic.applicationCode, 'XML_RANGE_CODE');
+  assert.deepStrictEqual(oneDayError.diagnostic.failedDateSpan, { from: '2026-07-01', to: '2026-07-01' });
+  assert.strictEqual(oneDayError.diagnostic.workgroupOrdinal, 2);
+
+  splitNotices = 0;
+  const clientFailure = await resolveOrderRange({
+    segment: { from: '2026-07-01', to: '2026-07-30' },
+    lookup: async () => { throw syntheticServiceError(400); },
+    parseOrders: parser,
+    onAdaptiveSplit: () => { splitNotices += 1; }
+  });
+  assert.strictEqual(clientFailure.state, SEGMENT_STATES.FAILURE);
+  assert.strictEqual(splitNotices, 0, 'non-409 failures must not trigger range splitting');
+
+  let stopChecks = 0;
+  await assert.rejects(
+    resolveOrderRange({
+      segment: { from: '2026-07-01', to: '2026-07-30' },
+      shouldStop: () => { stopChecks += 1; return stopChecks >= 3; },
+      lookup: async () => ({ status: 200, ids: [] }),
+      parseOrders: parser
+    }),
+    error => error.code === 'EST_IMPORT_STOPPED'
+  );
+}
+
 function detail(pin) {
   return { pin, activeExists: true, archiveExists: false, expectedDeliveryDate: '2026-06-03', serviceName: 'Xpresspost', signatureImageExists: false, suppressSignature: false, significantEvents: [{ eventIdentifier: 'DELIVERED', eventDate: '2026-06-05', eventTime: '12:00:00', eventTimeZone: 'EDT', eventDescription: 'Delivered' }] };
 }
@@ -71,6 +227,153 @@ async function testEstWorkers() {
       assert.ok(!result.stdout.includes('SYNTHETIC900001'));
     } else { assert.notStrictEqual(result.code, 0); assert.strictEqual(fs.readFileSync(env.TRACKING_CSV, 'utf8'), sentinel); }
     fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+function normalizedRequestDate(value) {
+  return /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}` : value;
+}
+
+function syntheticEstExport(orderIds, pinForOrder) {
+  const manifestHeader = 'Order Id,WERKS - Induction Point,VBELN - SAP Order Id,KUNNR - Behalf of Customer Number,KUNNR - Payer Customer Number,Category Type Code,VBELN - SAP Contract Id,Creation Date,Mailing Date';
+  const itemHeader = 'Order Id,MATNR - Article Number,Bar Code Id,Postal Zip Code,Imported Order ID,Date Time Trace Inquiry Event,Description Significant Event';
+  const manifests = orderIds.map(orderId => `${orderId},,,,,,,20260630,20260701`);
+  const items = orderIds.map(orderId => `${orderId},908,${pinForOrder(orderId)},K1A 0B1,${orderId},2026-07-02,Shipment created`);
+  return [
+    'Manifest.csv', String(manifests.length + 1), manifestHeader, ...manifests, '',
+    'ManifestItems.csv', String(items.length + 1), itemHeader, ...items, ''
+  ].join('\n');
+}
+
+function longRangeEstHandler({ permanentConflict = false, stopFile = '' } = {}) {
+  const requests = { orderRanges: [], exportedOrderIds: [], exportRequests: 0 };
+  const workgroups = ['11111', '22222', '33333'];
+  const pinMap = new Map();
+  const pinForOrder = orderId => {
+    if (orderId.endsWith('2026-07-31')) return 'SYNTHETIC899999';
+    if (!pinMap.has(orderId)) pinMap.set(orderId, `SYNTHETIC8${String(pinMap.size + 1).padStart(5, '0')}`);
+    return pinMap.get(orderId);
+  };
+  const handler = (request, response) => {
+    response.setHeader('Content-Type', 'application/xml');
+    if (request.url === '/dop/connect') return response.end('<connect><status>ok</status></connect>');
+    if (request.url.includes('/workgroup/customerNumber/')) return response.end(`<list>${workgroups.map(id => `<string>${id}</string>`).join('')}</list>`);
+    const orderMatch = /\/ship\/desktop\/\d+\/(\d+)\/(?:SHP|OSS)\/order\/([^/]+)\/([^/]+)\/-?\d+/.exec(request.url);
+    if (request.method === 'GET' && orderMatch) {
+      const [, workgroup, rawFrom, rawTo] = orderMatch;
+      const from = normalizedRequestDate(rawFrom);
+      const to = normalizedRequestDate(rawTo);
+      const days = dateSpanDays(from, to);
+      requests.orderRanges.push({ workgroup, from, to, format: /^\d{8}$/.test(rawFrom) ? 'yyyymmdd' : 'iso', days });
+      const containsPermanentFailure = permanentConflict
+        && workgroup === workgroups[2]
+        && from <= '2026-08-05'
+        && to >= '2026-08-05';
+      if (days > 30 || containsPermanentFailure) {
+        response.statusCode = 409;
+        return response.end('<messages><message><code>RANGE_CONFLICT</code><description>Refine the synthetic history range</description></message></messages>');
+      }
+      if (stopFile && requests.orderRanges.length === 1) fs.writeFileSync(stopFile, 'stop\n');
+      const orderIds = [`ORDER-${workgroup}-COMMON`, `ORDER-${workgroup}-${from}`];
+      return response.end(`${orderIds.join('\n')}\n${orderIds[1]}\n`);
+    }
+    if (request.method === 'POST' && request.url.includes('/exportorderhistory')) {
+      requests.exportRequests += 1;
+      let body = '';
+      request.setEncoding('utf8');
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const orderIds = [...body.matchAll(/<string>([^<]+)<\/string>/g)].map(match => match[1]);
+        requests.exportedOrderIds.push(...orderIds);
+        response.setHeader('Content-Type', 'text/plain');
+        response.end(syntheticEstExport(orderIds, pinForOrder));
+      });
+      return undefined;
+    }
+    response.statusCode = 404;
+    return response.end('<messages><message><code>404</code><description>not found</description></message></messages>');
+  };
+  return { handler, requests, workgroups };
+}
+
+async function testEstLongRangeIntegration() {
+  const runScenario = async ({ permanentConflict = false, cancelDuringRange = false } = {}) => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-est-long-range-'));
+    const trackingPath = path.join(temporary, 'data', 'tracking.csv');
+    const stopFile = cancelDuringRange ? path.join(temporary, 'STOP') : '';
+    fs.mkdirSync(path.dirname(trackingPath), { recursive: true });
+    const sentinel = Buffer.from('previous tracking.csv bytes must remain exact\n');
+    fs.writeFileSync(trackingPath, sentinel);
+    const synthetic = longRangeEstHandler({ permanentConflict, stopFile });
+    const { server, baseUrl } = await startServer(synthetic.handler);
+    const result = await runWorker('import-est-history.js', {
+      ...estEnv(baseUrl, temporary),
+      EST_TO: '2026-08-12',
+      STOP_FILE: stopFile
+    }, { username: 'synthetic-user', password: 'synthetic-password' });
+    await stopServer(server);
+    return { temporary, trackingPath, sentinel, synthetic, result };
+  };
+
+  const successful = await runScenario();
+  try {
+    assert.strictEqual(successful.result.code, 0);
+    const rangesByWorkgroup = successful.synthetic.requests.orderRanges.reduce((groups, item) => {
+      (groups[item.workgroup] ||= []).push(item);
+      return groups;
+    }, {});
+    for (const ranges of Object.values(rangesByWorkgroup)) {
+      assert.deepStrictEqual(ranges.map(({ from, to }) => ({ from, to })), [
+        { from: '2026-07-01', to: '2026-07-30' },
+        { from: '2026-07-31', to: '2026-08-12' }
+      ]);
+      assert.ok(ranges.every(range => range.days <= 30));
+    }
+    assert.strictEqual(successful.result.events.filter(event => event.type === 'est_range_segmented').length, 1);
+    assert.strictEqual(successful.result.events.filter(event => event.type === 'est_range_adaptive_split').length, 0);
+    assert.strictEqual(successful.synthetic.requests.exportRequests, 3);
+    assert.strictEqual(new Set(successful.synthetic.requests.exportedOrderIds).size, 9);
+    assert.strictEqual(successful.synthetic.requests.exportedOrderIds.length, 9, 'split responses must be deduplicated per workgroup before export');
+    assert.strictEqual(rowsAsObjects(fs.readFileSync(successful.trackingPath, 'utf8')).length, 7, 'duplicate tracking PINs across exports must remain deduplicated');
+    assert.strictEqual(successful.result.events.find(event => event.type === 'est_complete')?.imported, 7);
+    assert.ok(!successful.result.stdout.includes('24680'));
+    assert.ok(!successful.synthetic.workgroups.some(workgroup => successful.result.stdout.includes(workgroup)));
+    assert.ok(!successful.result.stdout.includes('/ship/desktop/'));
+  } finally {
+    fs.rmSync(successful.temporary, { recursive: true, force: true });
+  }
+
+  const failed = await runScenario({ permanentConflict: true });
+  try {
+    assert.notStrictEqual(failed.result.code, 0);
+    assert.deepStrictEqual(fs.readFileSync(failed.trackingPath), failed.sentinel);
+    assert.strictEqual(failed.synthetic.requests.exportRequests, 0, 'exports must wait until every workgroup/date segment is resolved');
+    assert.ok(failed.synthetic.requests.orderRanges.some(range => range.workgroup === '11111'));
+    assert.ok(failed.synthetic.requests.orderRanges.some(range => range.workgroup === '22222'));
+    const failure = failed.result.events.find(event => event.type === 'error');
+    assert.strictEqual(failure.reasonCode, 'EST_ORDER_RANGE_UNRESOLVED');
+    assert.match(failure.message, /previous tracking\.csv was preserved/);
+    assert.strictEqual(failure.diagnostic.status, 409);
+    assert.strictEqual(failure.diagnostic.applicationCode, 'RANGE_CONFLICT');
+    assert.deepStrictEqual(failure.diagnostic.failedDateSpan, { from: '2026-08-05', to: '2026-08-05' });
+    assert.strictEqual(failure.diagnostic.workgroupOrdinal, 3);
+    assert.strictEqual(failure.diagnostic.adaptiveSplitAttempted, true);
+    assert.strictEqual(failed.result.events.filter(event => event.type === 'est_range_adaptive_split').length, 1);
+    assert.ok(!failed.result.stdout.includes('24680'));
+    assert.ok(!failed.synthetic.workgroups.some(workgroup => failed.result.stdout.includes(workgroup)));
+    assert.ok(!failed.result.stdout.includes('/ship/desktop/'));
+  } finally {
+    fs.rmSync(failed.temporary, { recursive: true, force: true });
+  }
+
+  const cancelled = await runScenario({ cancelDuringRange: true });
+  try {
+    assert.notStrictEqual(cancelled.result.code, 0);
+    assert.deepStrictEqual(fs.readFileSync(cancelled.trackingPath), cancelled.sentinel);
+    assert.strictEqual(cancelled.result.events.find(event => event.type === 'error')?.reasonCode, 'EST_IMPORT_STOPPED');
+    assert.strictEqual(cancelled.synthetic.requests.exportRequests, 0);
+  } finally {
+    fs.rmSync(cancelled.temporary, { recursive: true, force: true });
   }
 }
 
@@ -165,6 +468,11 @@ function testCircuitUnit() {
 }
 
 (async () => {
-  testParsersAndDiagnostics(); testCircuitUnit(); await testEstWorkers(); await testTrackingWorkers();
+  testParsersAndDiagnostics();
+  testCircuitUnit();
+  await testEstDateRangesAndResolution();
+  await testEstWorkers();
+  await testEstLongRangeIntegration();
+  await testTrackingWorkers();
   process.stdout.write('EST and current Tracking API failure-handling integration tests passed.\n');
 })().catch(error => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
