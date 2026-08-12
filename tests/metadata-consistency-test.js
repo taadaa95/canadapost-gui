@@ -8,7 +8,7 @@ const { expectedBinaryName } = require('../scripts/finalize-artifacts');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const guide = read('BETA_OPERATING_GUIDE.md');
+const guide = read('OPERATING_GUIDE.md');
 const readme = read('README.md');
 const html = read('index.html');
 const renderer = read('renderer.js');
@@ -33,11 +33,11 @@ const currentValues = [
   PRODUCT_METADATA.trackingEnvironments.test,
   PRODUCT_METADATA.trackingEnvironments.production
 ];
-for (const value of currentValues) assert.ok(guide.includes(String(value)), `Beta guide is missing current metadata value ${value}.`);
+for (const value of currentValues) assert.ok(guide.includes(String(value)), `Operating guide is missing current metadata value ${value}.`);
 
 for (const platform of ['linux', 'windows']) {
-  const artifact = expectedBinaryName({ version: PRODUCT_METADATA.applicationVersion, platform, channel: PRODUCT_METADATA.releaseChannel });
-  assert.ok(guide.includes(artifact), `Beta guide is missing canonical ${platform} artifact name.`);
+  const artifact = expectedBinaryName({ version: PRODUCT_METADATA.applicationVersion, platform });
+  assert.ok(guide.includes(artifact), `Operating guide is missing canonical ${platform} artifact name.`);
 }
 
 assert.doesNotMatch(guide, /0\.4\.0-dev|est-import-v[1-4]|schema version 7|3,?000 ms/i);

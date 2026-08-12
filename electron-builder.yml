@@ -48,7 +48,7 @@ files:
   - "!**/*browser-profile*"
   - "!**/node_modules/playwright/**"
   - "!**/node_modules/playwright-core/.local-browsers/**"
-artifactName: "Canada.Post.Claim.Runner-${version}-${os}-${arch}-${env.RELEASE_CHANNEL}.${ext}"
+artifactName: "Canada.Post.Claim.Runner-${version}-${os}-${arch}.${ext}"
 directories:
   output: dist/packages
 win:

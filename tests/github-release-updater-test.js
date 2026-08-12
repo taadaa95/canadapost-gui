@@ -8,27 +8,35 @@ const path = require('path');
 const updater = require('../lib/github-release-updater');
 const security = require('../lib/update-security');
 
-function release(tag, options = {}) {
-  return { tag_name: tag, name: tag, draft: false, prerelease: false, published_at: '2026-08-01T12:00:00.000Z', assets: [], ...options };
+const SOURCE = Object.freeze({
+  provider: 'github-releases',
+  owner: 'taadaa95',
+  repository: 'canadapost-claim-runner-releases'
+});
+
+function digest(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
-function signedManifest(keys, overrides = {}) {
-  return security.signManifest({
-    format: security.UPDATE_MANIFEST_FORMAT,
-    manifestVersion: security.UPDATE_MANIFEST_VERSION,
-    applicationVersion: '0.4.1-beta.1',
-    channel: 'beta',
-    publishedAt: '2026-08-01T12:00:00.000Z',
-    minimumSupportedVersion: '0.4.0-beta.1',
-    platform: 'linux',
-    architecture: 'x64',
-    artifact: {
-      file: 'Canada.Post.Claim.Runner-0.4.1-beta.1-linux-x86_64-beta.AppImage',
-      bytes: 26,
-      sha256: crypto.createHash('sha256').update('synthetic updater artifact').digest('hex')
-    },
-    ...overrides
-  }, keys.privateKey);
+function release(tag, bytes, options = {}) {
+  const releaseVersion = String(tag).replace(/^v/, '');
+  const linuxFile = `Canada.Post.Claim.Runner-${releaseVersion}-linux-x86_64.AppImage`;
+  const windowsFile = `Canada.Post.Claim.Runner-${releaseVersion}-win-x64.exe`;
+  return {
+    tag_name: tag,
+    name: `Canada Post Claim Runner ${releaseVersion}`,
+    draft: false,
+    prerelease: false,
+    body: 'A concise synthetic release note.',
+    html_url: `https://github.com/${SOURCE.owner}/${SOURCE.repository}/releases/tag/${tag}`,
+    assets: [linuxFile, windowsFile].map(file => ({
+      name: file,
+      size: bytes.length,
+      digest: `sha256:${digest(bytes)}`,
+      browser_download_url: `https://github.com/${SOURCE.owner}/${SOURCE.repository}/releases/download/${tag}/${file}`
+    })),
+    ...options
+  };
 }
 
 function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedBytes, fail = () => false, alterHash = null }) {
@@ -72,215 +80,158 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
       const replacement = alterHash(target, count, files);
       if (replacement) return replacement;
     }
-    return crypto.createHash('sha256').update(files.get(target)).digest('hex');
+    return digest(files.get(target));
   };
   return { fileSystem, hashFile, files, calls, counts };
 }
 
+assert.strictEqual(require('../package.json').version, '0.4.0');
+const updaterUiText = [
+  fs.readFileSync(path.join(__dirname, '..', 'lib', 'github-release-updater.js'), 'utf8'),
+  fs.readFileSync(path.join(__dirname, '..', 'locales', 'en-CA.json'), 'utf8'),
+  fs.readFileSync(path.join(__dirname, '..', 'locales', 'fr-CA.json'), 'utf8')
+].join('\n');
+assert.doesNotMatch(updaterUiText, /unsigned beta|beta channel|release channel|signing key|trustedPublicKeyEd25519/i);
 assert.strictEqual(updater.version('v0.4.1'), '0.4.1');
-assert.strictEqual(updater.channelFor('0.4.0-beta.1'), 'beta');
-assert.strictEqual(updater.channelFor('0.4.0'), 'stable');
-assert(security.compareVersions('0.4.0-dev.10', '0.4.0-beta.1') < 0);
-assert(security.compareVersions('0.4.0-dev.99', '0.4.0-alpha.1') < 0);
-assert(security.compareVersions('0.4.0-alpha.9', '0.4.0-beta.1') < 0);
-assert(security.compareVersions('0.4.0-beta.1', '0.4.0-beta.2') < 0);
-assert(security.compareVersions('0.4.0-beta.10', '0.4.0-beta.2') > 0);
-assert(security.compareVersions('0.4.0-beta.99', '0.4.0-rc.1') < 0);
-assert(security.compareVersions('0.4.0-rc.1', '0.4.0') < 0);
-assert(security.compareVersions('0.5.0-dev.1', '0.4.99') > 0);
+assert.strictEqual(updater.channelFor, undefined, 'release-channel selection must not be exported');
+assert.strictEqual(updater.apiUrl(SOURCE), 'https://api.github.com/repos/taadaa95/canadapost-claim-runner-releases/releases/latest');
+assert.strictEqual(updater.expectedArtifactName('0.4.1', 'linux', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage');
+assert.strictEqual(updater.expectedArtifactName('0.4.1', 'win32', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-win-x64.exe');
+assert.throws(() => updater.expectedArtifactName('0.4.1', 'linux', 'arm64'), /not supported/i);
+assert.throws(() => updater.apiUrl({ ...SOURCE, provider: 'custom-manifest' }), /provider/i);
 assert.throws(() => updater.version('latest'), /invalid/i);
 assert.throws(() => updater.githubUrl('http://github.com/file'), /approved/i);
 assert.throws(() => updater.githubUrl('https://example.com/file'), /approved/i);
-assert.throws(() => security.validateUnsignedManifest({
-  format: security.UPDATE_MANIFEST_FORMAT,
-  manifestVersion: security.UPDATE_MANIFEST_VERSION,
-  applicationVersion: '0.4.1-beta.1',
-  channel: 'beta',
-  publishedAt: '2026-08-01T12:00:00.000Z',
-  platform: 'linux',
-  architecture: 'x64',
-  artifact: { file: '..\\outside.AppImage', bytes: 1, sha256: 'a'.repeat(64) }
-}), /file name is invalid/i);
 
-const stable = updater.selectRelease([
-  release('v0.4.2-beta.1', { prerelease: true }),
-  release('v0.4.1'),
-  release('v0.4.3', { draft: true })
-], '0.4.0', 'stable');
-assert.strictEqual(stable.version, '0.4.1');
+assert(security.compareVersions('0.4.0-beta.1', '0.4.0') < 0);
+assert(security.compareVersions('0.4.0-dev.10', '0.4.0') < 0);
+assert(security.compareVersions('0.4.0', '0.4.1') < 0);
+assert(security.compareVersions('0.4.0-rc.1', '0.4.0') < 0);
 
-const beta = updater.selectRelease([
-  release('v0.4.2-beta.1', { prerelease: true }),
-  release('v0.4.1')
-], '0.4.0-beta.1', 'beta');
-assert.strictEqual(beta.version, '0.4.2-beta.1');
-
-const dev10ToBeta1 = updater.selectRelease([
-  release('v0.4.0-beta.1', { prerelease: true }),
-  release('v0.4.0-dev.9', { prerelease: true })
-], '0.4.0-dev.10', 'beta');
-assert.strictEqual(dev10ToBeta1.version, '0.4.0-beta.1');
-
-const keys = crypto.generateKeyPairSync('ed25519');
-const wrongKeys = crypto.generateKeyPairSync('ed25519');
-const manifest = signedManifest(keys);
-const verified = updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', {
-  publicKey: keys.publicKey,
-  currentVersion: '0.4.0-beta.1',
-  expectedPublishedAt: manifest.publishedAt,
-  platform: 'linux',
-  arch: 'x64'
-});
-assert.strictEqual(updater.selectArtifact(verified, 'linux', 'x64').file.endsWith('.AppImage'), true);
-assert.throws(() => updater.selectArtifact(verified, 'linux', 'arm64'), /not supported/i);
-assert.throws(() => updater.validateManifest({ ...manifest, signature: '' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /missing or malformed/i);
-assert.throws(() => updater.validateManifest({ ...manifest, signature: 'not-base64' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /missing or malformed/i);
-assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: wrongKeys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /signature verification/i);
-assert.throws(() => updater.validateManifest({ ...manifest, publishedAt: '2026-08-01T13:00:00.000Z' }, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /signature verification/i);
-assert.throws(() => updater.validateManifest(manifest, '0.4.2-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /release tag/i);
-assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'stable', { publicKey: keys.publicKey, currentVersion: '0.4.0', platform: 'linux', arch: 'x64' }), /Stable channel/i);
-assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'windows', arch: 'x64' }), /platform/i);
-assert.throws(() => updater.validateManifest(manifest, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'arm64' }), /architecture/i);
-const wrongArtifactVersion = signedManifest(keys, { artifact: { ...manifest.artifact, file: 'Canada.Post.Claim.Runner-0.4.9-beta.1-linux-x86_64-beta.AppImage' } });
-assert.throws(() => updater.selectArtifact(updater.validateManifest(wrongArtifactVersion, '0.4.1-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), 'linux', 'x64'), /filename/i);
-
-const downgrade = signedManifest(keys, { applicationVersion: '0.3.9-beta.1', minimumSupportedVersion: '' });
-assert.throws(() => updater.validateManifest(downgrade, '0.3.9-beta.1', 'beta', { publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', platform: 'linux', arch: 'x64' }), /downgrade/i);
-
-const snapshot = updater.progressSnapshot(25, 100, 1000, 2000);
-assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, ratio: snapshot.ratio, bytesPerSecond: snapshot.bytesPerSecond, etaSeconds: snapshot.etaSeconds }, {
-  received: 25, total: 100, ratio: 0.25, bytesPerSecond: 25, etaSeconds: 3
-});
+const artifactBytes = Buffer.from('synthetic updater artifact');
+const stableRelease = release('v0.4.1', artifactBytes);
+const candidate = updater.validateLatestRelease(stableRelease, '0.4.0', 'linux', 'x64');
+assert.strictEqual(candidate.available, true);
+assert.strictEqual(candidate.version, '0.4.1');
+assert.strictEqual(candidate.artifact.file, 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage');
+assert.strictEqual(candidate.artifact.bytes, artifactBytes.length);
+assert.strictEqual(candidate.artifact.sha256, digest(artifactBytes));
+assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.1', 'linux', 'x64').available, false);
+assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.2', 'linux', 'x64').available, false);
+assert.throws(() => updater.validateLatestRelease({ ...stableRelease, draft: true }, '0.4.0', 'linux', 'x64'), /normal stable release/i);
+assert.throws(() => updater.validateLatestRelease({ ...stableRelease, prerelease: true }, '0.4.0-beta.1', 'linux', 'x64'), /normal stable release/i);
+assert.throws(() => updater.validateLatestRelease(release('v0.4.2-rc.1', artifactBytes), '0.4.1', 'linux', 'x64'), /stable semantic version/i);
+assert.throws(() => updater.validateLatestRelease({ ...stableRelease, assets: [] }, '0.4.0', 'linux', 'x64'), /missing Canada\.Post/i);
+assert.throws(() => updater.validateLatestRelease({
+  ...stableRelease,
+  assets: stableRelease.assets.map(item => ({ ...item, name: `${item.name}-beta` }))
+}, '0.4.0', 'linux', 'x64'), /missing Canada\.Post/i);
+for (const badDigest of [undefined, '', 'sha256:1234', `sha512:${'a'.repeat(64)}`]) {
+  assert.throws(() => updater.validateLatestRelease({
+    ...stableRelease,
+    assets: stableRelease.assets.map(item => ({ ...item, digest: badDigest }))
+  }, '0.4.0', 'linux', 'x64'), /SHA-256 digest/i);
+}
+assert.throws(() => updater.validateLatestRelease({
+  ...stableRelease,
+  assets: stableRelease.assets.map(item => ({ ...item, size: 0 }))
+}, '0.4.0', 'linux', 'x64'), /size is invalid/i);
+assert.throws(() => updater.validateLatestRelease({
+  ...stableRelease,
+  assets: stableRelease.assets.map(item => ({ ...item, browser_download_url: 'https://attacker.invalid/update.AppImage' }))
+}, '0.4.0', 'linux', 'x64'), /approved GitHub hosts/i);
 
 (async () => {
-  const artifactBytes = Buffer.from('synthetic updater artifact');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-updater-trust-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-updater-stable-'));
   try {
-    const isolatedHandlers = new Map();
-    updater.registerGithubReleaseUpdater({
-      app: { isPackaged: true },
-      registerIpcHandler: (channel, handler) => isolatedHandlers.set(channel, handler),
-      dialog: {},
-      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
-      shell: {},
-      isolated: true
-    });
-    const isolatedResult = await isolatedHandlers.get('updates:open')();
-    assert.strictEqual(isolatedResult.ok, false);
-    assert.match(isolatedResult.error, /disabled while isolated test data is active/i);
-
-    const frenchHandlers = new Map();
-    const frenchDialogs = [];
-    updater.registerGithubReleaseUpdater({
-      app: { isPackaged: false },
-      registerIpcHandler: (channel, handler) => frenchHandlers.set(channel, handler),
-      dialog: { showMessageBox: async options => { frenchDialogs.push(options); return { response: 0 }; } },
-      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
-      shell: {},
-      localeProvider: () => 'fr-CA'
-    });
-    const frenchDevelopmentResult = await frenchHandlers.get('updates:open')();
-    assert.strictEqual(frenchDevelopmentResult.ok, false);
-    assert.strictEqual(frenchDialogs[0].title, 'Rechercher des mises à jour');
-    assert.match(frenchDialogs[0].message, /version empaquetée/);
-    assert.strictEqual(frenchDialogs[0].buttons[0], 'OK');
-
-    const unsignedHandlers = new Map();
-    const unsignedDialogs = [];
-    const openedReleasePages = [];
-    updater.registerGithubReleaseUpdater({
-      app: { isPackaged: true, getVersion: () => '0.4.0-dev.10' },
-      registerIpcHandler: (channel, handler) => unsignedHandlers.set(channel, handler),
-      dialog: { showMessageBox: async options => { unsignedDialogs.push(options); return { response: 0 }; } },
-      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
-      shell: { openExternal: async value => { openedReleasePages.push(value); } },
-      source: {
-        owner: 'taadaa95',
-        repository: 'canadapost-claim-runner-releases',
-        trustedPublicKeyEd25519: '',
-        manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
-      }
-    });
-    const unsignedResult = await unsignedHandlers.get('updates:open')();
-    assert.strictEqual(unsignedResult.code, 'UPDATE_TRUST_NOT_CONFIGURED');
-    assert.strictEqual(unsignedResult.automaticUpdatesAvailable, false);
-    assert.strictEqual(unsignedResult.manualDownload, true);
-    assert.strictEqual(unsignedDialogs[0].title, 'Automatic updates unavailable');
-    assert.match(unsignedDialogs[0].message, /unsigned beta build \(version 0\.4\.0-dev\.10\)/i);
-    assert.doesNotMatch(unsignedDialogs[0].title, /No update available/i);
-    assert.strictEqual(unsignedDialogs[0].buttons[0], 'Open Releases Page');
-    assert.deepStrictEqual(openedReleasePages, ['https://github.com/taadaa95/canadapost-claim-runner-releases/releases']);
-
-    const artifactPath = path.join(root, manifest.artifact.file);
-    fs.writeFileSync(artifactPath, artifactBytes);
-    assert.strictEqual(security.verifyArtifact(artifactPath, manifest.artifact), true);
-    fs.appendFileSync(artifactPath, '!');
-    assert.throws(() => security.verifyArtifact(artifactPath, manifest.artifact), /size verification/i);
-    fs.writeFileSync(artifactPath, Buffer.alloc(manifest.artifact.bytes, 1));
-    assert.throws(() => security.verifyArtifact(artifactPath, manifest.artifact), /checksum verification/i);
-
-    const source = {
-      owner: 'taadaa95',
-      repository: 'canadapost-claim-runner-releases',
-      manifestAssets: { windows: 'package-manifest-windows.json', linux: 'package-manifest-linux.json' }
-    };
-    const candidate = release('v0.4.1-beta.1', {
-      prerelease: true,
-      html_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/tag/v0.4.1-beta.1',
-      assets: [
-        { name: 'package-manifest-linux.json', browser_download_url: 'https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/package-manifest-linux.json' },
-        { name: manifest.artifact.file, size: manifest.artifact.bytes, digest: `sha256:${manifest.artifact.sha256}`, browser_download_url: `https://github.com/taadaa95/canadapost-claim-runner-releases/releases/download/v0.4.1-beta.1/${manifest.artifact.file}` }
-      ]
-    });
-    const fetchImpl = async url => {
-      const value = String(url);
-      if (value.includes('/releases?')) return new Response(JSON.stringify([candidate]), { status: 200 });
-      if (value.includes('package-manifest-linux.json')) return new Response(JSON.stringify(manifest), { status: 200 });
-      throw new Error(`Unexpected URL: ${value}`);
-    };
-    const result = await updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl });
-    assert.strictEqual(result.available, true);
-    assert.strictEqual(result.version, '0.4.1-beta.1');
-    assert.strictEqual(result.artifact.sha256, manifest.artifact.sha256);
-
-    await assert.rejects(() => updater.resolveUpdate({
-      source,
-      publicKey: keys.publicKey,
+    const calls = [];
+    const resolved = await updater.resolveUpdate({
+      source: SOURCE,
       currentVersion: '0.4.0-beta.1',
-      channel: 'beta',
-      platform: 'linux',
-      arch: 'x64',
-      fetchImpl: async url => {
-        const value = String(url);
-        if (value.includes('/releases?')) {
-          return new Response(JSON.stringify([{
-            ...candidate,
-            assets: candidate.assets.map(item => item.name === 'package-manifest-linux.json'
-              ? { ...item, name: 'package-manifest-linux.unsigned.json' }
-              : item)
-          }]), { status: 200 });
-        }
-        throw new Error(`Unsigned manifest must not be fetched: ${value}`);
-      }
-    }), error => error.code === 'UPDATE_MANIFEST_MISSING');
-
-    const redirectCalls = [];
-    await assert.rejects(() => updater.resolveUpdate({
-      source,
-      publicKey: keys.publicKey,
-      currentVersion: '0.4.0-beta.1',
-      channel: 'beta',
       platform: 'linux',
       arch: 'x64',
       fetchImpl: async (url, options) => {
-        redirectCalls.push({ url: String(url), redirect: options.redirect });
+        calls.push({ url: String(url), redirect: options.redirect });
+        return new Response(JSON.stringify(release('v0.4.0', artifactBytes)), { status: 200 });
+      }
+    });
+    assert.strictEqual(resolved.available, true, 'the new updater must move an old development runtime to stable 0.4.0');
+    assert.strictEqual(resolved.version, '0.4.0');
+    assert.deepStrictEqual(calls, [{ url: updater.apiUrl(SOURCE), redirect: 'manual' }]);
+
+    await assert.rejects(() => updater.resolveUpdate({
+      source: SOURCE,
+      currentVersion: '0.4.0',
+      platform: 'linux',
+      arch: 'x64',
+      fetchImpl: async (url, options) => {
+        assert.strictEqual(options.redirect, 'manual');
         return new Response('', { status: 302, headers: { location: 'https://attacker.invalid/update.json' } });
       }
     }), error => error.code === 'UPDATE_URL_BLOCKED');
-    assert.deepStrictEqual(redirectCalls, [{ url: updater.apiUrl(source), redirect: 'manual' }], 'a disallowed redirect must be rejected before it is followed');
+
+    const downloadRoot = path.join(root, 'profile');
+    const downloaded = await updater.downloadUpdate(candidate, {
+      app: { getPath: () => downloadRoot },
+      userAgent: 'synthetic-test',
+      fetchImpl: async () => new Response(artifactBytes, {
+        status: 200,
+        headers: { 'content-length': String(artifactBytes.length) }
+      })
+    });
+    assert.strictEqual(fs.readFileSync(downloaded, 'utf8'), artifactBytes.toString('utf8'));
+    assert.strictEqual(security.verifyArtifact(downloaded, candidate.artifact), true);
+
+    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.2', artifact: {
+      ...candidate.artifact,
+      file: 'Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage'
+    } }, {
+      app: { getPath: () => downloadRoot },
+      userAgent: 'synthetic-test',
+      fetchImpl: async () => new Response(artifactBytes, { status: 200, headers: { 'content-length': String(artifactBytes.length + 1) } })
+    }), error => error.code === 'UPDATE_DOWNLOAD_SIZE_MISMATCH');
+
+    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.3', artifact: {
+      ...candidate.artifact,
+      file: 'Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage',
+      sha256: '0'.repeat(64)
+    } }, {
+      app: { getPath: () => downloadRoot },
+      userAgent: 'synthetic-test',
+      fetchImpl: async () => new Response(artifactBytes, { status: 200, headers: { 'content-length': String(artifactBytes.length) } })
+    }), error => error.code === 'UPDATE_DOWNLOAD_HASH_MISMATCH');
+
+    const artifactPath = path.join(root, candidate.artifact.file);
+    fs.writeFileSync(artifactPath, artifactBytes);
+    fs.appendFileSync(artifactPath, '!');
+    assert.throws(() => security.verifyArtifact(artifactPath, candidate.artifact), /size verification/i);
+    fs.writeFileSync(artifactPath, Buffer.alloc(candidate.artifact.bytes, 1));
+    assert.throws(() => security.verifyArtifact(artifactPath, candidate.artifact), /checksum verification/i);
+
+    const handlers = new Map();
+    const dialogs = [];
+    updater.registerGithubReleaseUpdater({
+      app: { isPackaged: true, getVersion: () => '0.4.0' },
+      registerIpcHandler: (channel, handler) => handlers.set(channel, handler),
+      dialog: { showMessageBox: async options => { dialogs.push(options); return { response: 1 }; } },
+      BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
+      shell: {},
+      source: SOURCE
+    });
+    const oldFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify(stableRelease), { status: 200 });
+    try {
+      const result = await handlers.get('updates:open')();
+      assert.strictEqual(result.deferred, true);
+      assert.strictEqual(dialogs.length, 1, 'idle update flow must use one normal confirmation');
+      assert.match(dialogs[0].message, /Current version: 0\.4\.0\nNew version: 0\.4\.1/);
+      assert.deepStrictEqual(dialogs[0].buttons, ['Download / Install Update', 'Cancel']);
+    } finally {
+      globalThis.fetch = oldFetch;
+    }
 
     const currentAppImage = path.join(root, 'Canada.Post.Claim.Runner-current.AppImage');
-    const downloadedAppImage = path.join(root, manifest.artifact.file);
+    const downloadedAppImage = path.join(root, candidate.artifact.file);
     const oldAppImage = Buffer.from('old verified application');
     const stagedPath = path.join(path.dirname(currentAppImage), `.${path.basename(currentAppImage)}.new-${process.pid}`);
     const backupStagedPath = `${currentAppImage}.previous.new-${process.pid}`;
@@ -290,55 +241,15 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
       currentBytes: oldAppImage,
       downloadedBytes: artifactBytes
     });
-    await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
+    await updater.replaceAppImage(downloadedAppImage, candidate.artifact.sha256, { APPIMAGE: currentAppImage }, {
       platform: 'linux', fileSystem: fake.fileSystem, fileHash: fake.hashFile
     });
-    assert.deepStrictEqual(fake.files.get(currentAppImage), artifactBytes, 'verified staged AppImage must atomically replace the current image');
-    assert.deepStrictEqual(fake.files.get(`${currentAppImage}.previous`), oldAppImage, 'verified previous AppImage must remain available for rollback');
-    assert.strictEqual(fake.counts.get(stagedPath), 2, 'staged AppImage must be verified after copy and immediately before replacement');
-    assert.strictEqual(fake.counts.get(backupStagedPath), 1, 'rollback AppImage copy must be verified before publication');
-    assert(fake.calls.some(call => call.operation === 'fsync' && call.target === stagedPath), 'staged AppImage data must be synchronized');
-    assert(fake.calls.some(call => call.operation === 'fsync' && call.target === backupStagedPath), 'rollback AppImage data must be synchronized');
-    assert.strictEqual(fake.calls.filter(call => call.operation === 'fsync' && call.target === path.dirname(currentAppImage)).length, 2, 'Linux directory must be synchronized after both atomic renames');
-    const replacementRename = fake.calls.findIndex(call => call.operation === 'rename' && call.target === stagedPath && call.destination === currentAppImage);
-    assert(replacementRename > 0);
-    assert.deepStrictEqual(fake.calls[replacementRename - 1], { operation: 'hash', target: stagedPath, destination: '' }, 'no operation may intervene between final staged verification and replacement');
-
-    if (process.platform === 'linux') {
-      fs.writeFileSync(currentAppImage, oldAppImage);
-      fs.writeFileSync(downloadedAppImage, artifactBytes);
-      await updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage });
-      assert.strictEqual(fs.readFileSync(currentAppImage, 'utf8'), artifactBytes.toString('utf8'));
-      assert.strictEqual(fs.readFileSync(`${currentAppImage}.previous`, 'utf8'), oldAppImage.toString('utf8'));
-    } else {
-      await assert.rejects(
-        () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }),
-        error => error.code === 'UPDATE_PLATFORM_UNSUPPORTED'
-      );
-    }
-
-    let nonLinuxSyncCalls = 0;
-    assert.strictEqual(updater.syncDirectory(path.dirname(currentAppImage), {
-      platform: 'win32',
-      fileSystem: { openSync() { nonLinuxSyncCalls += 1; throw new Error('must not open'); } }
-    }), false);
-    assert.strictEqual(nonLinuxSyncCalls, 0, 'Windows must not attempt unsupported directory fsync');
-
-    const failureCases = [
-      ['file sync', (operation, target) => operation === 'fsync' && target === stagedPath],
-      ['directory sync', (operation, target) => operation === 'fsync' && target === path.dirname(currentAppImage)],
-      ['atomic rename', (operation, target, destination) => operation === 'rename' && target === stagedPath && destination === currentAppImage]
-    ];
-    for (const [label, fail] of failureCases) {
-      const failing = fakeAppImageFileSystem({ current: currentAppImage, downloaded: downloadedAppImage, currentBytes: oldAppImage, downloadedBytes: artifactBytes, fail });
-      await assert.rejects(
-        () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
-          platform: 'linux', fileSystem: failing.fileSystem, fileHash: failing.hashFile
-        }),
-        error => error.code === 'UPDATE_APPIMAGE_REPLACE_FAILED',
-        `${label} failure must remain fatal on Linux`
-      );
-    }
+    assert.deepStrictEqual(fake.files.get(currentAppImage), artifactBytes);
+    assert.deepStrictEqual(fake.files.get(`${currentAppImage}.previous`), oldAppImage);
+    assert.strictEqual(fake.counts.get(stagedPath), 2);
+    assert.strictEqual(fake.counts.get(backupStagedPath), 1);
+    assert(fake.calls.some(call => call.operation === 'fsync' && call.target === stagedPath));
+    assert.strictEqual(fake.calls.filter(call => call.operation === 'fsync' && call.target === path.dirname(currentAppImage)).length, 2);
 
     const changedBeforeRename = fakeAppImageFileSystem({
       current: currentAppImage,
@@ -347,52 +258,38 @@ assert.deepStrictEqual({ received: snapshot.received, total: snapshot.total, rat
       downloadedBytes: artifactBytes,
       alterHash: (target, count) => target === stagedPath && count === 2 ? '0'.repeat(64) : ''
     });
-    await assert.rejects(
-      () => updater.replaceAppImage(downloadedAppImage, manifest.artifact.sha256, { APPIMAGE: currentAppImage }, {
-        platform: 'linux', fileSystem: changedBeforeRename.fileSystem, fileHash: changedBeforeRename.hashFile
-      }),
-      error => error.code === 'UPDATE_STAGED_HASH_MISMATCH'
-    );
-    assert.deepStrictEqual(changedBeforeRename.files.get(currentAppImage), oldAppImage, 'integrity failure must leave the current AppImage unchanged');
+    await assert.rejects(() => updater.replaceAppImage(downloadedAppImage, candidate.artifact.sha256, { APPIMAGE: currentAppImage }, {
+      platform: 'linux', fileSystem: changedBeforeRename.fileSystem, fileHash: changedBeforeRename.hashFile
+    }), error => error.code === 'UPDATE_STAGED_HASH_MISMATCH');
+    assert.deepStrictEqual(changedBeforeRename.files.get(currentAppImage), oldAppImage);
 
-    fs.writeFileSync(downloadedAppImage, Buffer.alloc(manifest.artifact.bytes, 1));
+    fs.writeFileSync(downloadedAppImage, artifactBytes);
     let quitCalled = false;
+    const launches = [];
     await assert.rejects(() => updater.installUpdate({
       app: { quit: () => { quitCalled = true; } },
       shell: {},
       downloadedPath: downloadedAppImage,
-      update: { artifact: manifest.artifact },
+      update: { ...candidate, version: '0.4.0' },
+      currentVersion: '0.4.0',
       platform: 'win32'
-    }), /checksum verification/i);
-    assert.strictEqual(quitCalled, false, 'an installer modified after download verification must never be executed');
+    }), error => error.code === 'UPDATE_DOWNGRADE_BLOCKED');
+    assert.strictEqual(quitCalled, false);
 
-    fs.writeFileSync(downloadedAppImage, artifactBytes);
-    const launches = [];
-    let linuxReplacementCalled = false;
     await updater.installUpdate({
       app: { quit: () => { quitCalled = true; } },
       shell: {},
       downloadedPath: downloadedAppImage,
-      update: { artifact: manifest.artifact },
+      update: candidate,
+      currentVersion: '0.4.0',
       platform: 'win32',
-      launchDetached: (command, args) => {
-        security.verifyArtifact(downloadedAppImage, manifest.artifact);
-        launches.push({ command, args });
-      },
-      replaceAppImageImpl: async () => { linuxReplacementCalled = true; throw new Error('Windows invoked Linux replacement'); }
+      launchDetached: (command, args) => launches.push({ command, args })
     });
     assert.strictEqual(launches.length, 1);
     assert.strictEqual(launches[0].command, 'powershell.exe');
-    assert.strictEqual(linuxReplacementCalled, false, 'Windows NSIS handoff must not invoke AppImage replacement');
     assert.strictEqual(quitCalled, true);
 
-    await assert.rejects(() => updater.resolveUpdate({ source, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl }), /No trusted production update public key/i);
-    await assert.rejects(() => updater.resolveUpdate({ source, publicKey: keys.publicKey, currentVersion: '0.4.0-beta.1', channel: 'beta', platform: 'linux', arch: 'x64', fetchImpl: async url => {
-      const value = String(url);
-      if (value.includes('/releases?')) return new Response(JSON.stringify([{ ...candidate, assets: candidate.assets.map(item => item.name === manifest.artifact.file ? { ...item, size: item.size + 1 } : item) }]), { status: 200 });
-      return new Response(JSON.stringify(manifest), { status: 200 });
-    } }), /asset size/i);
-    process.stdout.write('Signed GitHub release updater trust-chain tests passed.\n');
+    process.stdout.write('Stable GitHub Latest updater trust and install tests passed.\n');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

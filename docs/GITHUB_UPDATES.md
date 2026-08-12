@@ -1,54 +1,56 @@
-# GitHub Releases update workflow
+# GitHub Releases updates
 
-Canada Post Claim Runner checks a fixed public release-only repository:
+Canada Post Claim Runner uses one stable release stream in the public repository:
 
 ```text
 taadaa95/canadapost-claim-runner-releases
 ```
 
-The private source repository remains private. The installed application does not contain a GitHub token and does not accept a renderer-configurable update URL.
+The installed application contains no GitHub token and accepts no renderer-configurable update URL. **Check for Updates** calls:
 
-## One-time setup
+```text
+GET /repos/taadaa95/canadapost-claim-runner-releases/releases/latest
+```
 
-1. Create the public repository `taadaa95/canadapost-claim-runner-releases` with no source code.
-2. Add a short README explaining that it contains only official application binaries and metadata.
-3. Enable GitHub immutable releases when available for the repository.
-4. Do not store signing keys, source archives, credentials, customer data, browser profiles or diagnostics in the release repository.
+GitHub Latest excludes drafts and prereleases. The updater also rejects either flag if returned unexpectedly. It compares the release tag with the runtime version using semantic, prerelease-aware ordering, so an internal runtime such as `0.4.0-beta.1` or `0.4.0-dev.10` is older than stable `0.4.0`.
 
-## Publishing an update
+## Trust model
 
-1. Update `package.json` to a newer semantic version, such as `0.4.1-beta.1` or `0.4.1`.
-2. Build and validate Windows and Linux artifacts through the source repository CI.
-3. Download the `linux-beta-unsigned` and `windows-beta-unsigned` workflow artifacts.
-4. On the offline signing workstation, verify that the production Ed25519 public key embedded in `config/update-source.json` matches the offline private key. The deliberate empty placeholder disables updates and must never be bypassed.
-5. Sign each `package-manifest-*.unsigned.json` candidate with `CPCR_UPDATE_PRIVATE_KEY_FILE=/external/offline/path npm run release:sign-manifest -- <unsigned-manifest> <package-manifest-platform.json>`. The script rejects private keys inside the repository, refuses overwrites, checks the embedded public key, signs canonical JSON, and self-verifies.
-6. Run `npm run release:verify-signed-manifest -- <signed-manifest> <artifact>` on both platform outputs.
-7. Create a GitHub Release in the public release repository with a tag matching the application version, prefixed with `v` if desired. Its publication timestamp must exactly match the signed manifest's `publishedAt` value.
-8. Mark beta versions as prereleases. Stable builds must be published as non-prerelease releases.
-9. Upload all of the following assets without renaming them:
-   - the Windows NSIS `.exe`;
-   - the Linux `.AppImage`;
-   - `package-manifest-windows.json`;
-   - `package-manifest-linux.json`;
-   - `SHA256SUMS-windows.txt`;
-   - `SHA256SUMS-linux.txt`;
-10. Publish the release. Draft releases are ignored. Never upload the `.unsigned.json` candidates.
+The updater requires all of the following:
 
-The versioned manifest signs canonical metadata containing application version, channel, publication time, optional minimum supported version, platform, architecture, file name, byte size, and SHA-256. The updater rejects an absent/malformed signature, wrong key, tampering, a missing configured production key, release/tag/time mismatch, downgrade, channel mismatch, unexpected host, wrong platform/architecture, asset size/digest mismatch, and downloaded size/hash mismatch.
+- release metadata from the configured repository's GitHub API endpoint;
+- approved HTTPS GitHub API, release, redirect, and asset hosts;
+- a version strictly newer than the running version;
+- supported platform and x64 architecture;
+- the exact stable filename for that version and platform;
+- a positive bounded size from GitHub release-asset metadata;
+- a GitHub asset `digest` matching `sha256:<64 hex characters>`;
+- an exact downloaded byte count and computed SHA-256 match;
+- a final size/SHA-256 check before executable replacement.
 
-## Installed application behaviour
+No custom manifest, release channel, Ed25519 key, or application-specific signature is used.
 
-The existing Update button performs an explicit check. It does not check or download automatically at startup.
+## Publishing a stable update
 
-- Stable application versions consider stable releases only.
-- Prerelease application versions consider prerelease releases only; cross-channel updates fail closed.
-- Downloads are stored under the application's private `userData/updates` directory. Cancelled partial files are removed, verified packages are bounded to the current package plus a small recent set, and healthy startup prunes obsolete staging files.
-- The user must explicitly choose Download and Install. Main-process operation state—not a renderer checkbox—blocks installation during Step 1 import, Step 2 diagnostics/exports/bulk work, Step 3 dry/live work, backup/restore, migration/recovery, privacy deletion, or another authoritative-data mutation. The exact blocking operation is shown and the verified download is retained.
-- Before installation, an authoritative SQLite database receives a verified owner-only backup and a minimal pending marker records old/target versions, timestamp and recovery paths. Credentials, browser profiles and device keys are excluded.
-- Windows retains and launches the verified NSIS installer only after a last-moment idle recheck. Linux preserves the existing `.previous` AppImage rollback executable.
-- Normal updated startup completes database initialization, integrity and relationship checks before archiving the marker as healthy. Interrupted startup preserves the marker, backup, installer and previous executable and exposes sanitized recovery state without overwriting current data.
-- Isolated migration-test mode disables updates.
+1. Set `package.json` to the next normal semantic version, such as `0.4.1`.
+2. Run the complete automated suite and build from the reviewed clean source commit.
+3. Verify `dist/release-metadata/SHA256SUMS.txt`, internal provenance, and `releases/v<version>.json`.
+4. Complete manual validation on the exact AppImage or Windows installer that will be uploaded.
+5. Create a non-draft, non-prerelease GitHub Release named `Canada Post Claim Runner <version>` with tag `v<version>`.
+6. Upload only the platform binaries being published and one `SHA256SUMS.txt` covering them.
+7. Confirm GitHub reports a SHA-256 digest for every binary asset before declaring the release ready.
 
-## Trust-chain status
+For Linux-only 0.4.0, the public assets are exactly:
 
-The updater trusts only the fixed repository and GitHub host allowlist plus a manifest verified by the embedded Ed25519 public key. HTTPS and GitHub metadata are transport/discovery inputs, not signing authority. The application contains no GitHub credential. The production public-key placeholder is deliberately empty in this beta commit, so update checks fail closed until an authorized reviewed commit embeds the production public key. Production private-key custody and signing remain external manual gates.
+- `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`
+- `SHA256SUMS.txt`
+
+SBOM, licence inventory, provenance, and package-audit reports remain internal metadata rather than public download clutter.
+
+## Installed behaviour
+
+The user makes one choice: **Download / Install Update** or **Cancel**. Downloads use the private application update directory. Partial and stale downloads are cleaned up. A protected Step 1, Step 2, Step 3, backup, restore, migration, recovery, privacy deletion, or authoritative-data operation blocks executable replacement. An automatic pre-update database backup and pending marker preserve interrupted-update recovery. Linux retains the previous AppImage; Windows launches the verified installer after shutdown.
+
+## Upgrade from the old beta
+
+The already-published 0.4.0-beta.1 binary contains the old updater configuration and cannot be changed retroactively. Users of that build must manually install 0.4.0 once. Existing application data remains in the same user profile. Starting with 0.4.0, later stable releases use GitHub Latest. No bridge beta is required.

@@ -29,7 +29,9 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.0-beta.1');
+assert.strictEqual(pkg.version, '0.4.0');
+assert.doesNotMatch(`${html}\n${renderer}\n${preload}\n${main}`, /unsigned beta|beta channel|release channel|signing key/i,
+  'normal update UI must not expose beta, channel, or signing-key messaging');
 assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
 assert.ok(!preload.includes('document.createElement'), 'Preload must remain a narrow IPC bridge');
 assert.ok(englishLocale['step3.supportGuidance'].includes('1-888-550-6333'), 'Missing Canada Post customer-service number');

@@ -84,8 +84,7 @@ for (const key of [
   'dialog.liveSubmit.title', 'dialog.liveSubmit.message', 'dialog.liveSubmit.canaryMessage',
   'dialog.liveSubmit.detail', 'dialog.liveSubmit.action', 'dialog.liveSubmit.canaryAction',
   'update.check', 'update.packagedOnly', 'update.none.title', 'update.none.message',
-  'update.available.title', 'update.available.message', 'update.available.download', 'update.available.openRelease',
-  'update.manual.title', 'update.manual.unsignedBeta', 'update.manual.detail', 'update.manual.openReleases'
+  'update.available.title', 'update.available.message', 'update.available.downloadInstall'
 ]) {
   assert(Object.hasOwn(french.messages, key), `French native-confirmation localization is missing: ${key}`);
   assert.notStrictEqual(french.messages[key], english[key], `French native-confirmation text remained English: ${key}`);

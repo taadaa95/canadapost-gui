@@ -38,6 +38,9 @@ assert.strictEqual((workflow.match(/npm run release:guard/g) || []).length, 2, '
 assert.strictEqual((workflow.match(/npm run release:provenance/g) || []).length, 2, 'both platform package jobs must bind metadata to one reviewed commit');
 assert.match(workflow, /release-provenance-linux\.json/);
 assert.match(workflow, /release-provenance-windows\.json/);
+assert.match(workflow, /name: linux-stable-package/);
+assert.match(workflow, /name: windows-stable-package/);
+assert.doesNotMatch(workflow, /RELEASE_CHANNEL|beta-unsigned|package-manifest/, 'stable CI packaging must not retain channel or custom-manifest machinery');
 assert.match(workflow, /RELEASE_SOURCE_COMMIT:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 assert.match(
   workflow,
@@ -88,8 +91,8 @@ assert.match(
 const requiredArtifactUploads =
   workflow.match(/if-no-files-found: error[\s\S]{0,60}retention-days: 7/g) || [];
 assert.ok(
-  requiredArtifactUploads.length >= 3,
-  'required release artifacts must use bounded retention'
+  requiredArtifactUploads.length >= 2,
+  'optional dispatch package artifacts must use bounded retention'
 );
 
 process.stdout.write(

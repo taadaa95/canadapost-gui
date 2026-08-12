@@ -1,6 +1,6 @@
 # Historical release notes
 
-Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `BETA_OPERATING_GUIDE.md` for 0.4.0-beta.1.
+Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for stable 0.4.0.
 
 ## Dev 11 candidate queue and Claim History simplification — 2026-08-12
 

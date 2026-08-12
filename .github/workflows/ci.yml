@@ -44,6 +44,8 @@ jobs:
         run: npx playwright install chromium
       - run: npm test
       - run: npm run test:dev10
+      - run: npm run test:updates
+      - run: npm run test:localization
       - name: Mock portal tests (Linux)
         if: runner.os == 'Linux'
         timeout-minutes: 5
@@ -75,14 +77,6 @@ jobs:
       - run: npm run release:audit
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run sbom
-      - uses: actions/upload-artifact@v4
-        if: matrix.os == 'ubuntu-latest'
-        with:
-          name: release-metadata
-          path: dist/release-metadata
-          if-no-files-found: error
-          retention-days: 7
-
   gitleaks:
     name: External secret scan
     runs-on: ubuntu-latest
@@ -101,7 +95,6 @@ jobs:
     needs: [test, gitleaks]
     runs-on: ubuntu-latest
     env:
-      RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: linux
       RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
       RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -128,12 +121,13 @@ jobs:
       - run: npm run release:validate
       - run: npm run release:provenance
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
-          name: linux-beta-unsigned
+          name: linux-stable-package
           path: |
             dist/packages/*
-            dist/release-metadata/package-manifest-linux.unsigned.json
-            dist/release-metadata/SHA256SUMS-linux.txt
+            dist/release-metadata/SHA256SUMS.txt
+            dist/release-metadata/releases/v0.4.0.json
             dist/release-metadata/package-size-linux.json
             dist/release-metadata/sbom.cyclonedx.json
             dist/release-metadata/dependency-licenses.json
@@ -147,7 +141,6 @@ jobs:
     needs: [test, gitleaks]
     runs-on: windows-latest
     env:
-      RELEASE_CHANNEL: beta
       RELEASE_PLATFORM: windows
       RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
       RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -174,12 +167,13 @@ jobs:
       - run: npm run release:validate
       - run: npm run release:provenance
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
-          name: windows-beta-unsigned
+          name: windows-stable-package
           path: |
             dist/packages/*
-            dist/release-metadata/package-manifest-windows.unsigned.json
-            dist/release-metadata/SHA256SUMS-windows.txt
+            dist/release-metadata/SHA256SUMS.txt
+            dist/release-metadata/releases/v0.4.0.json
             dist/release-metadata/package-size-windows.json
             dist/release-metadata/sbom.cyclonedx.json
             dist/release-metadata/dependency-licenses.json

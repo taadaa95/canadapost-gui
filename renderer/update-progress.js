@@ -56,11 +56,6 @@
       fill.style.width = `${value}%`;
       percent.textContent = `${value}%`;
       detail.textContent = `${formatBytes(payload.received)} / ${formatBytes(payload.total)}`;
-    } else if (payload.stage === 'ready') {
-      track.classList.remove('indeterminate');
-      fill.style.width = '100%';
-      percent.textContent = '100%';
-      detail.textContent = translate('update.progress.verified');
     } else {
       track.classList.add('indeterminate');
       fill.style.width = '';

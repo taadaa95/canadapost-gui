@@ -1,6 +1,6 @@
 # Canada Post Claim Runner
 
-Current beta: **0.4.0-beta.1**. `BETA_OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports and release notes are historical.
+Current stable version: **0.4.0**. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
 
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 
@@ -66,11 +66,15 @@ An interrupted or uncertain claim appears as **Needs attention** in Claim Histor
 
 History is a single newest-first claim record with Refresh and CSV export. It shows tracking number, attempt time, status, confirmation when available, a concise result, and useful evidence. Only records that genuinely need human resolution show inline reconciliation actions; ordinary completed records do not. Backup, restore, stored-data management, and support bundles are under **Settings → Advanced**. Browser-session controls remain in Step 3.
 
-## Validation and public-beta build
+## Validation and stable build
 
 ```bash
 npm test
+npm run test:dev10
+npm run test:updates
+npm run test:localization
 npm run lint
+npm run lint:dev10
 npm run format:check
 npm run typecheck
 npm run coverage
@@ -90,12 +94,14 @@ The suites cover:
 - encrypted credential storage and authenticated encrypted backups;
 - claim selection, idempotency, interrupted attempts, and retry limits;
 - Step 3 `WebContentsView` isolation, dry-run safeguards, mock navigation/outcomes, selector behavior, fault points and structured diagnostic redaction;
-- SQLite migrations and immutable evidence, localization completeness, integer-cent reporting, signed-update verification and accessibility rules.
+- SQLite migrations and immutable evidence, localization completeness, integer-cent reporting, GitHub release-asset digest verification and accessibility rules.
 - current Tracking OAuth token acquisition/caching/refresh, exact official endpoints and headers, JSON schema normalization, archive/not-found/error handling, credential separation, diagnostic gating, circuit semantics and packaged loopback smokes.
 
 ## Release process
 
-Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a manifest/checksum, extracts the archive and scans it again. `RELEASE_CHANNEL=beta npm run release:package` builds from a clean Git materialization, generates release metadata and audits packaged content. Production Step 3 uses Electron's built-in browser and the package must not contain a second Playwright browser runtime. CI builds Linux AppImage and Windows NSIS artifacts; unsigned beta artifacts are visibly identified.
+Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a source manifest/checksum, extracts the archive and scans it again. `npm run release:package` builds the stable Linux package from a clean Git materialization, generates SHA-256 and provenance metadata, and audits packaged content. `RELEASE_CHANNEL` is not used. Production Step 3 uses Electron's built-in browser and the package must not contain a second Playwright browser runtime.
+
+Starting with 0.4.0, **Check for Updates** uses GitHub's latest normal release and verifies the exact filename, platform, architecture, byte size, and GitHub SHA-256 asset digest. The already-distributed 0.4.0-beta.1 binary has the old compiled updater and requires one manual installation of 0.4.0. Existing application data remains in the same user profile.
 
 See `docs/RELEASE_PROCESS.md`, `MANUAL_RELEASE_GATES.md`, `RELEASE_NOTES.md` and `SECURITY.md`.
 
@@ -107,7 +113,7 @@ Dry run is intentionally conservative. It fills the receiver, tracking, referenc
 
 
 
-## Step 3 operator controls (v0.4.0-beta.1)
+## Step 3 operator controls (v0.4.0)
 
 The v0.4.0 productization branch adds a safety layer before browser automation begins:
 

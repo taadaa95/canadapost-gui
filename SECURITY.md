@@ -24,7 +24,7 @@ Classification output is run-scoped and fail-closed. CSV promotion has rollback 
 - Current Step 2 sends OAuth client credentials only to the selected Canada Post token endpoint and sends the resulting Bearer token only to the matching Tracking gateway.
 - The HTTP layer uses manual redirect handling. It never follows 301, 302, 303, 307 or 308 responses, so credentials and Bearer tokens cannot be forwarded through redirects.
 - Diagnostics retain only safe status, hostname, query-free pathname, content type, public API version/scope, bounded application error fields and request/correlation identifiers. They exclude authorization headers, tokens, client credentials, response bodies, cookies and complete tracking identifiers.
-- The deprecated Basic/XML client is isolated and disabled. The public-beta path has no automatic fallback from OAuth/JSON.
+- The deprecated Basic/XML client is isolated and disabled. The supported path has no automatic fallback from OAuth/JSON.
 
 ## Application data
 
@@ -86,7 +86,7 @@ Configured secrets and personal fields are added to the redaction set before for
 
 The latest Step 3 run contributes a metadata-only file inventory when included in a Diagnostic ZIP; filenames and file contents are excluded. Local detailed runs can contain operational context that the shareable archive intentionally omits and should remain private.
 
-## Live submission authorization (v0.4.0-beta.1)
+## Live submission authorization (v0.4.0)
 
 The renderer cannot start a live Step 3 worker with only a button click. The main process validates all submission options, requires a non-empty selected queue, snapshots that queue into a private run-specific CSV, enforces built-in-browser mode, and rejects live mode unless the renderer supplies an explicit acknowledgement produced by the live-submission confirmation dialog. This is a defense-in-depth control, not a substitute for reviewing the queue.
 

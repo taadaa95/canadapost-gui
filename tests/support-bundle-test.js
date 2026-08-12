@@ -5,7 +5,7 @@ const supportBundle = require('../lib/support-bundle');
 
 const reference = supportBundle.supportReferenceId(new Date('2026-08-01T00:00:00.000Z'), size => Buffer.alloc(size, 0xab));
 assert.strictEqual(reference, 'CPCR-20260801-ABABABABAB');
-const defaults = supportBundle.preview({ applicationVersion: '0.4.0-beta.1', databaseSchemaVersion: 8, trackingParserVersion: 'v1', supportReferenceId: reference });
+const defaults = supportBundle.preview({ applicationVersion: '0.4.0', databaseSchemaVersion: 8, trackingParserVersion: 'v1', supportReferenceId: reference });
 assert.deepStrictEqual(defaults.selectedComponents, ['system', 'settings']);
 assert.strictEqual(defaults.supportReferenceId, reference);
 assert.ok(defaults.exclusions.includes('credentials'));

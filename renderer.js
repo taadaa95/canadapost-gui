@@ -2973,10 +2973,10 @@ $('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
 $('supportBundleAcknowledge')?.addEventListener('change', () => { $('confirmSupportBundle').disabled = !$('supportBundleAcknowledge').checked; });
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
-  const message = res?.message || res?.error || tr(res?.ok ? 'update.pageOpenedMessage' : 'update.pageOpenFailedMessage', res?.ok ? 'Opened update page.' : 'Could not open update page.');
+  const message = res?.message || res?.error || tr(res?.ok ? 'update.checkCompleteMessage' : 'update.checkFailedMessage', res?.ok ? 'Update check complete.' : 'Could not check for updates.');
   const status = $('settingsStatus');
   if (status) {
-    setLocalizedText(status, res?.ok ? 'update.pageOpened' : 'update.urlMissing', {}, res?.ok ? 'Update page opened' : 'Update URL not configured');
+    setLocalizedText(status, res?.ok ? 'update.checkComplete' : 'update.checkFailed', {}, res?.ok ? 'Update check complete' : 'Update check failed');
     status.className = res?.ok ? 'pill good' : 'pill bad';
   }
   log(message, res?.ok ? '' : 'log-late', 'step1');

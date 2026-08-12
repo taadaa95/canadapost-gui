@@ -1,62 +1,23 @@
-# Dev 11 beta release readiness
+# Stable 0.4.0 release readiness
 
 ## Candidate identity
 
-- Starting commit: `3431bdbdfbba63310277eee1ed020da9ea4c2cb7`
 - Canonical source branch: `feature/dev11-beta-release-hardening`
-- Target version/channel: `0.4.0-beta.1` / `beta`
-- Pull-request base: `feature/dev10-step3-executable-queue`
-- Final candidate commit: read from the clean-build `release-provenance-<platform>.json` and the PR head; both must match.
+- Target application version: `0.4.0`
+- Linux artifact: `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`
+- Windows artifact: `Canada.Post.Claim.Runner-0.4.0-win-x64.exe`
+- Final source SHA: recorded by the clean build and final handoff
 
-## Implementation commits by phase
+The branch name remains for PR continuity and is not a release channel.
 
-1. Metadata/document integrity: `ec8bb08`
-2. Stale-policy safety: `d9517cd`
-3. Signed updater trust chain: `2361435`
-4. Built-in-browser runtime/package reduction: `701362c`, package measurement `edf06fe`
-5. Architecture decomposition: `fd04aa7`
-6. IPC/worker boundaries: `96454b6`
-7. Resumable onboarding and supported themes: `a9219f8`
-8. Support bundle: `283dd12`
-9. Release guard, CI canonicalization, provenance, and this report: final PR-head commit
+## Preserved safety
 
-## Architecture and security summary
+Step 3 still requires the latest complete promoted Step 2 run, immutable evidence and snapshots, duplicate/terminal/unresolved blocking, dry-run and live-confirmation barriers, worker revalidation, visible built-in browser controls, and no automatic retry after an uncertain final action. Database schema remains 8 with migration, backup, recovery, reconciliation, and audit protections unchanged.
 
-Main-process IPC ownership is split into feature registries with shared bounded payload contracts. Renderer shared state, onboarding, stylesheet ownership, and Step 3 navigation/form/outcome/browser/safety/diagnostic helpers have explicit module boundaries. The production runtime uses Electron’s built-in browser with `playwright-core`; an independent production Chromium/profile path is rejected.
+## Stable updater
 
-Stale policy is advisory and cannot expire or block an otherwise valid late candidate. Step 3 still requires the latest complete promoted Step 2 run, revalidates evidence hashes before an immutable private snapshot, blocks duplicate/terminal/unresolved/reconciliation-required records, preserves dry-run and canary barriers, persists attempts before final actions, never automatically retries uncertain actions, and requires a visible built-in browser for CAPTCHA/text verification.
+The updater uses the configured repository's GitHub Latest endpoint. It rejects drafts, prereleases, non-newer versions, unsupported platforms/architectures, noncanonical filenames, missing or malformed GitHub SHA-256 asset digests, size mismatches, hash mismatches, incomplete downloads, disallowed hosts, and downgrades. It does not use channels, custom manifests, or Ed25519 keys.
 
-The GitHub Releases updater accepts only a fixed repository/allowlisted hosts and fails closed without a configured Ed25519 public key, canonical signed manifest, exact release/tag/channel/platform/architecture/version/size/hash agreement, user confirmation, operation lock, and pre-update database backup. No private signing key is present.
+## Publication gate
 
-Support exports require preview/acknowledgment; logs, masked history, and Step 3 diagnostics are opt-in, while credentials, tokens, cookies, browser profiles, raw API bodies, screenshots, full tracking numbers, and contact/address data are excluded.
-
-## Data and migration impact
-
-There is no new Dev 11 database schema migration. Schema version remains `8`. Existing startup backup, structural reconciliation, transactional migration, rollback, privacy deletion, and isolated-profile protections remain in force. The dormant legacy `manual_reviews` table and `manual_review_state` column remain for upgrade compatibility, but the application no longer creates, displays, counts, or resolves those records. Support bundles are user-selected local ZIP exports.
-
-## Package result
-
-The unsigned Linux package measured from implementation commit `701362c` is `131,090,651` bytes versus the Dev 10 baseline `387,230,260` bytes: `256,139,609` bytes / `66.14%` smaller. Its unpacked resources measured 14 MiB and its audited ASAR contained 353 entries and all six workers. The enforced budgets are 200 MiB for Linux AppImage and 220 MiB for Windows NSIS. Exact final-commit Linux and Windows sizes must come from their `package-size-*.json` reports; no local Windows size is claimed.
-
-Package audits reject bundled Playwright browsers, obsolete external profiles, fixtures/tests, runtime/customer data, logs, diagnostics, source maps, credentials, secrets, and unexpected ASAR content. CI beta packages and provenance reports are explicitly unsigned.
-
-## Automated validation
-
-Required commands are listed in `README.md` and CI runs unit/integration, Dev 10 regression, mock portal, Step 3 visibility, accessibility, Electron isolated-profile E2E, lint, format, typecheck, coverage, secret scanning, release audit, production dependency audit, SBOM, package content/size, release metadata, and provenance gates. Linux GUI-dependent automation runs under Xvfb. Windows results are claimed only from Windows CI.
-
-The final PR description and handoff report must record each command’s actual result, the clean package provenance commit, CI status, any failure, and any environment limitation.
-
-## Rollback
-
-Do not publish or merge when a required check fails. Stop live operations, preserve immutable audit/reconciliation state, withdraw affected unsigned artifacts or draft release, retain the previous executable/installer and pre-update database backup, and use the documented rollback/reconciliation path. Never retry an uncertain final claim action automatically.
-
-## External/manual gates — pending
-
-- Acquire and protect a Windows code-signing certificate; Authenticode-sign and independently verify the final Windows binary.
-- Supply and protect the offline production Ed25519 private key; configure its reviewed public key in source; sign/verify exact post-signing manifests outside the repository.
-- Obtain legal, privacy, EULA, trademark, policy, holiday-calendar, and support/lifecycle approval.
-- Perform human physical clean-install, launch, visual/keyboard, upgrade/migration, backup/restore, rollback, uninstall, and residue checks on supported Windows and Linux machines.
-- With authorized real credentials only, perform the website/API diagnostic, CAPTCHA/text verification, supervised Step 1/Step 2 procedure, dry run, one-claim canary, and reconciliation. Confirm that only `LATE_CANDIDATE` reaches Step 3 and that `REVIEW_REQUIRED`/`TRACKING_ERROR` stay excluded. No automated session may do this.
-- Execute and review the customer pilot with staffed support and deletion/incident rehearsals.
-
-Until every gate is signed off, this is an unsigned public-beta candidate, not a production-signed or stable release.
+Automated validation, clean-source packaging, package audit, size report, checksum, provenance, and stable release-metadata validation must pass before manual testing. The release remains unpublished until Kris validates the exact AppImage using `MANUAL_RELEASE_GATES.md`.

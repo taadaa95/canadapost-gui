@@ -1,6 +1,6 @@
 # Historical implementation record
 
-This file preserves Dev 1–10 checkpoint history. It is not an operating guide and its artifact names, branches, versions, package sizes, and completion statements are superseded by `BETA_OPERATING_GUIDE.md` and issue #4.
+This file preserves Dev 1–10 checkpoint history. It is not an operating guide and its artifact names, branches, versions, package sizes, and completion statements are superseded by `OPERATING_GUIDE.md`.
 
 # Autonomous productization progress
 

@@ -16,7 +16,7 @@ try {
   for (const relative of files) {
     const destination = path.join(stage, relative); fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.copyFileSync(path.join(root, relative), destination);
   }
-  const env = { ...process.env, RELEASE_CHANNEL: process.env.RELEASE_CHANNEL || 'beta', RELEASE_PLATFORM: 'linux', RELEASE_SOURCE_BRANCH: identity.branch, RELEASE_SOURCE_COMMIT: identity.commit, RELEASE_MATERIALIZED_FROM_GUARDED_SOURCE: '1' };
+  const env = { ...process.env, RELEASE_PLATFORM: 'linux', RELEASE_SOURCE_BRANCH: identity.branch, RELEASE_SOURCE_COMMIT: identity.commit, RELEASE_MATERIALIZED_FROM_GUARDED_SOURCE: '1' };
   for (const [command, args] of [['npm', ['ci']], ['npm', ['test']], ['npm', ['run', 'lint']], ['npm', ['run', 'typecheck']], ['npm', ['run', 'sbom']], ['npx', ['electron-builder', '--linux', 'AppImage', '--x64']], ['npm', ['run', 'package:audit', '--', 'dist/packages/linux-unpacked']], ['npm', ['run', 'package:size', '--', 'dist/packages']], ['npm', ['run', 'release:finalize']], ['npm', ['run', 'release:validate']], ['npm', ['run', 'release:provenance']]]) {
     const result = spawnSync(command, args, { cwd: stage, env, stdio: 'inherit' }); if (result.status !== 0) process.exit(result.status || 1);
   }

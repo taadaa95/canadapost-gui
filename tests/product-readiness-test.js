@@ -30,24 +30,14 @@ const updateSecurity = require('../lib/update-security');
     assert.ok(!crashText.includes('9000000042'));
     await assert.rejects(() => new DisabledCrashProvider().send(), /disabled/);
 
-    const keys = crypto.generateKeyPairSync('ed25519');
     const artifact = path.join(root, 'artifact.bin');
     fs.writeFileSync(artifact, 'synthetic artifact');
     const checksum = crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex');
-    const metadata = updateSecurity.signManifest({
-      format: updateSecurity.UPDATE_MANIFEST_FORMAT,
-      manifestVersion: updateSecurity.UPDATE_MANIFEST_VERSION,
-      applicationVersion: '0.4.1-beta.1', channel: 'beta', publishedAt: '2026-07-26T00:00:00.000Z',
-      platform: 'linux', architecture: 'x64',
-      artifact: { file: 'synthetic.AppImage', bytes: fs.statSync(artifact).size, sha256: checksum }
-    }, keys.privateKey);
-    const verifyOptions = { publicKey: keys.publicKey, channel: 'beta', currentVersion: '0.4.0-beta.1', platform: 'linux', architecture: 'x64' };
-    assert.strictEqual(updateSecurity.verifyUpdateMetadata(metadata, verifyOptions).ok, true);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { ...verifyOptions, publicKey: '' }), /No trusted production update public key/);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(metadata, { ...verifyOptions, channel: 'stable' }), /cannot install beta/);
     assert.strictEqual(updateSecurity.verifyArtifactChecksum(artifact, checksum), true);
-    const downgrade = updateSecurity.signManifest({ ...updateSecurity.unsignedManifest(metadata), applicationVersion: '0.3.0' }, keys.privateKey);
-    assert.throws(() => updateSecurity.verifyUpdateMetadata(downgrade, { ...verifyOptions, currentVersion: '0.4.0' }), /downgrade/);
+    assert(updateSecurity.compareVersions('0.4.0-beta.1', '0.4.0') < 0);
+    assert(updateSecurity.compareVersions('0.4.0', '0.4.1') < 0);
+    fs.appendFileSync(artifact, '!');
+    assert.throws(() => updateSecurity.verifyArtifact(artifact, { bytes: fs.statSync(artifact).size - 1, sha256: checksum }), /size verification/i);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

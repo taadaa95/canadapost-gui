@@ -12,7 +12,6 @@ const identity = process.env.RELEASE_MATERIALIZED_FROM_GUARDED_SOURCE === '1'
   : assertReleaseGitState(root);
 const metadataDirectory = path.join(root, 'dist', 'release-metadata');
 const candidates = [
-  `package-manifest-${platform}.unsigned.json`,
   `SHA256SUMS-${platform}.txt`,
   `package-size-${platform}.json`,
   'sbom.cyclonedx.json',
@@ -28,13 +27,13 @@ const report = {
   version: 1,
   generatedAt: new Date().toISOString(),
   applicationVersion: require('../package.json').version,
-  channel: process.env.RELEASE_CHANNEL || 'beta',
   platform,
   architecture: 'x64',
   sourceBranch: identity.branch,
   sourceCommit: identity.commit,
-  artifactTrust: 'unsigned-beta-build',
-  signingRequiredBeforeProductionPublication: true,
+  buildOrigin: process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_RUN_ID
+    ? `github-actions:${process.env.GITHUB_RUN_ID}`
+    : 'local-clean-source',
   materials
 };
 const destination = path.join(metadataDirectory, `release-provenance-${platform}.json`);
