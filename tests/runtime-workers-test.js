@@ -36,7 +36,7 @@ function makeLayout({ packaged = false } = {}) {
       userDataPath,
       executablePath,
       isPackaged: packaged,
-      platform: 'linux',
+      platform: process.platform,
       appImagePath: path.join(root, 'Canada-Post-Claim-Runner.AppImage')
     }
   };
