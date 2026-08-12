@@ -157,10 +157,12 @@ jobs:
             dist/release-metadata/release-provenance-linux.json
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git switch -c "$tag"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/ci-transfer.index"
+          git read-tree --empty
           git add -f .ci-transfer
-          git commit -m "ci: temporary Linux artifact transfer"
-          git push origin "HEAD:refs/heads/$tag"
+          tree="$(git write-tree)"
+          commit="$(git commit-tree -m 'ci: temporary Linux artifact transfer' "$tree")"
+          git push origin "$commit:refs/heads/$tag"
 
   package-windows:
     name: Windows package
@@ -208,10 +210,12 @@ jobs:
             "dist/release-metadata/release-provenance-windows.json"
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git switch -c $tag
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP "ci-transfer.index"
+          git read-tree --empty
           git add -f .ci-transfer
-          git commit -m "ci: temporary Windows artifact transfer"
-          git push origin "HEAD:refs/heads/$tag"
+          $tree = git write-tree
+          $commit = git commit-tree -m "ci: temporary Windows artifact transfer" $tree
+          git push origin "$commit`:refs/heads/$tag"
 
   package-macos:
     name: macOS universal package and content audit
@@ -314,10 +318,12 @@ jobs:
             dist/release-metadata/release-provenance-macos.json
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git switch -c "$tag"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/ci-transfer.index"
+          git read-tree --empty
           git add -f .ci-transfer
-          git commit -m "ci: temporary macOS artifact transfer ($SIGNED_BUILD)"
-          git push origin "HEAD:refs/heads/$tag"
+          tree="$(git write-tree)"
+          commit="$(git commit-tree -m "ci: temporary macOS artifact transfer ($SIGNED_BUILD)" "$tree")"
+          git push origin "$commit:refs/heads/$tag"
 
   rebuild-windows-v0-4-0:
     name: Windows v0.4.0 pinned rebuild and transfer
@@ -379,7 +385,9 @@ jobs:
           git show "$env:GITHUB_SHA`:scripts/ci-transfer.js" | node - pack .ci-transfer "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe" windows-v0.4.0-build.json
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git switch -c $tag
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP "ci-transfer.index"
+          git read-tree --empty
           git add -f .ci-transfer
-          git commit -m "ci: temporary pinned Windows artifact transfer"
-          git push origin "HEAD:refs/heads/$tag"
+          $tree = git write-tree
+          $commit = git commit-tree -m "ci: temporary pinned Windows artifact transfer" $tree
+          git push origin "$commit`:refs/heads/$tag"

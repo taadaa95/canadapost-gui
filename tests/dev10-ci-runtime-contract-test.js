@@ -92,6 +92,7 @@ assert.match(
 
 assert.ok((workflow.match(/ci-transfer\.js pack/g) || []).length >= 3, 'platform validation must create verified chunked transfers when Actions artifact storage is unavailable');
 assert.match(workflow, /node - pack \.ci-transfer/, 'the exact-source rebuild must use the current verified transfer script');
+assert.ok((workflow.match(/git read-tree --empty/g) || []).length >= 4, 'transfer branches must contain only artifact chunks');
 assert.ok((workflow.match(/refs\/heads\/\$tag/g) || []).length >= 4, 'manual dispatch transfers must use isolated temporary branches');
 assert.doesNotMatch(workflow, /gh release create/, 'CI transfers must never create application releases');
 

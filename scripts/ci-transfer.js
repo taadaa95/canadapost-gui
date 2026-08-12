@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const CHUNK_BYTES = 90_000_000;
+const CHUNK_BYTES = 49_000_000;
 
 function sha256(file) {
   const hash = crypto.createHash('sha256');
