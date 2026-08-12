@@ -939,25 +939,16 @@ main.tabbed-main > .results-short {
 
 
 .history-panel.active {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
 }
 
 .history-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
-.history-toolbar {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) repeat(5, auto);
-  gap: 4px;
-  align-items: end;
-}
-
-.history-toolbar .field { min-width: 0; }
-.history-toolbar button { white-space: nowrap; }
 
 .browser-session-status {
   min-height: 36px;
@@ -974,7 +965,7 @@ main.tabbed-main > .results-short {
 .history-content {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(380px, .9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   overflow: hidden;
 }
@@ -1011,8 +1002,7 @@ main.tabbed-main > .results-short {
   background: var(--field);
 }
 
-.history-row,
-.reconciliation-row {
+.history-row {
   display: grid;
   align-items: center;
   gap: 6px;
@@ -1024,10 +1014,8 @@ main.tabbed-main > .results-short {
 }
 
 .history-row { grid-template-columns: 1.15fr 1fr .8fr 1fr 2.3fr; }
-.reconciliation-row { grid-template-columns: 1.1fr 1fr .7fr 2fr 2.2fr; }
 
-.history-row.head,
-.reconciliation-row.head {
+.history-row.head {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -1038,8 +1026,7 @@ main.tabbed-main > .results-short {
   letter-spacing: .03em;
 }
 
-.history-row:last-child,
-.reconciliation-row:last-child { border-bottom: 0; }
+.history-row:last-child { border-bottom: 0; }
 
 .history-actions {
   display: flex;
@@ -1060,31 +1047,8 @@ main.tabbed-main > .results-short {
   text-align: center;
 }
 
-.history-details {
-  grid-column: 1 / -1;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 8px;
-}
-
-.history-details summary {
-  cursor: pointer;
-  font-weight: 900;
-  color: var(--text);
-}
-
-.manual-entry-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.manual-entry-grid .wide { grid-column: span 2; }
 
 @media (max-width: 1250px) {
-  .history-toolbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .history-toolbar .field:first-child { grid-column: span 2; }
   .history-content { grid-template-columns: 1fr; overflow: auto; }
   .history-section { min-height: 300px; }
 }
@@ -1780,13 +1744,9 @@ main.tabbed-main {
   .settings-grid,
   .settings-two-col,
   .settings-three-col,
-  .history-summary,
-  .manual-entry-grid {
+  .history-summary {
     grid-template-columns: 1fr;
   }
-  .history-toolbar { grid-template-columns: 1fr; }
-  .history-toolbar .field:first-child,
-  .manual-entry-grid .wide { grid-column: auto; }
   #step3 .step3-workspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(360px, 1fr) auto 128px;
@@ -2006,9 +1966,7 @@ main.tabbed-main {
 .settings-grid,
 .step-fields,
 .history-summary,
-.history-toolbar,
 .history-content,
-.manual-entry-grid,
 .step-workspace,
 .settings-two-col,
 .settings-three-col,
@@ -2024,7 +1982,6 @@ main.tabbed-main {
 
 .settings-section,
 .history-section,
-.history-details,
 .step-status-card,
 .step-log-card,
 .step-browser-card,
@@ -2041,7 +1998,6 @@ main.tabbed-main {
 
 .settings-section,
 .history-section,
-.history-details,
 .step-status-card,
 .step-log-card,
 .step-browser-card,
@@ -2195,28 +2151,14 @@ progress {
   min-height: 360px;
 }
 
-.history-summary {
-  gap: 14px;
-}
+.history-summary { gap: 14px; }
 
-.history-toolbar {
-  grid-template-columns: minmax(240px, 1fr) minmax(180px, 220px) repeat(5, auto);
-  align-items: end;
-}
+.history-content { grid-template-columns: minmax(0, 1fr); }
 
-.history-content {
-  grid-template-columns: minmax(360px, .95fr) minmax(0, 1.2fr);
-}
-
-.history-row,
-.reconciliation-row {
+.history-row {
   min-width: 860px;
   padding: 10px 12px;
   font-size: 13px;
-}
-
-.manual-entry-grid {
-  margin-top: 14px;
 }
 
 .results-panel .operations-panel,
@@ -2237,21 +2179,14 @@ progress {
   .workflow-strip,
   .step-tabs,
   .compact-actions,
-  .history-toolbar,
   .step2-fields,
   .step3-fields,
   .settings-grid,
   .settings-two-col,
   .settings-three-col,
-  .manual-entry-grid,
   .step-workspace,
   .history-content {
     grid-template-columns: 1fr;
-  }
-
-  .history-toolbar .field:first-child,
-  .manual-entry-grid .wide {
-    grid-column: auto;
   }
 
   #step3 .step3-workspace {
@@ -2269,7 +2204,6 @@ progress {
   .step-actions,
   .step-actions-3,
   .history-summary,
-  .history-toolbar,
   .workflow-strip {
     grid-template-columns: 1fr;
   }
@@ -2390,9 +2324,7 @@ progress {
 
 .settings-grid,
 .history-summary,
-.history-toolbar,
 .history-content,
-.manual-entry-grid,
 .step-workspace,
 .settings-two-col,
 .settings-three-col,
@@ -2404,7 +2336,6 @@ progress {
 
 .settings-section,
 .history-section,
-.history-details,
 .step-status-card,
 .step-log-card,
 .step-browser-card,
@@ -2435,8 +2366,7 @@ progress {
 .settings-note,
 .step-copy-box,
 .browser-session-status,
-.history-row > div,
-.reconciliation-row > div,
+  .history-row > div,
 .pill,
 .warning-item,
 .detail-copy {
@@ -2459,24 +2389,16 @@ progress {
   text-align: center !important;
 }
 
-.history-toolbar {
-  grid-template-columns: minmax(220px, 1.25fr) minmax(160px, .8fr) repeat(5, auto) !important;
-}
-
 @media (max-width: 1320px) {
   .step-tab,
   .step-tab.active {
     flex-basis: calc((100% - 24px) / 3) !important;
-  }
-  .history-toolbar {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 
 @media (max-width: 900px) {
   .workflow-strip,
   .compact-actions,
-  .history-toolbar,
   .history-summary,
   .step-workspace,
   .step2-fields,
@@ -2484,7 +2406,6 @@ progress {
   .settings-grid,
   .settings-two-col,
   .settings-three-col,
-  .manual-entry-grid,
   .history-content,
   .step-actions,
   .step-actions-3 {
@@ -3002,6 +2923,13 @@ main.tabbed-main > .app-shell,
 .step3-browser-session-row .browser-session-status {
   flex: 1 1 260px;
   margin: 0;
+}
+
+.advanced-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .step3-action-advisory .blocking-check-list {
@@ -3647,7 +3575,6 @@ body.page-scroll-layout .history-panel.active {
 #step3 .step3-log-card,
 .history-panel .step3-control-card,
 .history-panel .history-section,
-.history-panel .history-details,
 .history-panel > div {
   width: 100% !important;
   min-width: 0 !important;
@@ -3730,17 +3657,6 @@ body.page-scroll-layout .history-panel.active {
   gap: 16px !important;
 }
 
-.history-panel .history-toolbar {
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
-  gap: 12px !important;
-  align-items: end !important;
-  margin-top: 12px !important;
-}
-
-.history-panel .history-toolbar .field:first-child {
-  grid-column: span 2;
-}
-
 .history-panel .history-content {
   display: flex !important;
   flex-direction: column !important;
@@ -3789,8 +3705,7 @@ body.page-scroll-layout .history-panel.active {
   overflow-y: hidden !important;
 }
 
-.history-panel .history-record-list > .history-row.head,
-.history-panel .history-record-list > .reconciliation-row.head {
+.history-panel .history-record-list > .history-row.head {
   position: sticky !important;
   top: 0 !important;
   z-index: 4 !important;
@@ -3799,16 +3714,14 @@ body.page-scroll-layout .history-panel.active {
   opacity: 1 !important;
 }
 
-.history-panel .history-row,
-.history-panel .reconciliation-row {
+.history-panel .history-row {
   min-height: 52px !important;
   padding: 12px 14px !important;
   font-size: 13px !important;
   line-height: 1.5 !important;
 }
 
-.history-panel .history-row > div,
-.history-panel .reconciliation-row > div {
+.history-panel .history-row > div {
   min-width: 0 !important;
   white-space: normal !important;
   overflow-wrap: anywhere !important;
@@ -3835,6 +3748,4 @@ body.page-scroll-layout .history-panel.active {
   #step3 .step3-fields,
   #step3 .step-actions-3 { grid-template-columns: minmax(0, 1fr) !important; }
   #step3 .browser-slot { height: 650px !important; }
-  .history-panel .history-toolbar .field:first-child { grid-column: auto; }
-  .history-panel .manual-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }

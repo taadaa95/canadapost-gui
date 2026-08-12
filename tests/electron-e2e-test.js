@@ -345,7 +345,6 @@ const { loadLocale } = require('../lib/i18n');
           overflowX: getComputedStyle(list).overflowX, overflowY: getComputedStyle(list).overflowY,
           sticky: getComputedStyle(head).position,
           stickyOffset: Math.abs(head.getBoundingClientRect().top - list.getBoundingClientRect().top),
-          clearVisible: document.getElementById('clearHistoryFilters').getBoundingClientRect().height > 0,
           hasBadge: Boolean(document.getElementById('reconciliationBadge'))
         };
       });
@@ -357,7 +356,6 @@ const { loadLocale } = require('../lib/i18n');
       assert.strictEqual(history.overflowY, 'auto');
       assert.strictEqual(history.sticky, 'sticky');
       assert(history.stickyOffset <= 2);
-      assert.strictEqual(history.clearVisible, true);
       assert.strictEqual(history.hasBadge, false);
     };
     for (const viewport of [{ width: 980, height: 680 }, { width: 1280, height: 720 }, { width: 1600, height: 1000 }, { width: 2560, height: 1440 }]) await assertHistoryLayout(viewport.width, viewport.height);

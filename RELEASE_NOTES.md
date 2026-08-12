@@ -2,6 +2,13 @@
 
 Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `BETA_OPERATING_GUIDE.md` for 0.4.0-beta.1.
 
+## Dev 11 candidate queue and Claim History simplification — 2026-08-12
+
+- Step 3 now returns and displays only currently actionable `LATE_CANDIDATE` records. Submitted, already-submitted, terminal, unresolved, reconciliation-required, tombstoned, and otherwise blocked records remain protected by every authoritative submission check but no longer clutter the queue.
+- History is now one newest-first Claim History list with Refresh and CSV export. Uncertain or exhausted latest attempts show **Needs attention** and the existing authoritative reconciliation actions inline; ordinary rows do not.
+- Search/status filters, manual shipment entry, the classification viewer, the dedicated Reconciliation Queue, and duplicate History browser-session controls were removed. Backup, restore, stored-data management, and support bundles now live only under **Settings → Advanced**.
+- Database schema 8, historical records, immutable classifications/evidence, attempts, audit data, duplicate tombstones, and reconciliation state remain intact.
+
 # Canada Post Claim Runner 0.4.0-dev.10
 
 ## Step 3 executable queue and idle-browser correction — 2026-07-31
@@ -9,7 +16,7 @@ Entries below preserve earlier development checkpoints. They are not current ope
 - Separates late-delivery candidates from candidates that are currently executable in Step 3.
 - Prevents submitted, duplicate, terminal, unresolved, and reconciliation-required records from being selected or included by Select all.
 - Revalidates claim-attempt state transactionally before creating the immutable worker snapshot.
-- Routes unresolved attempts directly to their matching reconciliation record in History without adding a retry bypass.
+- Keeps unresolved attempts blocked until they are resolved through authoritative Claim History actions, without adding a retry bypass.
 - Keeps the native browser hidden until an executable snapshot passes mandatory preflight and main-process validation.
 - Replaces the misleading white idle browser and generic Browser ready state with explicit idle, preparing, opening, loaded, hidden, and failure states.
 - Keeps schema version 8, duplicate protection, SQLite queue authority, evidence hashes, update guards, dry-run protection, and CAPTCHA handling unchanged.
@@ -45,11 +52,10 @@ This is `0.4.0-dev.9`, an unsigned development build. It is not a public release
 
 # Canada Post Claim Runner 0.4.0-dev.2
 
-## History scrolling, filter reset and navigation cleanup — 2026-07-29
+## Historical History scrolling checkpoint — 2026-07-29
 
 - Bounds each populated History record section between a useful 260 px minimum and a responsive `min(60vh, 640px)` maximum, with independent vertical and horizontal scrolling. Opaque theme-aware table headers remain sticky while records scroll; long values wrap without forcing application-level horizontal overflow.
-- Adds a non-destructive **Clear filters** secondary action. It resets search, status, and transient page/offset state, refreshes the unfiltered first page immediately, and is disabled at the default filter state. It does not call any record, evidence, settings, CSV, credential, or database mutation path.
-- Removes the purely visual reconciliation indicator from the History navigation tab. The reconciliation queue, dashboard count, in-page unresolved count, History refresh, and the separate Results notification indicator remain intact.
+- This layout checkpoint predates the Dev 11 single-list Claim History interface described above.
 - Bumps package, application, installer, localized release, and validation metadata to `0.4.0-dev.2`. Step 1, Step 2, Step 3, Tracking pacing, and claim-classification behavior are unchanged.
 
 This remains an unsigned build pending supervised review. No live Tracking request, claim portal, or claim submission is used for validation.

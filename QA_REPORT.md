@@ -1,10 +1,10 @@
 # v0.4.0-dev.2 QA report
 
-## History refinement — 2026-07-29
+## Claim History simplification — 2026-08-12
 
-History claim-attempt, reconciliation and Step 2 classification record boxes now use a 260 px CSS minimum and responsive `min(60vh, 640px)` maximum when populated, with independent vertical/horizontal scrolling, comfortable wrapping and opaque sticky table headers. Compact empty/loading/error states use a 180–220 px range. The page remains vertically scrollable and has no application-level horizontal overflow.
+History now uses a single newest-first Claim History table with a 260 px CSS minimum and responsive `min(60vh, 640px)` maximum when populated, comfortable wrapping, and an opaque sticky header. Compact empty/loading/error states use a 180–220 px range. The page remains vertically scrollable and has no application-level horizontal overflow.
 
-The new non-destructive Clear filters action resets search, status, and transient page/offset to the default first-page state, refreshes immediately, and disables itself at defaults. UI tests prove that no mutation IPC path is called, 500 synthetic records remain present, and an evidence sentinel remains byte-identical. Database tests prove pagination reads do not mutate records. The purely visual History-tab reconciliation badge and both renderer update paths were removed; the reconciliation data, dashboard, in-page count, refresh behavior and separate Results notification badge remain intact.
+Search/status filters, manual shipment entry, the classification viewer, the separate Reconciliation Queue, and duplicate History browser-session controls are absent. Latest unknown, in-progress, or max-attempt failure rows show **Needs attention** and authoritative reconciliation actions inline. Backup, restore, stored-data management, and support bundles are available under **Settings → Advanced**. Tests preserve the evidence sentinel and verify ordinary rows have no reconciliation actions.
 
 Zero, one, 19, 50 and 500-record fixtures, missing values, long identifiers/statuses/messages, sticky scroll behavior and tab alignment passed at 980×680, 1280×720, 1600×1000, 2560×1440 and maximized Electron viewports. The approved spacious Step 3 layout and native mock-browser bounds also passed unchanged. Complete `npm test`, formatting, typecheck, lint (zero errors; four pre-existing non-failing complexity warnings), 96.06% line/statement coverage, 73.05% branch coverage, 93.18% function coverage, accessibility, localization, mock portal, Electron E2E, 178-file release audit, secret scan, full/production npm audits (zero vulnerabilities), and the 509-entry SBOM passed.
 

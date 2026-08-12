@@ -13,12 +13,11 @@ const englishLocale = require('../locales/en-CA.json');
 const pkg = require('../package.json');
 
 const requiredIds = [
-  'historyTab', 'historySearch', 'historyStatusFilter', 'historyList',
-  'reconciliationList', 'reconciliationCountPill', 'historyResultCount', 'clearHistoryFilters',
-  'historyShipments', 'historySubmitted', 'historyReconciliation', 'historyFailed',
-  'databaseIntegrity', 'createBackup', 'restoreBackup', 'createDiagnostics',
+  'historyTab', 'historyList', 'historyResultCount',
+  'historySubmitted', 'historyNeedsAttention', 'historyRecordTotal',
+  'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
-  'dryRun', 'claimQueueList', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'addManualShipment', 'manualShipmentList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus', 'checkStep3BrowserSession', 'step3BrowserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
+  'dryRun', 'claimQueueList', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'checkStep3BrowserSession', 'clearStep3BrowserSession', 'step3BrowserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
   'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
@@ -37,10 +36,7 @@ assert.ok(englishLocale['step3.supportGuidance'].includes('1-888-550-6333'), 'Mi
 assert.ok(englishLocale['step3.supportGuidance'].includes('Unsure about a claim?'), 'Missing Step 3 claim-verification guidance');
 assert.match(html, /data-i18n="step3\.supportGuidance"/);
 assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
-assert.ok(renderer.includes("$('clearBrowserSession')?.addEventListener"));
-assert.ok(renderer.includes("$('historySearch')?.addEventListener"));
-assert.ok(renderer.includes("$('clearHistoryFilters')?.addEventListener"));
-assert.ok(renderer.includes('Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS)'));
+assert.ok(renderer.includes("$('clearStep3BrowserSession')?.addEventListener"));
 assert.ok(!html.includes('id="reconciliationBadge"'), 'History tab must not contain a notification badge');
 assert.ok(!renderer.includes("$('reconciliationBadge')"), 'Renderer must not update a removed History badge');
 const historyTabMarkup = html.match(/<button id="tabHistory"[^>]*>([\s\S]*?)<\/button>/)?.[1] || '';
@@ -50,6 +46,9 @@ assert.ok(/id="tabResults"[^>]*>[\s\S]*?id="notificationsBadge"/.test(html), 'Re
 assert.ok(/data-tab="historyTab"/.test(html));
 assert.match(html, /data-i18n="step3\.dryRun"/);
 assert.match(englishLocale['step3.dryRun'], /Dry run.+stop before final review or submission/i);
+assert.match(englishLocale['step3.queue.candidateCount'], /\{count\} candidates/);
+assert.doesNotMatch(englishLocale['step3.queue.candidateCount'], /blocked|executable/i,
+  'normal queue count must describe only visible actionable candidates');
 assert.ok(!html.includes('Reliability, Testing &amp; Retention'), 'Reliability settings section should be removed');
 assert.ok(renderer.includes('function setBuiltinBrowserActivity'));
 assert.ok(renderer.includes('onBrowserActivity'));
@@ -91,8 +90,25 @@ assert.doesNotMatch(html, /manualReviewList|manualReviewCountPill|Eligibility Ma
 assert.doesNotMatch(`${renderer}\n${preload}\n${main}`, /listManualReviews|updateManualReview|manualReview:list|manualReview:update/,
   'eligibility manual-review renderer and IPC APIs must be absent');
 const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?.[0] || '';
-assert.ok(historyMarkup.includes('id="refreshBrowserSession"'), 'Browser-session safety controls must remain after UI removal');
-assert.ok(!/<div class="history-toolbar"[^>]*>\s*<\/div>/.test(historyMarkup), 'Health-check removal must not leave an empty toolbar');
+for (const removedId of [
+  'historySearch', 'historyStatusFilter', 'clearHistoryFilters', 'reconciliationList',
+  'reconciliationCountPill', 'addManualShipment', 'manualShipmentList',
+  'historyClassificationList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus'
+]) assert.ok(!historyMarkup.includes(`id="${removedId}"`), `History must not retain #${removedId}`);
+assert.doesNotMatch(historyMarkup, /Reconciliation Queue|Manually add|classification records/i);
+assert.strictEqual((html.match(/id="createBackup"/g) || []).length, 1);
+assert.strictEqual((html.match(/id="restoreBackup"/g) || []).length, 1);
+assert.strictEqual((html.match(/id="createDiagnostics"/g) || []).length, 1);
+const settingsMarkup = html.match(/<section id="settingsTab"[\s\S]*?<section id="step1"/)?.[0] || '';
+for (const id of ['createBackup', 'restoreBackup', 'manageStoredData', 'createDiagnostics']) {
+  assert.ok(settingsMarkup.includes(`id="${id}"`), `${id} must be available in Settings → Advanced`);
+}
+assert.doesNotMatch(`${renderer}\n${preload}`, /listReconciliation|listClassificationQueue|listManualShipments|addManualShipment/,
+  'removed History-only preload and renderer APIs must not remain exposed');
+assert.doesNotMatch(main, /registerIpcHandler\('(reconciliation:list|classification:list|shipment:listManual|shipment:manualAdd)'/,
+  'removed History-only IPC handlers must not remain exposed');
+assert.match(renderer, /if \(item\.needsAttention\)[\s\S]*?reconciliationActionButton/,
+  'inline History reconciliation actions must be gated by needsAttention');
 assert.ok(!html.includes('id="step3PreflightModal"'), 'The blocking Step 3 preflight modal must be removed');
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');

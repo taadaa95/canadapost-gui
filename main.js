@@ -1849,7 +1849,7 @@ registerIpcHandler('history:list', (_event, options = {}) => {
   return { ok: true, items: claimDb.listClaimHistory(DB_PATH, options) };
 });
 
-registerIpcHandler('history:export', async (_event, options = {}) => {
+registerIpcHandler('history:export', async () => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'External exports are disabled while isolated test data is active.' };
   const result = await dialog.showSaveDialog(win, {
     title: localizedText('dialog.exportHistory.title', {}, 'Export claim history'),
@@ -1857,13 +1857,8 @@ registerIpcHandler('history:export', async (_event, options = {}) => {
     filters: [{ name: localizedText('dialog.csvFiles', {}, 'CSV files'), extensions: ['csv'] }]
   });
   if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-  archiveTools.exportHistoryCsv(DB_PATH, result.filePath, options);
+  archiveTools.exportHistoryCsv(DB_PATH, result.filePath);
   return { ok: true, path: result.filePath };
-});
-
-registerIpcHandler('reconciliation:list', () => {
-  ensureDirs();
-  return { ok: true, items: claimDb.listReconciliation(DB_PATH, 1000) };
 });
 
 registerIpcHandler('reconciliation:update', async (_event, payload = {}) => {
@@ -1871,36 +1866,6 @@ registerIpcHandler('reconciliation:update', async (_event, payload = {}) => {
     return await operationCoordinator.run('authoritative_data_mutation', async () => {
       const item = claimDb.reconcileAttempt(DB_PATH, payload.attemptId, String(payload.action || ''), String(payload.note || ''), String(payload.confirmationNumber || ''));
       return { ok: true, item, reconciliationCount: claimDb.listReconciliation(DB_PATH, 10000).length };
-    });
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
-});
-
-registerIpcHandler('classification:list', (_event, payload = {}) => {
-  try { return { ok: true, items: claimDb.listClassificationQueue(DB_PATH, String(payload.classification || ''), payload) }; }
-  catch (error) { return { ok: false, error: error.message, items: [] }; }
-});
-
-registerIpcHandler('shipment:listManual', (_event, options = {}) => {
-  ensureDirs();
-  return { ok: true, items: claimDb.listManualShipments(DB_PATH, options) };
-});
-
-registerIpcHandler('shipment:manualAdd', async (_event, payload = {}) => {
-  try {
-    return await operationCoordinator.run('authoritative_data_mutation', async () => {
-      const shipment = claimDb.upsertShipment(DB_PATH, {
-        trackingNumber: payload.trackingNumber,
-        referenceNumber: payload.referenceNumber,
-        serviceCode: payload.serviceCode,
-        destinationPostalCode: payload.destinationPostalCode,
-        expectedDate: payload.expectedDate,
-        deliveryDate: payload.deliveryDate,
-        classification: payload.classification || 'MANUAL_ENTRY',
-        eligibilityReason: payload.note || 'Manually entered shipment.'
-      });
-      return { ok: true, shipment };
     });
   } catch (error) {
     return { ok: false, error: error.message };

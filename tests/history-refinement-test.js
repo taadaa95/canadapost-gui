@@ -20,7 +20,8 @@ const { chromium } = require('playwright');
       trackingNumber: index === 498 ? `LONG${'9'.repeat(180)}` : `HISTORY${String(index).padStart(12, '0')}`,
       referenceNumber: index === 497 ? `REFERENCE-${'unbroken'.repeat(100)}` : `REFERENCE-${index}`,
       attemptedAt: '2026-07-29T12:00:00.000Z',
-      status: index % 3 === 0 ? 'failed' : 'submitted',
+      status: index === 0 ? 'unknown' : (index % 3 === 0 ? 'failed' : 'submitted'),
+      needsAttention: index === 0,
       confirmationNumber: `CONF-${index}`,
       message: index === 499 ? `Long error ${'message-with-detail/'.repeat(200)}` : (index === 496 ? '' : `Outcome ${index}`),
       screenshotPath: '',
@@ -28,6 +29,7 @@ const { chromium } = require('playwright');
     }));
     window.__historyCalls = [];
     window.__mutationCalls = [];
+    window.prompt = () => '';
     const ok = async () => ({ ok: true });
     window.cpApp = new Proxy({
       onEvent: () => {}, onRun: () => {}, onStage: () => {}, onBrowserActivity: () => {},
@@ -35,17 +37,11 @@ const { chromium } = require('playwright');
       loadConfig: async () => ({ ok: true, appVersion: '0.4.0-dev.4', setupCompleted: true, databaseIntegrity: { ok: true }, dashboard: {}, reconciliationCount: 0 }),
       listHistory: async options => {
         window.__historyCalls.push({ ...options });
-        const search = String(options.search || '').toLowerCase();
-        const status = String(options.status || 'all');
-        const filtered = window.__historyRecords.filter(item => (!search || [item.trackingNumber, item.referenceNumber, item.confirmationNumber].some(value => String(value || '').toLowerCase().includes(search))) && (status === 'all' || item.status === status));
-        return { ok: true, items: filtered.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 500)) };
+        return { ok: true, items: window.__historyRecords.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 500)) };
       },
-      listReconciliation: async () => ({ ok: true, items: [] }),
-      getDashboard: async () => ({ ok: true, dashboard: { shipments: 500, submitted: 333, reconciliation: 0, failed: 167 }, integrity: { ok: true } }),
-      listManualShipments: async () => ({ ok: true, items: [] }),
+      getDashboard: async () => ({ ok: true, dashboard: { submitted: 333, reconciliation: 1, historyRecords: 500 }, integrity: { ok: true } }),
       getFinancialReport: async () => ({ ok: true, report: { currency: 'CAD', totalsMinor: {}, pendingMinor: 0, recoveryRateBasisPoints: null } }),
-      reconcileAttempt: async value => { window.__mutationCalls.push(['reconcileAttempt', value]); return { ok: true }; },
-      addManualShipment: async value => { window.__mutationCalls.push(['addManualShipment', value]); return { ok: true }; }
+      reconcileAttempt: async value => { window.__mutationCalls.push(['reconcileAttempt', value]); return { ok: true }; }
     }, { get: (target, property) => property in target ? target[property] : ok });
   });
 
@@ -82,7 +78,6 @@ const { chromium } = require('playwright');
           headerBackground: headStyle.backgroundColor,
           documentWidth: document.documentElement.scrollWidth,
           viewportWidth: document.documentElement.clientWidth,
-          clearVisible: document.getElementById('clearHistoryFilters').getBoundingClientRect().height > 0,
           tabHeight: document.getElementById('tabHistory').getBoundingClientRect().height,
           adjacentTabHeight: document.getElementById('tabResults').getBoundingClientRect().height
         };
@@ -97,39 +92,31 @@ const { chromium } = require('playwright');
       assert(layout.stickyOffset <= 2, 'History header did not remain pinned to its scrolling container');
       assert(!['transparent', 'rgba(0, 0, 0, 0)'].includes(layout.headerBackground));
       assert(layout.documentWidth <= layout.viewportWidth + 1, `${viewport.width}x${viewport.height} developed application-level horizontal overflow`);
-      assert.strictEqual(layout.clearVisible, true);
       assert(Math.abs(layout.tabHeight - layout.adjacentTabHeight) <= 1, 'Removing the History badge changed tab alignment');
     }
 
-    await page.locator('#historySearch').fill('HISTORY000000000499');
-    await page.locator('#historyStatusFilter').selectOption('failed');
-    await page.waitForTimeout(300);
-    assert.strictEqual(await page.locator('#clearHistoryFilters').isEnabled(), true);
-    await page.evaluate(() => {
-      window.setHistoryPagination(4, 300);
-    });
-    await page.locator('#clearHistoryFilters').focus();
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => document.querySelectorAll('#historyList .history-row:not(.head)').length === 500);
-    const cleared = await page.evaluate(() => ({
-      search: document.getElementById('historySearch').value,
-      status: document.getElementById('historyStatusFilter').value,
-      disabled: document.getElementById('clearHistoryFilters').disabled,
-      count: document.getElementById('historyResultCount').textContent,
-      state: window.getHistoryViewState(),
-      lastCall: window.__historyCalls.at(-1),
-      records: window.__historyRecords.length,
-      mutations: window.__mutationCalls.length
-    }));
-    assert.deepStrictEqual({ search: cleared.search, status: cleared.status }, { search: '', status: 'all' });
-    assert.strictEqual(cleared.disabled, true);
-    assert.strictEqual(cleared.count, '500 records');
-    assert.deepStrictEqual(cleared.state, { search: '', status: 'all', page: 1, offset: 0 });
-    assert.strictEqual(cleared.lastCall.offset, 0);
-    assert.strictEqual(cleared.lastCall.page, 1);
-    assert.strictEqual(cleared.records, 500);
-    assert.strictEqual(cleared.mutations, 0, 'Clear filters must not invoke a mutation IPC path');
-    assert.deepStrictEqual(fs.readFileSync(evidencePath), evidence, 'Clear filters changed an evidence file');
+    assert.strictEqual(await page.locator('#historySearch').count(), 0);
+    assert.strictEqual(await page.locator('#historyStatusFilter').count(), 0);
+    assert.strictEqual(await page.locator('#clearHistoryFilters').count(), 0);
+    assert.strictEqual(await page.locator('#reconciliationList').count(), 0);
+    assert.strictEqual(await page.locator('#manualShipmentList').count(), 0);
+    assert.strictEqual(await page.locator('#historyClassificationList').count(), 0);
+    assert.strictEqual(await page.locator('#refreshBrowserSession').count(), 0);
+    assert.strictEqual(await page.locator('#clearBrowserSession').count(), 0);
+    assert.strictEqual(await page.locator('#historyList').getByText('Needs attention', { exact: true }).count(), 1);
+    const attentionRow = page.locator('#historyList .history-row:not(.head)').first();
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark submitted' }).count(), 1);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark not submitted' }).count(), 1);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Approve retry' }).count(), 1);
+    const ordinaryRow = page.locator('#historyList .history-row:not(.head)').nth(1);
+    assert.strictEqual(await ordinaryRow.locator('.history-actions button').count(), 0,
+      'ordinary History rows must not expose reconciliation actions');
+    await attentionRow.getByRole('button', { name: 'Approve retry' }).click();
+    await page.waitForFunction(() => window.__mutationCalls.length === 1);
+    assert.deepStrictEqual(await page.evaluate(() => window.__mutationCalls[0]), [
+      'reconcileAttempt', { attemptId: 1, action: 'retry', note: '', confirmationNumber: '' }
+    ]);
+    assert.deepStrictEqual(fs.readFileSync(evidencePath), evidence, 'History rendering changed an evidence file');
 
     await page.evaluate(async () => {
       window.__historyRecords.unshift({ id: 501, trackingNumber: 'NEW-HISTORY-RECORD', attemptedAt: '2026-07-29T15:00:00Z', status: 'submitted', confirmationNumber: 'NEW', message: 'New record' });
@@ -142,7 +129,7 @@ const { chromium } = require('playwright');
       assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), count);
     }
 
-    process.stdout.write('History refinement, 500-record layout and non-destructive filter reset tests passed.\n');
+    process.stdout.write('Simple Claim History, inline attention actions and 500-record layout tests passed.\n');
   } finally {
     await browser.close();
     fs.rmSync(evidenceRoot, { recursive: true, force: true });

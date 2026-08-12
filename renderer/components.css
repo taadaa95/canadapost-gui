@@ -32,4 +32,3 @@
 .claim-queue-status .pill { justify-self: start; }
 .claim-queue-block-reason { color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
 .claim-queue-status .compact-button { justify-self: start; min-height: 30px; padding: 4px 8px; }
-.reconciliation-row.focused { outline: 2px solid var(--accent-2); outline-offset: -2px; background: var(--accent-soft); }

@@ -173,7 +173,12 @@
             <button id="saveUserSettings" class="success" type="button" data-i18n="settings.save"></button>
             <details class="settings-note advanced-settings">
               <summary id="advancedSettingsTitle" data-i18n="settings.advanced"></summary>
-              <button id="manageStoredData" class="secondary" type="button" data-i18n="privacy.manageStoredData"></button>
+              <div class="advanced-settings-actions">
+                <button id="createBackup" class="secondary" type="button" data-i18n="action.createBackup"></button>
+                <button id="restoreBackup" class="warning" type="button" data-i18n="action.restoreBackup"></button>
+                <button id="manageStoredData" class="secondary" type="button" data-i18n="privacy.manageStoredData"></button>
+                <button id="createDiagnostics" class="secondary" type="button" data-i18n="support.bundle"></button>
+              </div>
             </details>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button" data-i18n="update.check"></button>
@@ -301,6 +306,7 @@
           <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
           <div class="step3-browser-session-row">
             <button id="checkStep3BrowserSession" class="secondary compact-button" type="button" data-i18n="browserSession.check"></button>
+            <button id="clearStep3BrowserSession" class="warning compact-button" type="button" data-i18n="action.clearSession"></button>
             <p id="step3BrowserSessionStatus" class="browser-session-status" role="status" aria-live="polite" data-i18n="browserSession.notChecked"></p>
           </div>
           <section id="step3ActionAdvisory" class="step3-action-advisory hidden" aria-labelledby="step3ActionAdvisoryTitle" aria-live="assertive">
@@ -380,74 +386,19 @@
       <section id="historyTab" class="tab-panel history-panel" role="tabpanel" aria-labelledby="tabHistory">
         <div class="step-title-row">
           <h2 data-i18n="history.title"></h2>
-          <span id="databaseIntegrity" class="pill" data-i18n="database.checking"></span>
+          <div class="history-actions">
+            <button id="refreshHistory" class="secondary" type="button" data-i18n="action.refresh"></button>
+            <button id="exportHistory" class="secondary" type="button" data-i18n="history.exportCsv"></button>
+          </div>
         </div>
 
         <div class="history-summary">
-          <div class="stat"><div id="historyShipments" class="num">0</div><div class="label" data-i18n="history.shipmentsRecorded"></div></div>
           <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label" data-i18n="history.submitted"></div></div>
-          <div class="stat"><div id="historyReconciliation" class="num">0</div><div class="label" data-i18n="history.needReconciliation"></div></div>
-          <div class="stat"><div id="historyFailed" class="num">0</div><div class="label" data-i18n="history.retryableFailures"></div></div>
-        </div>
-
-        <div>
-          <div class="history-toolbar">
-            <div class="field">
-              <label for="historySearch" data-i18n="history.searchLabel"></label>
-              <input id="historySearch" type="search" data-i18n-placeholder="history.searchPlaceholder" />
-            </div>
-            <div class="field">
-              <label for="historyStatusFilter" data-i18n="common.status"></label>
-              <select id="historyStatusFilter">
-                <option value="all" data-i18n="history.filter.all"></option>
-                <option value="submitted" data-i18n="history.filter.submitted"></option>
-                <option value="submitted_manual" data-i18n="history.filter.submittedManual"></option>
-                <option value="already_submitted" data-i18n="history.filter.alreadySubmitted"></option>
-                <option value="failed" data-i18n="history.filter.failed"></option>
-                <option value="unknown" data-i18n="history.filter.unknown"></option>
-                <option value="not_submitted" data-i18n="history.filter.notSubmitted"></option>
-                <option value="retry_approved" data-i18n="history.filter.retryApproved"></option>
-                <option value="dry_run_ready" data-i18n="history.filter.dryRunReady"></option>
-                <option value="dry_run_interrupted" data-i18n="history.filter.dryRunInterrupted"></option>
-              </select>
-            </div>
-            <button id="clearHistoryFilters" class="secondary" type="button" data-i18n="history.clearFilters" data-i18n-aria-label="history.clearFiltersLabel" disabled></button>
-            <button id="refreshHistory" class="secondary" type="button" data-i18n="action.refresh"></button>
-            <button id="exportHistory" class="secondary" type="button" data-i18n="history.exportCsv"></button>
-            <button id="createBackup" class="secondary" type="button" data-i18n="action.createBackup"></button>
-            <button id="restoreBackup" class="warning" type="button" data-i18n="action.restoreBackup"></button>
-            <button id="createDiagnostics" class="secondary" type="button" data-i18n="support.bundle"></button>
-          </div>
-          <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto auto minmax(0,1fr);">
-            <button id="refreshBrowserSession" class="secondary" type="button" data-i18n="browserSession.check"></button>
-            <button id="clearBrowserSession" class="warning" type="button" data-i18n="action.clearSession"></button>
-            <div id="browserSessionStatus" class="browser-session-status" role="status" aria-live="polite" data-i18n="browserSession.notChecked"></div>
-          </div>
-          <details class="history-details">
-            <summary data-i18n="history.manual.title"></summary>
-            <div class="manual-entry-grid">
-              <div class="field"><label for="manualTracking" data-i18n="history.manual.tracking"></label><input id="manualTracking" type="text" /></div>
-              <div class="field"><label for="manualReference" data-i18n="history.manual.reference"></label><input id="manualReference" type="text" /></div>
-              <div class="field"><label for="manualService" data-i18n="history.manual.service"></label><input id="manualService" type="text" /></div>
-              <div class="field"><label for="manualPostal" data-i18n="history.manual.postal"></label><input id="manualPostal" type="text" /></div>
-              <div class="field"><label for="manualExpected" data-i18n="history.manual.expected"></label><input id="manualExpected" type="date" /></div>
-              <div class="field"><label for="manualDelivery" data-i18n="history.manual.delivery"></label><input id="manualDelivery" type="date" /></div>
-              <div class="field wide"><label for="manualNote" data-i18n="history.manual.note"></label><input id="manualNote" type="text" /></div>
-              <button id="addManualShipment" class="secondary" type="button" data-i18n="history.manual.save"></button>
-            </div>
-            <div id="manualShipmentList" class="history-list compact" aria-live="polite"></div>
-          </details>
-          <details class="history-details">
-            <summary id="historyClassificationsTitle" data-i18n="history.classifications"></summary>
-            <div id="historyClassificationList" class="history-list compact" aria-live="polite"></div>
-          </details>
+          <div class="stat"><div id="historyNeedsAttention" class="num">0</div><div class="label" data-i18n="history.needsAttention"></div></div>
+          <div class="stat"><div id="historyRecordTotal" class="num">0</div><div class="label" data-i18n="history.totalRecords"></div></div>
         </div>
 
         <div class="history-content">
-          <div class="history-section">
-            <div class="history-section-head"><h3 data-i18n="history.reconciliationQueue"></h3><span id="reconciliationCountPill" class="pill" data-i18n="history.zeroUnresolved"></span></div>
-            <div id="reconciliationList" class="history-list history-record-list"></div>
-          </div>
           <div class="history-section">
             <div class="history-section-head"><h3 data-i18n="history.claimAttempts"></h3><span id="historyResultCount" class="pill" role="status" aria-live="polite" data-i18n="history.zeroRecords"></span></div>
             <div id="historyList" class="history-list history-record-list"></div>

@@ -1,6 +1,6 @@
 # Support bundles
 
-Use **History → Support bundle** to preview an archive before creating it. Every preview shows a random, non-identifying support reference, application/platform/architecture versions, database schema version, Tracking parser version, selected components, permanent exclusions, and a review warning.
+Use **Settings → Advanced → Support bundle** to preview an archive before creating it. Every preview shows a random, non-identifying support reference, application/platform/architecture versions, database schema version, Tracking parser version, selected components, permanent exclusions, and a review warning.
 
 System integrity and sanitized configuration status are selected by default. Masked recent attempt summaries and metadata-only log and Step 3 inventories require separate opt in. Credentials, tokens, cookies, browser profiles, private keys, raw Tracking API response bodies, screenshots, filenames, free-form messages and log/trace contents, full tracking numbers, addresses, and contact details are never included. The operator must explicitly acknowledge the preview and inspect the resulting ZIP before using an approved support channel.
 

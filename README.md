@@ -6,7 +6,7 @@ Electron application for importing Canada Post EST shipment history, checking de
 
 ## Important operating rule
 
-The automatic queue contains only `LATE_CANDIDATE` records: authoritative tracking has a usable original Delivery Standard and a successful-delivery date after that standard. A revised operational estimate is retained separately and does not replace an earlier original standard. First-attempt evidence remains visible for review but never suppresses a shipment whose successful delivery was late.
+The Step 3 queue contains only actionable `LATE_CANDIDATE` records: authoritative tracking has a usable original Delivery Standard and a successful-delivery date after that standard, and the current claim-attempt state permits execution. Previously submitted, already-submitted, terminal, unresolved, reconciliation-required, and otherwise blocked records are excluded automatically. Safe retry states already authorized by the claim-attempt rules remain available. A revised operational estimate is retained separately and does not replace an earlier original standard.
 
 The other outcomes are `ON_TIME`, `REVIEW_REQUIRED`, and `TRACKING_ERROR`. A missing/invalid Delivery Standard or missing/invalid successful-delivery result remains `REVIEW_REQUIRED`; it is not promoted and cannot enter Step 3. Authentication, transport, API, timeout, and parser failures remain `TRACKING_ERROR` and also cannot enter Step 3. EST Shipment Date, EST Service Code, first attempt, policy-version selection, exclusion prediction, claim-window status, and predicted approval are not prerequisites for late-candidate detection; service/policy/window information is advisory and Canada Post makes the final claim decision.
 
@@ -60,7 +60,11 @@ CSV and JSON files remain as workflow inputs, exports, and human-readable summar
 - `tracking-run-summary.json`: complete Step 2 counts;
 - timestamped claim summaries and evidence files.
 
-An interrupted claim becomes a reconciliation item and is not retried automatically. Failed claims are limited to three automatic attempts by default. Reconcile terminal, uncertain, or exhausted attempts before approving another submission.
+An interrupted or uncertain claim appears as **Needs attention** in Claim History and is not retried automatically. Use the actions on that exceptional history row to record a verified submission, record that it was not submitted, or approve a retry where appropriate. Failed claims are limited to three automatic attempts by default.
+
+## Claim History
+
+History is a single newest-first claim record with Refresh and CSV export. It shows tracking number, attempt time, status, confirmation when available, a concise result, and useful evidence. Only records that genuinely need human resolution show inline reconciliation actions; ordinary completed records do not. Backup, restore, stored-data management, and support bundles are under **Settings → Advanced**. Browser-session controls remain in Step 3.
 
 ## Validation and public-beta build
 
@@ -136,7 +140,7 @@ The directory includes:
 
 The trace records selector strategies, frame scans, form readiness, navigation transitions, browser/network failures, dry-run barriers, final-action dispatch state, confirmation polling, evidence metadata, and stop/shutdown behavior. It does not intentionally record passwords, cookies, authorization data, entered form values, or full tracking numbers.
 
-Use **Open Detailed Diagnostics** in Step 3 to inspect the latest local run. The History tab's **Support bundle** flow previews its manifest and components before export. System integrity and sanitized setting status are selected by default; masked history and metadata-only log and Step 3 inventories require opt in. Credentials, tokens, cookies, browser profiles, raw Tracking API bodies, screenshots, filenames, and free-form operational text are always excluded. Review the archive before sharing; see [support bundles](docs/SUPPORT_BUNDLES.md).
+Use **Open Detailed Diagnostics** in Step 3 to inspect the latest local run. **Settings → Advanced → Support bundle** previews its manifest and components before export. System integrity and sanitized setting status are selected by default; masked history and metadata-only log and Step 3 inventories require opt in. Credentials, tokens, cookies, browser profiles, raw Tracking API bodies, screenshots, filenames, and free-form operational text are always excluded. Review the archive before sharing; see [support bundles](docs/SUPPORT_BUNDLES.md).
 
 Step 3 remains directly accessible and does not run a portal health or compatibility check. Its actual submission protections remain mandatory: only immutable, promoted `LATE_CANDIDATE` records can be selected; dry run is the default; unresolved and terminal attempts are blocked; live runs require explicit acknowledgement and native final confirmation; canary mode limits the run to one record; and CAPTCHA or text verification remains under human control in the isolated built-in browser. Uncertain final actions are never retried automatically.
 

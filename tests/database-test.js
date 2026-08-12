@@ -31,14 +31,6 @@ try {
   assert.strictEqual(shipment.classification, 'ELIGIBLE - DELIVERED LATE');
   assert.strictEqual(shipment.eligibility_reason, 'Delivered after guarantee.');
 
-  claimDb.upsertShipment(dbPath, {
-    trackingNumber: 'MANUAL1', referenceNumber: 'MAN-REF', serviceCode: 'DOM.XP',
-    classification: 'MANUAL_ENTRY', eligibilityReason: 'Entered for follow-up.'
-  });
-  const manualShipments = claimDb.listManualShipments(dbPath, { search: 'MAN-REF' });
-  assert.strictEqual(manualShipments.length, 1);
-  assert.strictEqual(manualShipments[0].trackingNumber, 'MANUAL1');
-
   const runId = claimDb.startRun(dbPath, 'tracking', { test: true });
   claimDb.ingestTrackingEvent(dbPath, runId, {
     type: 'pin_late', pin: '1234567890123456', classification: 'DELIVERED_LATE_ELIGIBLE',
@@ -59,6 +51,8 @@ try {
   let queue = claimDb.listReconciliation(dbPath, 100, 3);
   assert.strictEqual(queue.length, 1);
   assert.strictEqual(queue[0].status, 'failed');
+  assert.strictEqual(claimDb.listClaimHistory(dbPath).find(item => item.id === queue[0].id).needsAttention, true,
+    'a max-attempt failure must be marked for inline History attention');
 
   claimDb.reconcileAttempt(dbPath, queue[0].id, 'retry', 'Verified not submitted remotely.');
   assert.strictEqual(claimDb.canAutomaticallyAttempt(dbPath, '1234567890123456', 3).allowed, true);
@@ -71,10 +65,14 @@ try {
   queue = claimDb.listReconciliation(dbPath);
   const unknown = queue.find(item => item.trackingNumber === '9999999999999999');
   assert.ok(unknown);
+  assert.strictEqual(claimDb.listClaimHistory(dbPath).find(item => item.id === unknown.id).needsAttention, true,
+    'an unknown latest attempt must be marked for inline History attention');
   claimDb.reconcileAttempt(dbPath, unknown.id, 'submitted', 'Confirmed in Canada Post.', 'TICKET-999');
   const manual = claimDb.latestAttemptState(dbPath, '9999999999999999');
   assert.strictEqual(manual.status, 'submitted_manual');
   assert.strictEqual(manual.confirmation_number, 'TICKET-999');
+  assert.strictEqual(claimDb.listClaimHistory(dbPath).find(item => item.id === unknown.id).needsAttention, false,
+    'a reconciled submitted attempt must no longer expose inline reconciliation actions');
 
   const dryId = claimDb.beginClaimAttempt(dbPath, { trackingNumber: 'DRYRUN1', dryRun: true });
   assert.ok(dryId > 0);

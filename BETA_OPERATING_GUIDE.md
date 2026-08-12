@@ -8,7 +8,7 @@ Only a completed and promoted Step 2 run can supply Step 3. A `LATE_CANDIDATE` r
 
 Policy guidance is advisory. The bundled policy coverage ends on 2026-07-26 and its holiday calendar ends on 2026-12-31. Claim-window dates are explicitly unverified estimates; stale or unsupported policy never marks a record definitively expired and never blocks a valid `LATE_CANDIDATE`.
 
-Step 3 uses only Electron's built-in browser. It validates the latest promoted run and evidence hashes immediately before creating a private immutable snapshot. Submitted, duplicate, terminal, unresolved, reconciliation-required, and otherwise unsafe records are blocked. Dry run remains the default barrier; live submission needs a separate acknowledgement. An uncertain final action is never retried automatically. CAPTCHA or text verification stops automation and requires a visible built-in browser before operator action.
+Step 3 uses only Electron's built-in browser. Its visible queue contains only actionable `LATE_CANDIDATE` records; previously submitted, duplicate, terminal, unresolved, reconciliation-required, and otherwise unsafe records are excluded automatically. The same states are revalidated before selection, snapshot creation, submission, and at the worker boundary. Dry run remains the default barrier; live submission needs a separate acknowledgement. An uncertain final action is never retried automatically. CAPTCHA or text verification stops automation and requires a visible built-in browser before operator action.
 
 ## Current technical contract
 
@@ -32,7 +32,7 @@ Step 3 uses only Electron's built-in browser. It validates the latest promoted r
 3. Save current Tracking API credentials without sharing or exporting them.
 4. Run the one-shipment diagnostic. A successful semantic result gates normal Step 2.
 5. Import shipments in Step 1, run Step 2, and inspect advisory policy warnings.
-6. Review and select the exact Step 3 queue. Reconcile all ambiguous outcomes before retrying anything.
+6. Review and select the actionable Step 3 queue. Resolve any **Needs attention** record directly in Claim History before retrying it.
 7. Start in dry-run mode. Live processing and canary verification remain separately acknowledged and supervised.
 
 Never use a production account during automated testing. The repository's automated browser suites use only the synthetic loopback mock portal.

@@ -203,8 +203,7 @@ const { chromium } = require('playwright');
           stickyPosition: headStyle?.position || '',
           stickyTop: headStyle?.top || '',
           stickyBackground: headStyle?.backgroundColor || '',
-          hasHistoryBadge: Boolean(document.getElementById('reconciliationBadge')),
-          clearReachable: document.getElementById('clearHistoryFilters').getBoundingClientRect().width > 0
+          hasHistoryBadge: Boolean(document.getElementById('reconciliationBadge'))
         };
       });
       assert(history.documentHeight > history.viewportHeight, 'History should use normal page-level scrolling');
@@ -219,7 +218,6 @@ const { chromium } = require('playwright');
       assert.strictEqual(history.stickyTop, '0px');
       assert(!['transparent', 'rgba(0, 0, 0, 0)'].includes(history.stickyBackground));
       assert.strictEqual(history.hasHistoryBadge, false);
-      assert.strictEqual(history.clearReachable, true);
     }
 
     for (const viewport of viewports) {

@@ -138,6 +138,7 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     let preview = service.previewCandidates(dbPath, { now: '2026-06-05' });
     const attempt = claimDb.beginClaimAttempt(dbPath, { trackingNumber: '3333333333333333' });
     claimDb.completeClaimAttempt(dbPath, attempt, { status: 'submitted' });
+    assert.strictEqual(service.previewCandidates(dbPath, { now: '2026-06-05' }).count, 0, 'submitted claims must disappear from preview');
     assert.throws(() => service.createRunSnapshot(dbPath, [{ recordId: preview.items[0].recordId, evidenceHash: preview.items[0].evidenceHash }], {
       csvPath: path.join(root, 'terminal.csv'), snapshotPath: path.join(root, 'terminal.json')
     }, { allowedDirectory: root }), error => error.code === 'STEP3_TERMINAL_OUTCOME');
@@ -147,6 +148,7 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     claimDb.finishRun(dbPath, run4, 'complete', { total: 1, success: 1 });
     preview = service.previewCandidates(dbPath, { now: '2026-06-05' });
     claimDb.beginClaimAttempt(dbPath, { trackingNumber: '4444444444444444' });
+    assert.strictEqual(service.previewCandidates(dbPath, { now: '2026-06-05' }).count, 0, 'unresolved attempts must disappear from preview');
     assert.throws(() => service.createRunSnapshot(dbPath, [{ recordId: preview.items[0].recordId, evidenceHash: preview.items[0].evidenceHash }], {
       csvPath: path.join(root, 'unresolved.csv'), snapshotPath: path.join(root, 'unresolved.json')
     }, { allowedDirectory: root }), error => error.code === 'STEP3_UNRESOLVED_ATTEMPT');

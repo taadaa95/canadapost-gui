@@ -6,12 +6,9 @@ const LOG_BOTTOM_THRESHOLD_PX = 56;
 
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
 const DEFAULT_THEME = 'system';
-const HISTORY_DEFAULT_FILTERS = Object.freeze({ search: '', status: 'all', page: 1, offset: 0 });
 let activeMessages = {};
 let preferredLocale = '';
 let localeRequestVersion = 0;
-const historyViewState = { ...HISTORY_DEFAULT_FILTERS };
-let reconciliationFocusAttemptId = null;
 const step3QueueController = window.Step3Queue.createController();
 const rendererEvents = window.RendererContext.events;
 
@@ -794,9 +791,9 @@ function localizedInterfaceValue(value) {
     'Manual verification required': 'runStatus.manualVerification', 'Paused for operator': 'outcome.pausedForOperator',
     'Paused for manual solve': 'outcome.pausedForManualSolve', 'Waiting for manual solve': 'outcome.waitingForManualSolve',
     Resuming: 'outcome.resuming', Done: 'outcome.done', 'Runner error': 'event.runnerError',
-    submitted: 'outcome.submitted', submitted_manual: 'history.filter.submittedManual', already_submitted: 'outcome.alreadySubmitted',
-    failed: 'outcome.failed', unknown: 'history.filter.unknown', not_submitted: 'history.filter.notSubmitted',
-    retry_approved: 'history.filter.retryApproved', dry_run_ready: 'history.filter.dryRunReady', dry_run_interrupted: 'history.filter.dryRunInterrupted'
+    submitted: 'outcome.submitted', submitted_manual: 'history.status.submittedManual', already_submitted: 'outcome.alreadySubmitted',
+    failed: 'outcome.failed', unknown: 'history.status.unknown', not_submitted: 'history.status.notSubmitted',
+    retry_approved: 'history.status.retryApproved', dry_run_ready: 'history.status.dryRunReady', dry_run_interrupted: 'history.status.dryRunInterrupted'
   };
   return keys[text] ? tr(keys[text], text) : (text || '—');
 }
@@ -1790,11 +1787,6 @@ function historyCell(text, className = '') {
   return cell;
 }
 
-function updateReconciliationCount(count) {
-  const pill = $('reconciliationCountPill');
-  if (pill) setLocalizedText(pill, 'history.unresolvedCount', { count: count || 0 }, '{count} unresolved');
-}
-
 function setHistoryRecordState(root, state) {
   if (!root) return;
   root.classList.remove('is-empty', 'is-loading', 'is-error');
@@ -1813,26 +1805,6 @@ function renderHistoryRecordMessage(rootId, message, state = 'error') {
   root.appendChild(notice);
 }
 
-function updateClearHistoryFiltersButton() {
-  const button = $('clearHistoryFilters');
-  if (!button) return;
-  const active = getFieldValue('historySearch') !== HISTORY_DEFAULT_FILTERS.search
-    || ($('historyStatusFilter')?.value || 'all') !== HISTORY_DEFAULT_FILTERS.status
-    || historyViewState.page !== HISTORY_DEFAULT_FILTERS.page
-    || historyViewState.offset !== HISTORY_DEFAULT_FILTERS.offset;
-  button.disabled = !active;
-}
-
-function setHistoryPagination(page = 1, offset = 0) {
-  historyViewState.page = Math.max(1, Number(page) || 1);
-  historyViewState.offset = Math.max(0, Number(offset) || 0);
-  updateClearHistoryFiltersButton();
-}
-
-function getHistoryViewState() {
-  return { ...historyViewState };
-}
-
 function renderHistory(items = []) {
   const root = $('historyList');
   if (!root) return;
@@ -1846,7 +1818,7 @@ function renderHistory(items = []) {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = tr('history.noAttempts', 'No claim attempts match the current filters.');
+    empty.textContent = tr('history.noAttempts', 'No claim history records yet.');
     root.appendChild(empty);
     return;
   }
@@ -1855,16 +1827,19 @@ function renderHistory(items = []) {
     row.className = 'history-row';
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
-    row.appendChild(historyCell(localizedInterfaceValue(item.status)));
+    row.appendChild(historyCell(item.needsAttention ? tr('history.needsAttention', 'Needs attention') : localizedInterfaceValue(item.status)));
     row.appendChild(historyCell(item.confirmationNumber));
     const messageCell = document.createElement('div');
-    messageCell.textContent = item.message || '—';
+    const resultText = document.createElement('span');
+    resultText.textContent = item.message || '—';
+    messageCell.appendChild(resultText);
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
     if (item.screenshotPath || item.textPath) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'secondary';
       button.textContent = tr('history.viewEvidence', 'View evidence');
-      button.style.marginLeft = '8px';
       button.addEventListener('click', async () => {
         const detail = {
           kind: item.status === 'submitted' ? 'submitted' : (item.status === 'already_submitted' ? 'already' : 'failed'),
@@ -1882,8 +1857,14 @@ function renderHistory(items = []) {
         activateTab('resultsTab');
         openDetail(registered.id);
       });
-      messageCell.appendChild(button);
+      actions.appendChild(button);
     }
+    if (item.needsAttention) {
+      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markSubmitted', 'Mark submitted'), 'submitted', 'success'));
+      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markNotSubmitted', 'Mark not submitted'), 'not_submitted', 'warning'));
+      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.approveRetry', 'Approve retry'), 'retry', 'secondary'));
+    }
+    if (actions.childElementCount) messageCell.appendChild(actions);
     row.appendChild(messageCell);
     root.appendChild(row);
   }
@@ -1913,162 +1894,24 @@ function reconciliationActionButton(item, label, action, className = 'secondary'
   return button;
 }
 
-function renderManualShipments(items = []) {
-  const root = $('manualShipmentList');
-  if (!root) return;
-  root.replaceChildren();
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'history-empty';
-    empty.textContent = tr('history.manual.empty', 'No manually entered shipments.');
-    root.appendChild(empty);
-    return;
-  }
-  const head = document.createElement('div');
-  head.className = 'history-row head';
-  ['common.tracking', 'history.manual.referenceShort', 'step3.queue.service', 'history.manual.expectedShort', 'history.manual.note'].forEach(key => head.appendChild(historyCell(tr(key))));
-  root.appendChild(head);
-  for (const item of items) {
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    row.appendChild(historyCell(item.trackingNumber));
-    row.appendChild(historyCell(item.referenceNumber));
-    row.appendChild(historyCell(item.serviceCode));
-    row.appendChild(historyCell(item.expectedDate));
-    row.appendChild(historyCell(item.note));
-    root.appendChild(row);
-  }
-}
-
-function renderReconciliation(items = []) {
-  const root = $('reconciliationList');
-  if (!root) return;
-  setHistoryRecordState(root, items.length ? '' : 'empty');
-  root.replaceChildren();
-  const head = document.createElement('div');
-  head.className = 'reconciliation-row head';
-  ['common.tracking', 'history.attemptTime', 'common.status', 'history.reason', 'history.actions'].forEach(key => head.appendChild(historyCell(tr(key))));
-  root.appendChild(head);
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'history-empty';
-    empty.textContent = tr('history.reconcile.empty', 'No uncertain or interrupted claims require reconciliation.');
-    root.appendChild(empty);
-    return;
-  }
-  const orderedItems = reconciliationFocusAttemptId
-    ? [...items].sort((left, right) => (Number(right.id) === Number(reconciliationFocusAttemptId)) - (Number(left.id) === Number(reconciliationFocusAttemptId)))
-    : items;
-  for (const item of orderedItems) {
-    const row = document.createElement('div');
-    const focused = Number(item.id) === Number(reconciliationFocusAttemptId);
-    row.className = `reconciliation-row${focused ? ' focused' : ''}`;
-    row.dataset.attemptId = String(item.id || '');
-    row.appendChild(historyCell(item.trackingNumber));
-    row.appendChild(historyCell(historyDate(item.attemptedAt)));
-    row.appendChild(historyCell(localizedInterfaceValue(item.status)));
-    row.appendChild(historyCell(`${item.errorCode ? `${item.errorCode}: ` : ''}${item.message || tr('history.reconcile.uncertain', 'Remote outcome is uncertain.')}`));
-    const actions = document.createElement('div');
-    actions.className = 'history-actions';
-    if (item.screenshotPath || item.textPath) {
-      const evidence = document.createElement('button');
-      evidence.type = 'button';
-      evidence.className = 'secondary';
-      evidence.textContent = tr('common.evidence', 'Evidence');
-      evidence.addEventListener('click', async () => {
-        const loaded = await window.cpApp.loadEvidence({ screenshotPath: item.screenshotPath, textPath: item.textPath });
-        if (loaded.ok && item.screenshotPath) await window.cpApp.openEvidence(item.screenshotPath);
-        else window.alert(loaded.error || loaded.pageText || tr('history.noEvidence', 'No evidence available.'));
-      });
-      actions.appendChild(evidence);
-    }
-    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markSubmitted', 'Mark submitted'), 'submitted', 'success'));
-    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markNotSubmitted', 'Mark not submitted'), 'not_submitted', 'warning'));
-    actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.approveRetry', 'Approve retry'), 'retry', 'secondary'));
-    row.appendChild(actions);
-    root.appendChild(row);
-  }
-}
-
-function renderHistoryClassifications(items = []) {
-  const target = $('historyClassificationList');
-  if (!target) return;
-  target.textContent = '';
-  if (!items.length) {
-    target.appendChild(queueCell(tr('history.classificationsEmpty', 'No matching classification records.')));
-    return;
-  }
-  for (const item of items) {
-    const row = document.createElement('div');
-    row.className = 'history-item';
-    row.append(
-      queueCell(item.tracking_number, 'history-primary'),
-      queueCell(tr(`classification.${item.classification}`, item.classification)),
-      queueCell(item.service_code),
-      queueCell(item.eligibility_reason)
-    );
-    target.appendChild(row);
-  }
-}
-
-async function refreshHistory(options = {}) {
+async function refreshHistory() {
   if (!window.cpApp?.listHistory) return;
-  if (options.resetPage) {
-    historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
-    historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
-  }
-  const search = getFieldValue('historySearch');
-  const status = $('historyStatusFilter')?.value || 'all';
-  historyViewState.search = search;
-  historyViewState.status = status;
-  updateClearHistoryFiltersButton();
-  renderHistoryRecordMessage('historyList', 'Loading claim attempts…', 'loading');
-  renderHistoryRecordMessage('reconciliationList', 'Loading reconciliation records…', 'loading');
-  const [history, reconciliation, dashboard, manualShipments, reviewClassifications, trackingErrors, onTimeClassifications] = await Promise.all([
-    window.cpApp.listHistory({ search, status, limit: 500, page: historyViewState.page, offset: historyViewState.offset }),
-    window.cpApp.listReconciliation(),
-    window.cpApp.getDashboard(),
-    window.cpApp.listManualShipments({ search, limit: 250 }),
-    window.cpApp.listClassificationQueue({ classification: 'REVIEW_REQUIRED', search, limit: 250 }),
-    window.cpApp.listClassificationQueue({ classification: 'TRACKING_ERROR', search, limit: 250 }),
-    window.cpApp.listClassificationQueue({ classification: 'ON_TIME', search, limit: 250 })
+  renderHistoryRecordMessage('historyList', tr('history.loading', 'Loading claim history…'), 'loading');
+  const [history, dashboard] = await Promise.all([
+    window.cpApp.listHistory({ limit: 500, offset: 0 }),
+    window.cpApp.getDashboard()
   ]);
   if (history.ok) renderHistory(history.items || []);
   else {
     setLocalizedText($('historyResultCount'), 'common.unavailable', {}, 'Unavailable');
     renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
   }
-  if (manualShipments.ok) renderManualShipments(manualShipments.items || []);
-  renderHistoryClassifications([
-    ...(reviewClassifications.items || []),
-    ...(trackingErrors.items || []),
-    ...(onTimeClassifications.items || [])
-  ]);
-  if (reconciliation.ok) {
-    renderReconciliation(reconciliation.items || []);
-    updateReconciliationCount((reconciliation.items || []).length);
-  } else renderHistoryRecordMessage('reconciliationList', reconciliation.error || tr('history.loadReconciliationFailed', 'Could not load reconciliation records.'));
   if (dashboard.ok) {
     const data = dashboard.dashboard || {};
-    setText('historyShipments', data.shipments || 0);
     setText('historySubmitted', data.submitted || 0);
-    setText('historyReconciliation', data.reconciliation || 0);
-    setText('historyFailed', data.failed || 0);
-    const integrity = $('databaseIntegrity');
-    if (integrity) {
-      setLocalizedText(integrity, dashboard.integrity?.ok ? 'database.healthy' : 'database.failed', {}, dashboard.integrity?.ok ? 'Database healthy' : 'Database check failed');
-      integrity.className = dashboard.integrity?.ok ? 'pill good' : 'pill bad';
-    }
+    setText('historyNeedsAttention', data.reconciliation || 0);
+    setText('historyRecordTotal', data.historyRecords || 0);
   }
-}
-
-async function clearHistoryFilters() {
-  clearTimeout(historySearchTimer);
-  if ($('historySearch')) $('historySearch').value = HISTORY_DEFAULT_FILTERS.search;
-  if ($('historyStatusFilter')) $('historyStatusFilter').value = HISTORY_DEFAULT_FILTERS.status;
-  Object.assign(historyViewState, HISTORY_DEFAULT_FILTERS);
-  updateClearHistoryFiltersButton();
-  await refreshHistory({ resetPage: true });
 }
 
 let backupPasswordResolver = null;
@@ -2225,7 +2068,7 @@ async function deletePrivacyData() {
 }
 
 async function refreshBrowserSessionStatus() {
-  const statuses = [$('browserSessionStatus'), $('step3BrowserSessionStatus')].filter(Boolean);
+  const statuses = [$('step3BrowserSessionStatus')].filter(Boolean);
   for (const status of statuses) setLocalizedText(status, 'browserSession.checking', {}, 'Checking local browser session…');
   const result = await window.cpApp.browserSessionStatus();
   const key = result.ok
@@ -2283,37 +2126,9 @@ async function confirmSupportBundle() {
 }
 
 async function exportClaimHistory() {
-  const result = await window.cpApp.exportHistory({
-    search: getFieldValue('historySearch'),
-    status: $('historyStatusFilter')?.value || 'all'
-  });
+  const result = await window.cpApp.exportHistory();
   if (result.ok) window.alert(trf('history.exported', { path: result.path }, 'Claim history exported:\n{path}'));
   else if (!result.canceled) window.alert(result.error || tr('history.exportFailed', 'Could not export claim history.'));
-}
-
-async function addManualShipment() {
-  const trackingNumber = getFieldValue('manualTracking');
-  if (!trackingNumber) {
-    window.alert(tr('history.manual.trackingRequired', 'Tracking number is required.'));
-    return;
-  }
-  const result = await window.cpApp.addManualShipment({
-    trackingNumber,
-    referenceNumber: getFieldValue('manualReference'),
-    serviceCode: getFieldValue('manualService'),
-    destinationPostalCode: getFieldValue('manualPostal'),
-    expectedDate: getFieldValue('manualExpected'),
-    deliveryDate: getFieldValue('manualDelivery'),
-    note: getFieldValue('manualNote')
-  });
-  if (!result.ok) {
-    window.alert(result.error || tr('history.manual.saveFailed', 'Could not save shipment.'));
-    return;
-  }
-  for (const id of ['manualTracking', 'manualReference', 'manualService', 'manualPostal', 'manualExpected', 'manualDelivery', 'manualNote']) {
-    if ($(id)) $(id).value = '';
-  }
-  await refreshHistory();
 }
 
 function isoDateFromOffset(daysOffset) {
@@ -2493,10 +2308,10 @@ function selectedClassificationRecords() {
 }
 
 function updateClaimQueueCount() {
-  const { selected, total, executable, blocked } = step3QueueController.snapshot();
+  const { selected, total, executable } = step3QueueController.snapshot();
   const pill = $('claimQueueCount');
   if (pill) {
-    setLocalizedText(pill, 'step3.selectedExecutableCount', { selected, executable, blocked, total }, '{selected} selected · {executable} executable · {blocked} blocked · {total} total');
+    setLocalizedText(pill, total === 1 ? 'step3.queue.oneCandidateCount' : 'step3.queue.candidateCount', { selected, count: total }, total === 1 ? '1 candidate · {selected} selected' : '{count} candidates · {selected} selected');
     pill.className = `pill ${selected > 0 ? 'good' : (executable > 0 ? 'warn' : 'bad')}`;
   }
   const runButton = $('runSubmitOnly');
@@ -2543,27 +2358,12 @@ function executionStateLabel(item) {
   return labels[item.executionState] || labels.executable;
 }
 
-async function reviewBlockedAttempt(item) {
-  if (!item?.trackingNumber) return;
-  reconciliationFocusAttemptId = Number(item.attemptId || 0) || null;
-  activateTab('historyTab');
-  if ($('historySearch')) $('historySearch').value = item.trackingNumber;
-  historyViewState.search = item.trackingNumber;
-  historyViewState.page = 1;
-  historyViewState.offset = 0;
-  await refreshHistory().catch(error => console.error(error));
-  const target = reconciliationFocusAttemptId
-    ? document.querySelector(`#reconciliationList [data-attempt-id="${reconciliationFocusAttemptId}"]`)
-    : null;
-  (target || $('reconciliationList') || $('historyList'))?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
-}
-
 function renderClaimQueue(items = [], preserveState = false) {
   const list = $('claimQueueList');
   if (!list) return;
   list.textContent = '';
   if (!preserveState) {
-    state.claimQueueItems = Array.isArray(items) ? items : [];
+    state.claimQueueItems = Array.isArray(items) ? items.filter(item => step3QueueController.isExecutable(item)) : [];
     step3QueueController.load(state.claimQueueItems);
   }
   state.claimQueueLoaded = true;
@@ -2627,14 +2427,6 @@ function renderClaimQueue(items = [], preserveState = false) {
     reason.className = 'claim-queue-block-reason';
     reason.textContent = [item.policyVersion, item.eligibilityReason, item.blockedReason].filter(Boolean).join(' · ');
     statusCell.append(status, reason);
-    if (!executable && (item.reconciliationRequired || ['unresolved_attempt', 'reconciliation_required'].includes(item.executionState))) {
-      const review = document.createElement('button');
-      review.type = 'button';
-      review.className = 'secondary compact-button';
-      review.textContent = tr('step3.queue.reviewAttempt', 'Review attempt');
-      review.addEventListener('click', event => { event.preventDefault(); reviewBlockedAttempt(item); });
-      statusCell.appendChild(review);
-    }
     row.appendChild(statusCell);
     list.appendChild(row);
   }
@@ -3055,8 +2847,6 @@ async function refreshConfig() {
     setLocalizedText($('buildTrustStatus'), cfg.signedBuild ? 'build.signed' : 'build.unsigned', {}, cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build');
     $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
   }
-  updateReconciliationCount(Number(cfg.reconciliationCount || 0));
-
   const configuredCustomer = cfg.estCustomerNumber || '';
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = configuredCustomer;
   if ($('historyAutoMobo')) $('historyAutoMobo').checked = true;
@@ -3152,21 +2942,6 @@ $('openStep3Diagnostics')?.addEventListener('click', async () => {
   if (!result?.ok) log(result?.error || tr('diagnostics.noneAvailable', 'No Step 3 diagnostics are available yet.'), 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
-$('clearHistoryFilters')?.addEventListener('click', clearHistoryFilters);
-$('historyStatusFilter')?.addEventListener('change', () => {
-  historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
-  historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
-  updateClearHistoryFiltersButton();
-  refreshHistory();
-});
-let historySearchTimer = null;
-$('historySearch')?.addEventListener('input', () => {
-  clearTimeout(historySearchTimer);
-  historyViewState.page = HISTORY_DEFAULT_FILTERS.page;
-  historyViewState.offset = HISTORY_DEFAULT_FILTERS.offset;
-  updateClearHistoryFiltersButton();
-  historySearchTimer = setTimeout(() => refreshHistory(), 250);
-});
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
 $('createBackup')?.addEventListener('click', createAppBackup);
 $('restoreBackup')?.addEventListener('click', restoreAppBackup);
@@ -3179,9 +2954,8 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
   $(id)?.addEventListener('change', resetPrivacyPreview);
   if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
 }
-$('refreshBrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('checkStep3BrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
-$('clearBrowserSession')?.addEventListener('click', clearBrowserSession);
+$('clearStep3BrowserSession')?.addEventListener('click', clearBrowserSession);
 $('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
 $('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
 $('trackingDiagnosticRow')?.addEventListener('keydown', event => { if (event.key === 'Enter') confirmTrackingDiagnosticRow(); });
@@ -3197,7 +2971,6 @@ $('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
 $('cancelSupportBundle')?.addEventListener('click', closeSupportBundle);
 $('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
 $('supportBundleAcknowledge')?.addEventListener('change', () => { $('confirmSupportBundle').disabled = !$('supportBundleAcknowledge').checked; });
-$('addManualShipment')?.addEventListener('click', addManualShipment);
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
   const message = res?.message || res?.error || tr(res?.ok ? 'update.pageOpenedMessage' : 'update.pageOpenFailedMessage', res?.ok ? 'Opened update page.' : 'Could not open update page.');

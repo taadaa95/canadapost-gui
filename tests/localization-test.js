@@ -7,12 +7,12 @@ const { assertLocaleCompleteness, loadLocale, normalizeLocale, translate, interp
 
 const root = path.resolve(__dirname, '..');
 const keys = assertLocaleCompleteness();
-assert.ok(keys.length >= 640, 'the complete interface localization catalogue must be present');
+assert.ok(keys.length >= 600, 'the complete interface localization catalogue must be present');
 assert.strictEqual(normalizeLocale('fr'), 'fr-CA');
 assert.strictEqual(normalizeLocale('en-US'), 'en-CA');
 const french = loadLocale('fr-CA');
 assert.strictEqual(translate(french, 'classification.REVIEW_REQUIRED'), 'Révision requise');
-assert.strictEqual(translate(french, 'history.clearFilters'), 'Effacer les filtres');
+assert.strictEqual(translate(french, 'history.needsAttention'), 'Attention requise');
 assert.strictEqual(translate(french, 'missing.key', 'Fallback text'), 'Fallback text');
 assert.strictEqual(interpolate(translate(french, 'step3.selectedCount'), { selected: 2, total: 4 }), '2 sur 4 sélectionnés');
 assert.strictEqual(interpolate('Keep {tracking} and {phone}', { tracking: '1234567890123456', phone: '1-888-550-6333' }), 'Keep 1234567890123456 and 1-888-550-6333');
@@ -26,12 +26,10 @@ const identicalFrenchAllowlist = new Map([
   ['environment.production', 'Production is the natural French cognate.'],
   ['settings.sender.province', 'Province is the natural French cognate.'],
   ['common.source', 'Source is the natural French cognate.'],
-  ['history.manual.note', 'Note is the natural French cognate.'],
   ['results.notificationCount', 'Notification is the natural French cognate and the value is parameterized.'],
   ['results.oneNotification', 'Notification is the natural French cognate.'],
   ['history.confirmation', 'Confirmation is the natural French cognate.'],
   ['history.message', 'Message is the natural French cognate.'],
-  ['history.actions', 'Actions is the natural French cognate.'],
   ['runStatus.captcha', 'CAPTCHA is an international technical acronym.'],
   ['common.absent', 'Absent is the natural French cognate.'],
   ['common.date', 'Date is the natural French cognate.']
@@ -41,7 +39,7 @@ assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].so
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
-assert(localizedAttributes.length >= 270, 'major interface text and accessibility attributes must use declarative localization');
+assert(localizedAttributes.length >= 240, 'major interface text and accessibility attributes must use declarative localization');
 for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
 
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
@@ -97,7 +95,7 @@ const observedEnglish = [
   'Run Step 1 — Import EST History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
   'Test API connection with one shipment', 'Export sanitized response structure', 'Discard incomplete Step 2 run',
   'Use built-in browser inside the app', 'Stop After Current Item',
-  'Check Browser Session', 'Manually add or annotate a shipment', 'Results & Evidence — click any row for details'
+  'Check Browser Session', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {
   assert(Object.values(english).includes(text), `English catalogue is missing reviewed copy: ${text}`);
@@ -131,5 +129,12 @@ assert.ok(!html.includes('id="runSiteHealth"'));
 assert.ok(!html.includes('id="siteHealthResult"'));
 assert.ok(!Object.hasOwn(english, 'health.run'), 'obsolete manual health-check localization must be removed');
 assert.ok(!Object.hasOwn(french.messages, 'health.run'), 'obsolete manual health-check French localization must be removed');
+for (const locale of [english, french.messages]) {
+  assert.ok(!Object.keys(locale).some(key => key.startsWith('history.filter.')), 'History filter localization must be removed');
+  assert.ok(!Object.keys(locale).some(key => key.startsWith('history.manual.')), 'manual-shipment localization must be removed');
+  for (const key of ['history.reconciliationQueue', 'history.classifications', 'history.clearFilters']) {
+    assert.ok(!Object.hasOwn(locale, key), `${key} must be removed`);
+  }
+}
 
 process.stdout.write(`Localization completeness tests passed for ${keys.length} keys and ${localizedAttributes.length} localized DOM attributes.\n`);
