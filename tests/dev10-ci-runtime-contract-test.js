@@ -90,10 +90,11 @@ assert.match(
   'Gitleaks must not consume artifact storage for its SARIF report'
 );
 
-assert.ok((workflow.match(/gh release create/g) || []).length >= 4, 'manual dispatches must create private draft transfer releases when Actions artifact storage is unavailable');
-assert.match(workflow, /--draft --target/);
-assert.doesNotMatch(workflow, /gh release create[^\n]*(?:--prerelease|--latest)/, 'CI transfer releases must never become public application releases');
+assert.ok((workflow.match(/ci-transfer\.js pack/g) || []).length >= 3, 'platform validation must create verified chunked transfers when Actions artifact storage is unavailable');
+assert.match(workflow, /node - pack \.ci-transfer/, 'the exact-source rebuild must use the current verified transfer script');
+assert.ok((workflow.match(/refs\/heads\/\$tag/g) || []).length >= 4, 'manual dispatch transfers must use isolated temporary branches');
+assert.doesNotMatch(workflow, /gh release create/, 'CI transfers must never create application releases');
 
 process.stdout.write(
-  'Dev.10 Electron preinstall, E2E isolation, Gitleaks and artifact-retention contracts passed.\n'
+  'Dev.10 Electron preinstall, E2E isolation, Gitleaks and artifact-transfer contracts passed.\n'
 );
