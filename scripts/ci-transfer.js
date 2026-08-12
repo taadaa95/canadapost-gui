@@ -40,6 +40,7 @@ function writeAll(descriptor, buffer) {
 function pack(outputDirectory, files) {
   fs.rmSync(outputDirectory, { recursive: true, force: true });
   fs.mkdirSync(outputDirectory, { recursive: true });
+  fs.writeFileSync(path.join(outputDirectory, '.gitattributes'), '* -text\n');
   const manifest = { format: 'canadapost-claim-runner-ci-transfer', version: 1, files: [] };
 
   for (const file of files) {
