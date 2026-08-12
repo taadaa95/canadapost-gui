@@ -1,6 +1,6 @@
 # Canada Post Claim Runner operating guide
 
-This is the current operator guide for stable version **0.4.0** on branch `feature/dev11-beta-release-hardening`. Earlier development notes remain historical records, not current instructions.
+This is the operator guide for application version **0.4.1** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.0 supports Linux x64 and Windows x64. Version 0.4.1 adds macOS universal support and remains unpublished until Kris validates the exact platform packages.
 
 ## Safety model
 
@@ -12,7 +12,7 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 
 | Item | Current value |
 | --- | --- |
-| Application | `0.4.0` |
+| Application | `0.4.1` |
 | Database schema | `8` |
 | EST parser/schema | `est-import-v5` |
 | Tracking API contract | `1.0.0` |
@@ -20,8 +20,9 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 | Tracking pacing | sequential, `3100 ms` minimum plus `0–100 ms` positive jitter |
 | Tracking test gateway | `https://api-stg.canadapost-postescanada.ca` |
 | Tracking production gateway | `https://api.canadapost-postescanada.ca` |
-| Linux artifact | `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage` |
-| Windows artifact | `Canada.Post.Claim.Runner-0.4.0-win-x64.exe` |
+| Linux artifact | `Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage` |
+| Windows artifact | `Canada.Post.Claim.Runner-0.4.1-win-x64.exe` |
+| macOS artifact | `Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg` (Intel x64 + Apple Silicon arm64) |
 
 ## Supported workflow
 
@@ -40,5 +41,7 @@ Never use a production account during automated testing. Automated browser suite
 Starting with 0.4.0, **Check for Updates** uses the latest normal GitHub release from `taadaa95/canadapost-claim-runner-releases`. It accepts only the exact platform package name, approved HTTPS GitHub hosts, GitHub's SHA-256 release-asset digest, and matching downloaded size and digest. It never installs a downgrade, draft, prerelease, wrong-platform, incomplete, or hash-mismatched package.
 
 The already-published 0.4.0-beta.1 binary contains the old updater configuration and cannot be changed remotely. Install 0.4.0 manually once when moving from that build. Existing application data remains in the same user profile. Do not create a bridge beta.
+
+macOS opens the verified DMG and asks the operator to replace the application in Applications. The running `.app` is never self-replaced. Do not publish an unsigned macOS test DMG as a stable package.
 
 Before publishing any stable package, run the automated checks and clean-source build in `docs/RELEASE_PROCESS.md`, then complete `MANUAL_RELEASE_GATES.md`.

@@ -87,12 +87,15 @@ const updater = require('../lib/github-release-updater');
 
     const abandoned = path.join(root, 'updates', 'old', 'package.AppImage.partial-123');
     const oldPackage = path.join(root, 'updates', 'old', 'old.AppImage');
+    const oldDmg = path.join(root, 'updates', 'old', 'old.dmg');
     fs.mkdirSync(path.dirname(abandoned), { recursive: true });
     fs.writeFileSync(abandoned, 'partial');
     fs.writeFileSync(oldPackage, 'old');
+    fs.writeFileSync(oldDmg, 'old mac package');
     updater.cleanupUpdateStorage(root, { keepRecent: 0, protectedPaths: [download] });
     assert.strictEqual(fs.existsSync(abandoned), false);
     assert.strictEqual(fs.existsSync(oldPackage), false);
+    assert.strictEqual(fs.existsSync(oldDmg), false);
     assert.strictEqual(fs.existsSync(download), true);
 
     process.stdout.write('Operation coordinator and update install/recovery guard tests passed.\n');

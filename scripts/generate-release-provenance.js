@@ -6,7 +6,8 @@ const path = require('path');
 const { assertReleaseGitState, validateReleaseIdentity, sha256File } = require('../lib/release-safety');
 
 const root = path.resolve(__dirname, '..');
-const platform = String(process.env.RELEASE_PLATFORM || (process.platform === 'win32' ? 'windows' : 'linux')).toLowerCase();
+const runtimePlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
+const platform = String(process.env.RELEASE_PLATFORM || runtimePlatform).toLowerCase();
 const identity = process.env.RELEASE_MATERIALIZED_FROM_GUARDED_SOURCE === '1'
   ? validateReleaseIdentity({ branch: process.env.RELEASE_SOURCE_BRANCH, commit: process.env.RELEASE_SOURCE_COMMIT }, { expectedBranch: process.env.CPCR_CANONICAL_RELEASE_BRANCH })
   : assertReleaseGitState(root);
@@ -28,7 +29,7 @@ const report = {
   generatedAt: new Date().toISOString(),
   applicationVersion: require('../package.json').version,
   platform,
-  architecture: 'x64',
+  architecture: platform === 'macos' ? 'universal (x64, arm64)' : 'x64',
   sourceBranch: identity.branch,
   sourceCommit: identity.commit,
   buildOrigin: process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_RUN_ID

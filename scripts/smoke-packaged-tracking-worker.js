@@ -7,6 +7,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const { resolveWorkerLaunch, spawnResolvedWorker } = require('../lib/runtime-workers');
+const { resolvePackagedLayout } = require('./packaged-layout');
 
 function listen(server) { return new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(server.address())); }); }
 function close(server) { return new Promise(resolve => server.close(() => resolve())); }
@@ -36,8 +37,7 @@ async function main() {
   const aliases = { success: 'tracking-success', 'systemic-500': '504', 'diagnostic-success': 'diagnostic-state', 'invariant-failure': 'optional-metadata' };
   const scenario = aliases[String(process.argv[3] || 'tracking-success')] || String(process.argv[3] || 'tracking-success');
   assert.ok(['token-success', 'token-failure', 'tracking-success', '401-refresh', '504', 'diagnostic-state', 'json-parser', 'est-service-fallback', 'first-attempt', 'semantic-gate-failure', 'semantic-gate-success', 'incomplete-isolation', 'rate-limiter', 'diagnostic-bulk-parity', 'event-1442', 'timeout-retry', 'optional-metadata'].includes(scenario), 'Unknown packaged Tracking API smoke scenario.');
-  const executablePath = path.join(packageRoot, process.platform === 'win32' ? 'Canada Post Claim Runner.exe' : 'canadapost-gui');
-  const resourcesPath = path.join(packageRoot, 'resources');
+  const { executablePath, resourcesPath, appPath } = resolvePackagedLayout(packageRoot);
   assert.ok(fs.statSync(executablePath, { throwIfNoEntry: false })?.isFile(), 'Packaged Electron executable is missing.');
 
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-packaged-tracking-smoke-'));
@@ -108,7 +108,7 @@ async function main() {
     ), { mode: 0o600 });
     if (failureMode || diagnosticMode || scenario === 'diagnostic-bulk-parity') fs.writeFileSync(claimsCsv, queueSentinel, { mode: 0o600 });
     const resolution = resolveWorkerLaunch('tracking', {
-      appPath: path.join(resourcesPath, 'app.asar'), resourcesPath, userDataPath: path.join(temporary, 'user-data'),
+      appPath, resourcesPath, userDataPath: path.join(temporary, 'user-data'),
       executablePath, appImagePath: process.env.APPIMAGE || '', isPackaged: true, platform: process.platform
     });
     const secretPayload = { clientId: 'synthetic-client-id', clientSecret: 'synthetic-client-secret', environment: 'test' };

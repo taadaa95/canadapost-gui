@@ -2,6 +2,14 @@
 
 Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for stable 0.4.0.
 
+## Canada Post Claim Runner 0.4.1 — pending publication
+
+- Adds official macOS support through one universal DMG for Intel x64 and Apple Silicon arm64.
+- Retains native Linux x64 AppImage and Windows x64 NSIS packages so GitHub Latest has a complete three-platform release.
+- Extends the simple GitHub Latest updater to verify and open the exact universal DMG, then guides the user through replacing the application in Applications without self-replacing the running bundle.
+- Adds native macOS CI tests for packaged workers, startup, paths, architecture, package contents, release metadata, and optional Developer ID signing/notarization.
+- Remains unpublished until Kris manually approves the exact platform packages. An unsigned macOS TEST artifact is not publication-ready.
+
 ## Canada Post Claim Runner 0.4.0 — stable
 
 - Stable distribution supports Linux x64 and Windows x64.

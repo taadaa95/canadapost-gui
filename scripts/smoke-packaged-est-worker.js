@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { resolveWorkerLaunch, spawnResolvedWorker } = require('../lib/runtime-workers');
 const { rowsAsObjects } = require('../lib/csv');
+const { resolvePackagedLayout } = require('./packaged-layout');
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -81,8 +82,7 @@ async function main() {
   const packageRoot = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dist', 'packages', 'linux-unpacked'));
   const scenario = String(process.argv[3] || 'populated');
   assert.ok(['empty', 'populated', 'high-volume', 'missing-date', 'previous-preservation', 'parser-v5'].includes(scenario), 'Unknown packaged Step 1 smoke scenario.');
-  const executablePath = path.join(packageRoot, process.platform === 'win32' ? 'Canada Post Claim Runner.exe' : 'canadapost-gui');
-  const resourcesPath = path.join(packageRoot, 'resources');
+  const { executablePath, resourcesPath, appPath } = resolvePackagedLayout(packageRoot);
   assert.ok(fs.statSync(executablePath, { throwIfNoEntry: false })?.isFile(), 'Packaged Electron executable is missing.');
 
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-packaged-est-smoke-'));
@@ -108,7 +108,7 @@ async function main() {
     const existingTracking = 'Tracking PIN\nSYNTHETIC-EXISTING\n';
     if (['empty', 'missing-date', 'previous-preservation'].includes(scenario)) fs.writeFileSync(trackingCsv, existingTracking, { mode: 0o600 });
     const resolution = resolveWorkerLaunch('estHistory', {
-      appPath: path.join(resourcesPath, 'app.asar'),
+      appPath,
       resourcesPath,
       userDataPath: path.join(temporary, 'user-data'),
       executablePath,
@@ -172,7 +172,7 @@ async function main() {
       }
       if (scenario === 'parser-v5') {
         const trackingResolution = resolveWorkerLaunch('tracking', {
-          appPath: path.join(resourcesPath, 'app.asar'), resourcesPath,
+          appPath, resourcesPath,
           userDataPath: path.join(temporary, 'user-data'), executablePath,
           appImagePath: process.env.APPIMAGE || '', isPackaged: true, platform: process.platform
         });

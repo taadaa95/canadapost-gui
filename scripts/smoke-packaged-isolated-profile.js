@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
+const { resolvePackagedLayout } = require('./packaged-layout');
 
 const OVERRIDE_ENV = 'CANADA_POST_CLAIM_RUNNER_USER_DATA_DIR';
 const CONFIRM_ENV = 'CANADA_POST_CLAIM_RUNNER_ISOLATED_TEST_CONFIRM';
@@ -98,7 +99,7 @@ async function launch(executable, executableArguments, env, expectedCode) {
     assert.strictEqual(extraction.status, 0, `AppImage extraction failed: ${String(extraction.stderr || '').slice(0, 500)}`);
     packageTarget = path.join(extractedAppImage, 'squashfs-root');
   }
-  const executable = path.join(packageTarget, process.platform === 'win32' ? 'Canada Post Claim Runner.exe' : 'canadapost-gui');
+  const { executablePath: executable } = resolvePackagedLayout(packageTarget);
   const executableArguments = [];
   assert.ok(fs.statSync(executable, { throwIfNoEntry: false })?.isFile(), 'Packaged executable is missing.');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-packaged-isolated-profile-'));

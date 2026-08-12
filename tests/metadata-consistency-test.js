@@ -35,7 +35,7 @@ const currentValues = [
 ];
 for (const value of currentValues) assert.ok(guide.includes(String(value)), `Operating guide is missing current metadata value ${value}.`);
 
-for (const platform of ['linux', 'windows']) {
+for (const platform of ['linux', 'windows', 'macos']) {
   const artifact = expectedBinaryName({ version: PRODUCT_METADATA.applicationVersion, platform });
   assert.ok(guide.includes(artifact), `Operating guide is missing canonical ${platform} artifact name.`);
 }

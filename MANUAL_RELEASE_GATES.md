@@ -1,8 +1,8 @@
 # Manual stable-release gates
 
-These gates are intentionally pending. Kris must run them against the exact clean-source AppImage recorded in `dist/release-metadata/releases/v0.4.0.json`. Automated work must not use real Canada Post credentials or authenticated services.
+Kris performs physical, visual, and live release testing against the exact checksum-identified packages. Automated work must not use real Canada Post credentials or authenticated services.
 
-## Exact 0.4.0 Linux validation
+## Recorded 0.4.0 Linux validation
 
 1. Verify the filename is `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`.
 2. Run `sha256sum Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage` and compare it exactly with `SHA256SUMS.txt` and `releases/v0.4.0.json`.
@@ -25,6 +25,18 @@ These gates are intentionally pending. Kris must run them against the exact clea
 - Obtain legal/privacy approval for notices, retention, licensing, support, and lifecycle commitments.
 - Verify current Canada Post policy, customer contract, holiday, and guarantee notices immediately before release.
 - Use only an authorized Canada Post account owner for real API diagnostics, CAPTCHA/text verification, supervised claims, canary submission, or account reconciliation.
-- Validate Windows separately before adding the `.exe` asset to a future public release.
+- Physical Windows validation remains distinct from the automated Windows package validation. Do not mark it passed unless Kris performs it.
 
-Until these steps pass, 0.4.0 is a stable release candidate and must not be published.
+## Exact 0.4.1 three-platform validation
+
+1. Compare the exact size and SHA-256 of all three canonical 0.4.1 binaries with the combined `SHA256SUMS.txt` and release metadata.
+2. Validate the AppImage on physical Linux x64 and the NSIS installer on physical Windows x64.
+3. Validate the universal DMG on Intel x64 and Apple Silicon arm64 where hardware is available; record any architecture not physically tested.
+4. On macOS, verify the public candidate is Developer ID signed and notarized, mounts normally, can replace the copy in Applications, preserves application data, and has the expected Gatekeeper experience. Do not treat an unsigned TEST DMG as equivalent.
+5. On every platform, verify startup, schema-8 database access, backup/restore paths, browser-profile isolation, privacy deletion, update storage, and packaged Step 1/Step 2 workers.
+6. Confirm the built-in `WebContentsView` and Playwright CDP connection behave normally without a separately bundled browser.
+7. Repeat the Step 3 gates above: actionable-only queue, immutable snapshot, dry-run barrier, live confirmation, CAPTCHA/manual verification, duplicate/already-submitted prevention, and uncertain-final-action protection.
+8. Exercise the updater with a newer synthetic/test release: exact asset selection, size/hash verification, protected-operation lock, pre-update database backup, and platform install behavior.
+9. Record the source SHA, filename, size, SHA-256, signing/notarization status, physical platform/architecture, results, and exceptions.
+
+Do not publish `v0.4.1` until these gates are complete and Kris explicitly approves the exact packages.

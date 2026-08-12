@@ -1,6 +1,6 @@
 # Accessibility validation checklist
 
-Automated checks cover named buttons, labels, duplicate IDs, document language/title, a main landmark, visible keyboard focus, reduced-motion CSS and locale-key completeness. A release tester must still validate on Windows and Linux:
+Automated checks cover named buttons, labels, duplicate IDs, document language/title, a main landmark, visible keyboard focus, reduced-motion CSS and locale-key completeness. A release tester must still validate on Windows, Linux, and macOS:
 
 - complete keyboard-only workflow and logical focus order;
 - focus trap and Escape behavior for every modal;

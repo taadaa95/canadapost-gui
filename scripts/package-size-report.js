@@ -19,8 +19,10 @@ function directoryBytes(directory) {
 }
 
 const platform = String(process.env.RELEASE_PLATFORM || process.platform).toLowerCase();
-const extension = platform === 'windows' || platform === 'win32' ? '.exe' : '.AppImage';
-const budgetKey = extension === '.exe' ? 'windows-x64-nsis' : 'linux-x64-appimage';
+const isWindows = platform === 'windows' || platform === 'win32';
+const isMacos = platform === 'macos' || platform === 'darwin';
+const extension = isWindows ? '.exe' : isMacos ? '.dmg' : '.AppImage';
+const budgetKey = isWindows ? 'windows-x64-nsis' : isMacos ? 'mac-universal-dmg' : 'linux-x64-appimage';
 const artifacts = fs.readdirSync(packageDirectory, { withFileTypes: true })
   .filter(entry => entry.isFile() && entry.name.endsWith(extension))
   .map(entry => ({ name: entry.name, bytes: fs.statSync(path.join(packageDirectory, entry.name)).size }));
@@ -32,7 +34,7 @@ for (const artifact of artifacts) {
   if (artifact.bytes > budget) throw new Error(`${artifact.name} exceeds the ${budgetKey} package-size budget by ${artifact.bytes - budget} bytes.`);
 }
 
-const unpackedName = extension === '.exe' ? 'win-unpacked' : 'linux-unpacked';
+const unpackedName = isWindows ? 'win-unpacked' : isMacos ? 'mac-universal' : 'linux-unpacked';
 const unpacked = path.join(packageDirectory, unpackedName);
 let contributors = [];
 if (fs.existsSync(unpacked)) {
@@ -62,6 +64,6 @@ const report = {
 };
 const reportDirectory = path.join(root, 'dist', 'release-metadata');
 fs.mkdirSync(reportDirectory, { recursive: true });
-const reportPath = path.join(reportDirectory, `package-size-${extension === '.exe' ? 'windows' : 'linux'}.json`);
+const reportPath = path.join(reportDirectory, `package-size-${isWindows ? 'windows' : isMacos ? 'macos' : 'linux'}.json`);
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(`Package-size report: ${reportPath}\n`);

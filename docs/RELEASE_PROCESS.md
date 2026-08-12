@@ -26,7 +26,7 @@ npm run release:package
 
 `release:guard` rejects a dirty tree, a commit different from `RELEASE_SOURCE_COMMIT`, or a branch other than `feature/dev11-beta-release-hardening`. The branch name is retained for PR continuity; it is not an application update channel.
 
-`release:package` creates a fresh temporary Git materialization, installs locked dependencies, reruns tests, builds `Canada.Post.Claim.Runner-<version>-linux-x86_64.AppImage`, audits packaged content, and generates:
+Native GitHub-hosted runners install locked dependencies, rerun tests, build the canonical Linux x64 AppImage, Windows x64 NSIS installer, and macOS universal DMG, audit packaged content, and generate:
 
 - `SHA256SUMS.txt` plus a platform-specific internal copy;
 - package-size report;
@@ -34,6 +34,6 @@ npm run release:package
 - provenance bound to the exact source SHA;
 - `releases/v<version>.json` with manual validation still marked pending.
 
-Only the AppImage and `SHA256SUMS.txt` belong in the public Linux Downloads section. Keep internal audit metadata outside the public asset list.
+Only the supported platform binaries and one combined `SHA256SUMS.txt` belong in the normal public download set. Legacy per-platform manifests may remain only where an installed Dev 10 updater requires them. Keep internal audit metadata outside the public asset list.
 
-Do not create or publish the GitHub release until Kris manually validates the exact built AppImage. See `MANUAL_RELEASE_GATES.md` and `docs/GITHUB_UPDATES.md`.
+Do not create or publish the GitHub release until Kris manually validates every exact platform binary. A public macOS binary must also be Developer ID signed and notarized. See `MANUAL_RELEASE_GATES.md` and `docs/GITHUB_UPDATES.md`.

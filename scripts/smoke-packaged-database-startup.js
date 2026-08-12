@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { resolveWorkerLaunch, spawnResolvedWorker } = require('../lib/runtime-workers');
+const { resolvePackagedLayout } = require('./packaged-layout');
 
 function createSyntheticLegacyDatabase(filePath, { advancedVersion = false } = {}) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -30,10 +31,9 @@ function createSyntheticLegacyDatabase(filePath, { advancedVersion = false } = {
 }
 
 async function launchProbe(packageRoot, databasePath, backupDirectory) {
-  const executablePath = path.join(packageRoot, process.platform === 'win32' ? 'Canada Post Claim Runner.exe' : 'canadapost-gui');
-  const resourcesPath = path.join(packageRoot, 'resources');
+  const { executablePath, resourcesPath, appPath } = resolvePackagedLayout(packageRoot);
   const resolution = resolveWorkerLaunch('databaseStartup', {
-    appPath: path.join(resourcesPath, 'app.asar'),
+    appPath,
     resourcesPath,
     userDataPath: path.join(path.dirname(databasePath), 'probe-user-data'),
     executablePath,

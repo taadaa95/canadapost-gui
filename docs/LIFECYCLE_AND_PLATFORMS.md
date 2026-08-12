@@ -1,6 +1,6 @@
 # Supported platforms, updates and lifecycle draft
 
-**Draft.** Stable releases target 64-bit Windows through NSIS and 64-bit Linux through AppImage. Node 24 is the CI validation runtime and Electron/Playwright versions are locked in `package-lock.json`. macOS is not currently supported.
+**Draft.** Stable 0.4.0 supports 64-bit Windows through NSIS and 64-bit Linux through AppImage. Version 0.4.1 adds a universal macOS DMG containing Intel x64 and Apple Silicon arm64 runtimes. Node 24 is the CI validation runtime and Electron/Playwright versions are locked in `package-lock.json`. The public macOS package requires Developer ID signing and Apple notarization; unsigned CI packages are technical test artifacts only.
 
 There is one normal stable version stream. The updater uses GitHub Latest, accepts only a strictly newer stable release and exact platform artifact, and verifies GitHub's SHA-256 release-asset digest before installation. Protected operations, automatic database backup, interrupted-update recovery, and rollback remain in force.
 

@@ -21,7 +21,7 @@ The updater requires all of the following:
 - release metadata from the configured repository's GitHub API endpoint;
 - approved HTTPS GitHub API, release, redirect, and asset hosts;
 - a version strictly newer than the running version;
-- supported platform and x64 architecture;
+- supported platform architecture (Linux x64, Windows x64, or macOS x64/arm64 using the universal package);
 - the exact stable filename for that version and platform;
 - a positive bounded size from GitHub release-asset metadata;
 - a GitHub asset `digest` matching `sha256:<64 hex characters>`;
@@ -35,21 +35,32 @@ No custom manifest, release channel, Ed25519 key, or application-specific signat
 1. Set `package.json` to the next normal semantic version, such as `0.4.1`.
 2. Run the complete automated suite and build from the reviewed clean source commit.
 3. Verify `dist/release-metadata/SHA256SUMS.txt`, internal provenance, and `releases/v<version>.json`.
-4. Complete manual validation on the exact AppImage or Windows installer that will be uploaded.
+4. Complete manual validation on every exact AppImage, Windows installer, and DMG that will be uploaded.
 5. Create a non-draft, non-prerelease GitHub Release named `Canada Post Claim Runner <version>` with tag `v<version>`.
 6. Upload only the platform binaries being published and one `SHA256SUMS.txt` covering them.
 7. Confirm GitHub reports a SHA-256 digest for every binary asset before declaring the release ready.
 
-For Linux-only 0.4.0, the public assets are exactly:
+Stable 0.4.0 publishes Linux x64 and Windows x64 binaries, their legacy Dev 10 compatibility manifests, and one checksum file:
 
 - `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`
+- `Canada.Post.Claim.Runner-0.4.0-win-x64.exe`
+- `package-manifest-linux.json`
+- `package-manifest-windows.json`
 - `SHA256SUMS.txt`
+
+Version 0.4.1 must not be published until Kris approves the exact three-platform set:
+
+- `Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage`
+- `Canada.Post.Claim.Runner-0.4.1-win-x64.exe`
+- `Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg`
 
 SBOM, licence inventory, provenance, and package-audit reports remain internal metadata rather than public download clutter.
 
 ## Installed behaviour
 
-The user makes one choice: **Download / Install Update** or **Cancel**. Downloads use the private application update directory. Partial and stale downloads are cleaned up. A protected Step 1, Step 2, Step 3, backup, restore, migration, recovery, privacy deletion, or authoritative-data operation blocks executable replacement. An automatic pre-update database backup and pending marker preserve interrupted-update recovery. Linux retains the previous AppImage; Windows launches the verified installer after shutdown.
+The user makes one choice: **Download / Install Update** or **Cancel**. Downloads use the private application update directory. Partial and stale downloads are cleaned up. A protected Step 1, Step 2, Step 3, backup, restore, migration, recovery, privacy deletion, or authoritative-data operation blocks executable replacement. An automatic pre-update database backup and pending marker preserve interrupted-update recovery. Linux retains the previous AppImage; Windows launches the verified installer after shutdown. macOS opens the verified DMG, clearly directs the user to replace the copy in Applications, and quits only after the user chooses to do so. It never recursively self-replaces a running `.app` bundle.
+
+The macOS CI build uses Developer ID signing, hardened runtime, Apple notarization, stapling, and signature/notarization verification only when the complete secret set is present. With no credentials it produces an explicitly unsigned TEST DMG for technical validation and never publishes it as stable.
 
 ## Upgrade from the old beta
 

@@ -11,11 +11,13 @@ const SOURCE_REPOSITORY = 'taadaa95/canadapost-gui';
 const RELEASE_REPOSITORY = 'taadaa95/canadapost-claim-runner-releases';
 const PLATFORM_POLICIES = Object.freeze({
   linux: Object.freeze({ extension: '.AppImage', platformToken: 'linux', architectureToken: 'x86_64' }),
-  windows: Object.freeze({ extension: '.exe', platformToken: 'win', architectureToken: 'x64' })
+  windows: Object.freeze({ extension: '.exe', platformToken: 'win', architectureToken: 'x64' }),
+  macos: Object.freeze({ extension: '.dmg', platformToken: 'mac', architectureToken: 'universal' })
 });
 
-function releasePlatform(value = process.env.RELEASE_PLATFORM || (process.platform === 'win32' ? 'windows' : process.platform)) {
-  const platform = String(value || '').trim().toLowerCase();
+function releasePlatform(value = process.env.RELEASE_PLATFORM || process.platform) {
+  const requested = String(value || '').trim().toLowerCase();
+  const platform = requested === 'win32' ? 'windows' : requested === 'darwin' ? 'macos' : requested;
   if (!Object.hasOwn(PLATFORM_POLICIES, platform)) throw new Error(`Unsupported release metadata platform: ${platform}`);
   return platform;
 }

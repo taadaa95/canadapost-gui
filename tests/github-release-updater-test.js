@@ -22,6 +22,7 @@ function release(tag, bytes, options = {}) {
   const releaseVersion = String(tag).replace(/^v/, '');
   const linuxFile = `Canada.Post.Claim.Runner-${releaseVersion}-linux-x86_64.AppImage`;
   const windowsFile = `Canada.Post.Claim.Runner-${releaseVersion}-win-x64.exe`;
+  const macFile = `Canada.Post.Claim.Runner-${releaseVersion}-mac-universal.dmg`;
   return {
     tag_name: tag,
     name: `Canada Post Claim Runner ${releaseVersion}`,
@@ -29,7 +30,7 @@ function release(tag, bytes, options = {}) {
     prerelease: false,
     body: 'A concise synthetic release note.',
     html_url: `https://github.com/${SOURCE.owner}/${SOURCE.repository}/releases/tag/${tag}`,
-    assets: [linuxFile, windowsFile].map(file => ({
+    assets: [linuxFile, windowsFile, macFile].map(file => ({
       name: file,
       size: bytes.length,
       digest: `sha256:${digest(bytes)}`,
@@ -85,7 +86,7 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
   return { fileSystem, hashFile, files, calls, counts };
 }
 
-assert.strictEqual(require('../package.json').version, '0.4.0');
+assert.strictEqual(require('../package.json').version, '0.4.1');
 const updaterUiText = [
   fs.readFileSync(path.join(__dirname, '..', 'lib', 'github-release-updater.js'), 'utf8'),
   fs.readFileSync(path.join(__dirname, '..', 'locales', 'en-CA.json'), 'utf8'),
@@ -97,7 +98,10 @@ assert.strictEqual(updater.channelFor, undefined, 'release-channel selection mus
 assert.strictEqual(updater.apiUrl(SOURCE), 'https://api.github.com/repos/taadaa95/canadapost-claim-runner-releases/releases/latest');
 assert.strictEqual(updater.expectedArtifactName('0.4.1', 'linux', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage');
 assert.strictEqual(updater.expectedArtifactName('0.4.1', 'win32', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-win-x64.exe');
+assert.strictEqual(updater.expectedArtifactName('0.4.1', 'darwin', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
+assert.strictEqual(updater.expectedArtifactName('0.4.1', 'darwin', 'arm64'), 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
 assert.throws(() => updater.expectedArtifactName('0.4.1', 'linux', 'arm64'), /not supported/i);
+assert.throws(() => updater.expectedArtifactName('0.4.1', 'darwin', 'ia32'), /not supported/i);
 assert.throws(() => updater.apiUrl({ ...SOURCE, provider: 'custom-manifest' }), /provider/i);
 assert.throws(() => updater.version('latest'), /invalid/i);
 assert.throws(() => updater.githubUrl('http://github.com/file'), /approved/i);
@@ -116,6 +120,8 @@ assert.strictEqual(candidate.version, '0.4.1');
 assert.strictEqual(candidate.artifact.file, 'Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage');
 assert.strictEqual(candidate.artifact.bytes, artifactBytes.length);
 assert.strictEqual(candidate.artifact.sha256, digest(artifactBytes));
+const macCandidate = updater.validateLatestRelease(stableRelease, '0.4.0', 'darwin', 'arm64');
+assert.strictEqual(macCandidate.artifact.file, 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
 assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.1', 'linux', 'x64').available, false);
 assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.2', 'linux', 'x64').available, false);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, draft: true }, '0.4.0', 'linux', 'x64'), /normal stable release/i);
@@ -288,6 +294,49 @@ assert.throws(() => updater.validateLatestRelease({
     assert.strictEqual(launches.length, 1);
     assert.strictEqual(launches[0].command, 'powershell.exe');
     assert.strictEqual(quitCalled, true);
+
+    const downloadedDmg = path.join(root, macCandidate.artifact.file);
+    fs.writeFileSync(downloadedDmg, artifactBytes);
+    const opened = [];
+    let macBeforeExit = 0;
+    quitCalled = false;
+    const keptOpen = await updater.installUpdate({
+      app: { quit: () => { quitCalled = true; } },
+      shell: { openPath: async file => { opened.push(file); return ''; } },
+      downloadedPath: downloadedDmg,
+      update: macCandidate,
+      currentVersion: '0.4.0',
+      platform: 'darwin',
+      beforeExit: () => { macBeforeExit += 1; },
+      confirmMacInstall: async () => false
+    });
+    assert.deepStrictEqual(keptOpen, { manualInstall: true, opened: true, quitRequested: false });
+    assert.deepStrictEqual(opened, [downloadedDmg]);
+    assert.strictEqual(macBeforeExit, 0);
+    assert.strictEqual(quitCalled, false);
+
+    const quitForInstall = await updater.installUpdate({
+      app: { quit: () => { quitCalled = true; } },
+      shell: { openPath: async () => '' },
+      downloadedPath: downloadedDmg,
+      update: macCandidate,
+      currentVersion: '0.4.0',
+      platform: 'darwin',
+      beforeExit: () => { macBeforeExit += 1; },
+      confirmMacInstall: async () => true
+    });
+    assert.strictEqual(quitForInstall.quitRequested, true);
+    assert.strictEqual(macBeforeExit, 1);
+    assert.strictEqual(quitCalled, true);
+
+    await assert.rejects(() => updater.installUpdate({
+      app: { quit: () => {} },
+      shell: { openPath: async () => 'synthetic mount failure' },
+      downloadedPath: downloadedDmg,
+      update: macCandidate,
+      currentVersion: '0.4.0',
+      platform: 'darwin'
+    }), error => error.code === 'UPDATE_DMG_OPEN_FAILED');
 
     process.stdout.write('Stable GitHub Latest updater trust and install tests passed.\n');
   } finally {

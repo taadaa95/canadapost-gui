@@ -69,6 +69,18 @@ assert.strictEqual(windows.workerPath, 'C:\\Program Files\\Canada Post Claim Run
 assert.strictEqual(windows.cwd, 'C:\\Users\\Synthetic\\AppData\\Roaming\\Canada Post Claim Runner\\worker-runtime');
 assert.ok(!windows.cwd.toLowerCase().endsWith('.asar'));
 
+const macos = deriveWorkerPaths('tracking', {
+  appPath: '/Applications/Canada Post Claim Runner.app/Contents/Resources/app.asar',
+  resourcesPath: '/Applications/Canada Post Claim Runner.app/Contents/Resources',
+  userDataPath: '/Users/Synthetic/Library/Application Support/Canada Post Claim Runner',
+  executablePath: '/Applications/Canada Post Claim Runner.app/Contents/MacOS/Canada Post Claim Runner',
+  isPackaged: true,
+  platform: 'darwin'
+});
+assert.strictEqual(macos.workerPath, '/Applications/Canada Post Claim Runner.app/Contents/Resources/app.asar.unpacked/scripts/get-tracking.js');
+assert.strictEqual(macos.cwd, '/Users/Synthetic/Library/Application Support/Canada Post Claim Runner/worker-runtime');
+assert.strictEqual(macos.resourceRoot, '/Applications/Canada Post Claim Runner.app/Contents/Resources/app.asar.unpacked');
+
 assert.throws(() => deriveWorkerPaths('tracking', {
   ...linuxPackage.context,
   userDataPath: path.join(linuxPackage.root, 'bad'),

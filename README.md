@@ -1,6 +1,6 @@
 # Canada Post Claim Runner
 
-Current stable version: **0.4.0**. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
+Current public stable version: **0.4.0** for Linux x64 and Windows x64. Version **0.4.1** adds official macOS universal support and is pending Kris's platform validation; it is not published yet. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
 
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 
@@ -29,7 +29,7 @@ Bulk tracking remains sequential (concurrency 1). Advanced Settings enforces a 3
 
 Legacy `user.ini` Developer Program username/password values can still be imported into encrypted storage for migration safety, but they are labeled deprecated and inactive. They are never copied into the current client ID/secret fields and Step 2 never falls back to legacy Basic/XML. A legacy customer-number entry is removed during the one-time privacy reset and is never used to populate Step 1; enter the current number explicitly in User Settings. Optional `mobo` remains legacy Step 1 configuration.
 
-The Canada Post web/EST login is entered in User Settings. Electron OS-keyring encryption is preferred. When a usable Linux keyring is unavailable, the app uses AES-256-GCM device-local encryption protected by owner-only application-data permissions.
+The Canada Post web/EST login is entered in User Settings. Electron OS-keyring encryption is preferred. When a usable OS credential store is unavailable, the app uses AES-256-GCM device-local encryption protected by owner-only application-data permissions.
 
 ## Upgrade from 0.1
 
@@ -99,9 +99,11 @@ The suites cover:
 
 ## Release process
 
-Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a source manifest/checksum, extracts the archive and scans it again. `npm run release:package` builds the stable Linux package from a clean Git materialization, generates SHA-256 and provenance metadata, and audits packaged content. `RELEASE_CHANNEL` is not used. Production Step 3 uses Electron's built-in browser and the package must not contain a second Playwright browser runtime.
+Never ZIP the working directory. `npm run release:safe` materializes only allowlisted tracked files in a clean staging directory, scans them, writes a source manifest/checksum, extracts the archive and scans it again. Native CI builds Linux x64, Windows x64, and macOS universal packages from a reviewed clean Git commit, generates SHA-256 and provenance metadata, and audits packaged content. `RELEASE_CHANNEL` is not used. Production Step 3 uses Electron's built-in browser and the package must not contain a second Playwright browser runtime.
 
 Starting with 0.4.0, **Check for Updates** uses GitHub's latest normal release and verifies the exact filename, platform, architecture, byte size, and GitHub SHA-256 asset digest. The already-distributed 0.4.0-beta.1 binary has the old compiled updater and requires one manual installation of 0.4.0. Existing application data remains in the same user profile.
+
+On macOS, the updater opens the verified universal DMG and tells the operator to replace Canada Post Claim Runner in Applications. It never recursively replaces a running `.app` bundle. A final public macOS package requires Developer ID signing and Apple notarization; an unsigned CI DMG is only a technical test artifact.
 
 See `docs/RELEASE_PROCESS.md`, `MANUAL_RELEASE_GATES.md`, `RELEASE_NOTES.md` and `SECURITY.md`.
 

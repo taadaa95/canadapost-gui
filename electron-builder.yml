@@ -68,4 +68,14 @@ linux:
   target:
     - target: AppImage
       arch: [x64]
+mac:
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch: [universal]
+  hardenedRuntime: true
+  notarize: true
+  mergeASARs: true
+dmg:
+  sign: false
 publish: null

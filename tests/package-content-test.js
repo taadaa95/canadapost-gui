@@ -15,7 +15,9 @@ for (const script of allowlist.runtimeScripts) assert.ok(builder.includes(`scrip
 for (const excluded of allowlist.excludedProductionRoots) assert.ok(!allowlist.allowedRoots.includes(excluded), `${excluded} must not be an allowed production root`);
 assert.ok(allowlist.artifactSizeBudgets['linux-x64-appimage'] > 0);
 assert.ok(allowlist.artifactSizeBudgets['windows-x64-nsis'] > 0);
+assert.ok(allowlist.artifactSizeBudgets['mac-universal-dmg'] > 0);
 assert.ok(allowlist.artifactSizeBudgets['linux-x64-appimage'] <= 200000000);
+assert.ok(allowlist.artifactSizeBudgets['mac-universal-dmg'] <= 300000000);
 assert.doesNotMatch(builder, /^\s*-\s+node_modules\/playwright\/\*\*/m, 'full Playwright must not be unpacked into production');
 assert.match(builder, /!node_modules\/playwright-core\/\.local-browsers/);
 for (const forbidden of [

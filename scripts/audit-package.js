@@ -13,7 +13,9 @@ const { auditPackagePaths, collectRelativePaths } = require('../lib/package-cont
 
 const target = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dist', 'packages', 'linux-unpacked'));
 if (!fs.existsSync(target)) throw new Error('Pass an unpacked Electron application directory to audit.');
-const resources = path.join(target, 'resources');
+const resources = target.endsWith('.app')
+  ? path.join(target, 'Contents', 'Resources')
+  : path.join(target, 'resources');
 const archive = path.join(resources, 'app.asar');
 if (!fs.existsSync(archive)) throw new Error('Packaged app.asar is missing.');
 const unpackedRoot = path.join(resources, 'app.asar.unpacked');
