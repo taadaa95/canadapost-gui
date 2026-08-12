@@ -2,6 +2,12 @@
 
 Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for stable 0.4.0.
 
+## Canada Post Claim Runner 0.4.0 — stable
+
+- Stable distribution supports Linux x64 and Windows x64.
+- The public release contains the exact platform binaries, a two-platform `SHA256SUMS.txt`, and legacy per-platform manifests for Dev 10 updater compatibility.
+- Linux manual validation remains the recorded physical validation. Windows automated validation is recorded separately and does not claim physical Windows testing.
+
 ## Dev 11 candidate queue and Claim History simplification — 2026-08-12
 
 - Step 3 now returns and displays only currently actionable `LATE_CANDIDATE` records. Submitted, already-submitted, terminal, unresolved, reconciliation-required, tombstoned, and otherwise blocked records remain protected by every authoritative submission check but no longer clutter the queue.

@@ -1,0 +1,64 @@
+name: Rebuild Windows v0.4.0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    name: Windows v0.4.0 pinned rebuild
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      RELEASE_PLATFORM: windows
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: 908e1c86a1b1710fc03b7ed21ee7ad5291d6f199
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 908e1c86a1b1710fc03b7ed21ee7ad5291d6f199
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - run: npm test
+      - run: npm run test:dev10
+      - run: npm run test:updates
+      - run: npm run test:localization
+      - run: npm run test:accessibility
+      - run: npm run package:windows
+      - run: npm run package:audit -- dist/packages/win-unpacked
+      - run: npm run package:size -- dist/packages
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - run: npm run release:validate
+      - run: npm run release:provenance
+      - run: npm run secret-scan
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Record exact installer identity
+        shell: pwsh
+        run: |
+          $installer = "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe"
+          $record = [ordered]@{
+            sourceSha = $env:RELEASE_SOURCE_COMMIT
+            file = [System.IO.Path]::GetFileName($installer)
+            bytes = (Get-Item $installer).Length
+            sha256 = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $record | ConvertTo-Json | Set-Content -Encoding utf8NoBOM windows-v0.4.0-build.json
+          Get-Content windows-v0.4.0-build.json
+      - name: Create private draft transfer release
+        shell: pwsh
+        run: |
+          $tag = "ci-transfer-windows-${{ github.run_id }}"
+          gh release create $tag --draft --target $env:RELEASE_SOURCE_COMMIT --title "CI transfer $tag" --notes "Temporary private transfer for the pinned Windows v0.4.0 rebuild."
+          gh release upload $tag "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe" windows-v0.4.0-build.json
