@@ -84,11 +84,11 @@ const watchdog = setTimeout(() => {
 
 (async () => {
   const root = path.resolve(__dirname, '..');
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-step3-visible-dry-run-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-step3-visible-submit-'));
   const dataDir = path.join(userData, 'data');
   const dbPath = path.join(userData, 'database', 'app.sqlite');
   fs.mkdirSync(dataDir, { recursive: true });
-  fs.writeFileSync(path.join(userData, 'config.json'), `${JSON.stringify({ setupCompleted: true, rememberSettings: false, dryRunDefault: true })}\n`, { mode: 0o600 });
+  fs.writeFileSync(path.join(userData, 'config.json'), `${JSON.stringify({ setupCompleted: true, rememberSettings: false })}\n`, { mode: 0o600 });
   const trackingNumber = '9900000000000001';
   fs.writeFileSync(path.join(dataDir, 'claims.csv'), [
     'Tracking PIN,Destination Postal Code,Expected Delivery Date,Original Delivery Standard Date,Actual Delivery Date,Reference #,Service Code,Status,Eligibility Reason',
@@ -158,7 +158,6 @@ const watchdog = setTimeout(() => {
       webUsername: 'synthetic-user', webPassword: 'synthetic-password', rememberSettings: false,
       claimStreetNumber: '1', claimStreetName: 'Example Street', claimCity: 'Ottawa', claimProvince: 'ON',
       claimPostalCode: 'K1A0B1', claimContactName: 'Synthetic Operator', claimContactEmail: 'operator@example.invalid',
-      dryRun: true, liveSubmissionConfirmed: false, canaryMode: true,
       selectedClassificationRecords: selection, expectedClaimCount: selection.length, afterSubmitMs: 5000
     }), selectedClassificationRecords), 'Hidden-slot submission rejection', 45000);
     assert.strictEqual(hiddenStart.ok, false, 'submission must not start while the browser slot cannot be displayed');
@@ -171,7 +170,7 @@ const watchdog = setTimeout(() => {
       document.getElementById('builtinBrowserSlot').scrollIntoView({ block: 'center' });
     }), 'Step 3 browser-slot activation', 15000);
 
-    phase('starting executable dry run');
+    phase('starting executable synthetic submission');
     const started = await withTimeout(window.evaluate(selection => window.cpApp.runSubmit({
       webUsername: 'synthetic-user',
       webPassword: 'synthetic-password',
@@ -183,14 +182,11 @@ const watchdog = setTimeout(() => {
       claimPostalCode: 'K1A0B1',
       claimContactName: 'Synthetic Operator',
       claimContactEmail: 'operator@example.invalid',
-      dryRun: true,
-      liveSubmissionConfirmed: false,
-      canaryMode: true,
       selectedClassificationRecords: selection,
       expectedClaimCount: selection.length,
       afterSubmitMs: 5000
-    }), selectedClassificationRecords), 'Executable dry-run start', 60000);
-    assert.strictEqual(started.ok, true, started.error || 'mock dry run did not start');
+    }), selectedClassificationRecords), 'Executable synthetic submission start', 60000);
+    assert.strictEqual(started.ok, true, started.error || 'mock submission did not start');
 
     phase('waiting for manual verification event');
     try {
@@ -268,32 +264,31 @@ const watchdog = setTimeout(() => {
       await target.executeJavaScript("document.getElementById('complete_verification').click(); true", true);
     }, origin), 'Synthetic verification completion', 30000);
 
-    phase('waiting for dry-run completion');
+    phase('waiting for synthetic submission completion');
     await window.waitForFunction(() => window.__step3Events.some(event => event?.type === 'submit_complete'), null, { timeout: 90000 });
     await window.waitForFunction(() => window.__step3Runs.some(run => run?.status === 'complete'), null, { timeout: 30000 });
     const result = await window.evaluate(() => ({
       complete: window.__step3Events.find(event => event?.type === 'submit_complete'),
-      claim: window.__step3Events.find(event => event?.type === 'claim_dry_run'),
+      claim: window.__step3Events.find(event => event?.type === 'claim_submitted'),
       errors: window.__step3Events.filter(event => event?.type === 'error' || event?.type === 'claim_error'),
       runs: window.__step3Runs
     }));
     assert.strictEqual(result.complete.total, 1, JSON.stringify(result));
-    assert.strictEqual(result.complete.dryRunReady, 1);
-    assert.strictEqual(result.complete.succeeded, 0);
+    assert.strictEqual(result.complete.succeeded, 1);
     assert.strictEqual(result.complete.failed, 0);
-    assert.ok(result.claim, 'mock dry run did not stop at the sender/contact checkpoint');
+    assert.ok(result.claim, 'mock claim was not submitted');
     assert.strictEqual(result.errors.length, 0, JSON.stringify(result.errors));
 
     const stats = portal.stats();
     assert(stats.claimStages.receiver >= 1);
     assert(stats.claimStages.reference >= 1);
     assert(stats.claimStages.sender >= 1);
-    assert.strictEqual(Number(stats.claimStages.review || 0), 0, 'dry run crossed into mock review');
-    assert.strictEqual(stats.finalReviewVisits, 0, 'dry run reached mock final review');
-    assert.strictEqual(stats.submittedClaims, 0, 'mock claim was submitted');
+    assert(Number(stats.claimStages.review || 0) >= 1, 'mock review stage was not reached');
+    assert(stats.finalReviewVisits >= 1, 'mock final review was not reached');
+    assert.strictEqual(stats.submittedClaims, 1, 'mock claim was not submitted');
 
     phase('validating history and diagnostics');
-    const history = claimDb.listClaimHistory(dbPath, { status: 'dry_run_ready' });
+    const history = claimDb.listClaimHistory(dbPath, { status: 'submitted' });
     assert.strictEqual(history.length, 1);
     const diagnosticRoot = path.join(userData, 'logs', 'step3-runs');
     const latest = fs.readdirSync(diagnosticRoot).sort().at(-1);
@@ -312,14 +307,13 @@ const watchdog = setTimeout(() => {
       'missing native browser attachment/visibility diagnostic'
     );
     assert(timeline.includes('manual-verification-display-ready'));
-    assert(timeline.includes('safety-barrier-reached'));
     const diagnosticText = `${electronDiagnostics}\n${timeline}`;
     for (const forbidden of ['synthetic-password', 'operator@example.invalid', 'Example Street']) {
       assert(!diagnosticText.includes(forbidden), `diagnostics exposed sensitive fixture value ${forbidden}`);
     }
 
     phase('assertions complete');
-    process.stdout.write('Step 3 visible mock verification and dry-run hard stop passed without review or submission.\n');
+    process.stdout.write('Step 3 visible mock verification and synthetic live submission passed.\n');
   } catch (error) {
     error.step3Phase = currentPhase;
     throw error;

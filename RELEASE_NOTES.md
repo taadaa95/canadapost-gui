@@ -23,6 +23,14 @@ Entries below preserve earlier development checkpoints. They are not current ope
 - Search/status filters, manual shipment entry, the classification viewer, the dedicated Reconciliation Queue, and duplicate History browser-session controls were removed. Backup, restore, stored-data management, and support bundles now live only under **Settings → Advanced**.
 - Database schema 8, historical records, immutable classifications/evidence, attempts, audit data, duplicate tombstones, and reconciliation state remain intact.
 
+## Dev 11 KISS workflow simplification — 2026-08-12
+
+- Renames Step 1 to **Import Shipment History** and gives its native date fields compact, theme-aware controls.
+- Reuses only authoritative, evidence-complete ON_TIME deliveries from SQLite so confirmed results skip later Tracking API requests without duplicating immutable history.
+- Removes Step 3 queue filters, browser/session inspection, browser-mode and dry/live choices, extra submission confirmations, and first-candidate limiting.
+- **Submit selected candidates** now runs silent authoritative preflight and immediately starts the full selected queue in the isolated built-in browser.
+- Retains promoted Step 2 validation, immutable snapshots, evidence-hash checks, duplicate/terminal/unresolved blocking, CAPTCHA pauses, navigation restrictions, and uncertain-final-action protection.
+
 # Canada Post Claim Runner 0.4.0-dev.10
 
 ## Step 3 executable queue and idle-browser correction — 2026-07-31
@@ -56,7 +64,7 @@ This is `0.4.0-dev.10`, an unsigned development build. It is not a public releas
 
 - Removes deprecated Developer Program credentials from normal Settings; Step 2 remains OAuth/JSON-only with no Basic/XML fallback.
 - Replaces the permanent Step 2 diagnostic-row panel with a compact, localized one-shipment dialog opened only by the diagnostic actions.
-- Removes Step 3 readiness, manual-review, on-time and canary panels. Mandatory preflight now runs automatically, and the live confirmation contains a default-on first-candidate option.
+- Removes obsolete Step 3 readiness, manual-review and on-time panels. Mandatory preflight runs automatically.
 - Keeps Step 3 selection, SQLite queue authority, transactional snapshots, evidence hashes, duplicate protection and reconciliation safeguards unchanged.
 - Removes Financial recovery from the visible renderer and preload mutation surface while retaining historical schema-8 records for compatibility.
 - Moves localized privacy preview/deletion controls into a closed-by-default modal opened from one Advanced Settings button.
@@ -215,20 +223,19 @@ Rebuilt unsigned Linux beta AppImage: `dist/packages/Canada Post Claim Runner-0.
 - Adds scrypt/AES-256-GCM backups with authenticated metadata and malicious-archive limits, a first-run readiness wizard, richer queue deadlines, Canadian French resources and accessibility checks.
 - Adds append-only integer-cent recovery reporting, local-only redacted crash reports, signed update metadata/channel/downgrade verification and commercial-readiness documentation.
 
-This remains an unsigned development build and is a public-beta candidate only. No real Canada Post login, claim, canary, customer pilot or physical clean-install test was performed. See `MANUAL_RELEASE_GATES.md`.
+This remains an unsigned development build and is a public-beta candidate only. No real Canada Post login, claim, customer pilot or physical clean-install test was performed. See `MANUAL_RELEASE_GATES.md`.
 
 ## Operator-control foundation
 
 - Adds a Step 3 readiness preflight.
 - Adds a reviewable claim queue with per-claim inclusion controls.
 - Snapshots the exact selected queue into a private run-specific CSV before starting the browser worker.
-- Requires explicit acknowledgement before a live submission run.
-- Adds canary mode to process only the first selected claim.
+- Runs silent authoritative preflight before a selected submission queue.
 - Makes the built-in Electron browser mandatory for Step 3.
 - Adds shared renderer-to-main input validation and strict bounds for run options.
-- Adds regression tests for queue selection, preflight, confirmation, and browser-mode enforcement.
+- Adds regression tests for queue selection, preflight and built-in-browser enforcement.
 
-This is a development build and should not be tagged as stable until supervised dry-run and live-canary validation are complete.
+This is a development build and should not be tagged as stable until supervised submission validation is complete.
 
 # Canada Post Claim Runner 0.3.6
 

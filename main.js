@@ -35,7 +35,6 @@ const { createFocusedRegistrar } = require('./main/ipc');
 const { validateWorkerEvent } = require('./lib/ipc-contracts');
 const supportBundle = require('./lib/support-bundle');
 const { resolveOwnedRegularFile } = require('./lib/path-confinement');
-const { requestNativeAuthorization } = require('./lib/live-submission-authorization');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
 
 const { ROOT, DATA_DIR, LOG_DIR, USER_DATA_ROOT } = storage;
@@ -1475,7 +1474,7 @@ function runPreflight(rawOptions = {}) {
     webPasswordAvailable: Boolean(submitted.webPassword || storage.passwordStored()),
     claimAddressAvailable: Boolean(String(submitted.claimStreetNumber || config.claimStreetNumber || '').trim() && String(submitted.claimStreetName || config.claimStreetName || '').trim()),
     claimCount: Number(preview.executableCount ?? preview.count ?? 0),
-    builtinBrowserRequired: true,
+    builtinBrowserAvailable: typeof WebContentsView === 'function' && workerReady('submitClaims'),
     reconciliationCount
   });
   return { ok: true, report, claimPreview: preview };
@@ -1617,13 +1616,6 @@ registerIpcHandler('browser:hideBuiltin', () => {
 
 registerIpcHandler('browser:focusBuiltin', () => {
   return { ok: focusBuiltinBrowser() };
-});
-
-registerIpcHandler('browser:sessionStatus', async () => {
-  if (USER_DATA_PROFILE.active) return { ok: true, exists: false, cookieCount: 0, disabled: true };
-  const browserSession = session.fromPartition('persist:canadapost-claims-builtin');
-  const cookies = await browserSession.cookies.get({}).catch(() => []);
-  return { ok: true, exists: cookies.length > 0, cookieCount: cookies.length };
 });
 
 registerIpcHandler('browser:clearSession', async (_event, payload = {}) => {
@@ -2232,224 +2224,6 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
   return { ok: true, logPath };
 });
 
-registerIpcHandler('run:start', async (_event, options = {}) => {
-  ensureDirs();
-
-  if (!options.dryRun) {
-    return { ok: false, error: 'Combined live runs are disabled. Complete Steps 1 and 2, review the promoted queue, then use the separately acknowledged Step 3 live action.', code: 'LIVE_REVIEW_REQUIRED' };
-  }
-
-  if (activeChild) {
-    return { ok: false, error: 'A run is already active.' };
-  }
-  const requiredWorkers = options.importHistory ? ['shippingHistory', 'tracking'] : ['tracking'];
-  const workerResolutions = {};
-  for (const workerName of requiredWorkers) {
-    const preflight = preflightWorkerLaunch(workerName);
-    if (!preflight.ok) return preflight;
-    workerResolutions[workerName] = preflight.resolution;
-  }
-
-  fs.rmSync(STOP_FILE, { force: true });
-
-  const config = readConfig();
-  const credentials = resolveWebCredentials(options, config);
-  const webUsername = credentials.username;
-  const webPassword = credentials.password;
-
-  if (!webUsername || !webPassword) {
-    return { ok: false, error: 'Missing Canada Post web login username/password.' };
-  }
-
-  const claimSettingsEnv = buildClaimSettingsEnv(options, config);
-  const claimSettingsValid = validateClaimSettings(claimSettingsEnv);
-  if (!claimSettingsValid.ok) return claimSettingsValid;
-
-  const trackingApiEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
-  const trackingApiFiles = ensureTrackingApiCredentials(trackingApiEnvironment);
-  if (!trackingApiFiles.ok) return trackingApiFiles;
-  if (!trackingDiagnosticGateSatisfied(config, trackingApiEnvironment)) {
-    return { ok: false, error: `Step 2 is blocked until “Test API connection with one shipment” succeeds for credential revision, ${trackingApiEnvironment}, and Tracking API ${TRACKING_API_VERSION}.` };
-  }
-  const legacyApiFiles = options.importHistory
-    ? ensureApiCredentialFiles(normalizeLegacyEnvironment(config.apiEnvironment || 'production'))
-    : null;
-  if (legacyApiFiles && !legacyApiFiles.ok) return legacyApiFiles;
-
-  const trackingCsv = path.join(DATA_DIR, 'tracking.csv');
-  if (!options.importHistory && !fs.existsSync(trackingCsv)) {
-    return { ok: false, error: `Missing ${trackingCsv}. Select, copy, or import tracking.csv first.` };
-  }
-
-  const historyEnv = buildHistoryEnv(options, config);
-  if (options.importHistory) {
-    if (!historyEnv.HISTORY_FROM || !historyEnv.HISTORY_TO) {
-      return { ok: false, error: 'Missing shipping history date range.' };
-    }
-    if (!historyEnv.HISTORY_CUSTOMER_NUMBER) {
-      return { ok: false, error: 'Missing Canada Post customer number. Enter it in User Settings.' };
-    }
-  }
-
-  const logPath = path.join(LOG_DIR, `run-${timestamp()}.log`);
-  emit('run', { status: 'started', logPath });
-  appendLog(logPath, `Canada Post GUI run started ${new Date().toISOString()}\nDuplicate-claim detector active: ${DUPLICATE_CLAIM_FIX_VERSION}\nHistory import version: ${HISTORY_IMPORT_VERSION}\n`);
-
-  const nextConfig = saveRememberedUserSettings({ ...config }, options, claimSettingsEnv);
-  if (options.importHistory) {
-    nextConfig.historyFrom = historyEnv.HISTORY_FROM;
-    nextConfig.historyTo = historyEnv.HISTORY_TO;
-    nextConfig.historyCustomerNumber = historyEnv.HISTORY_CUSTOMER_NUMBER;
-    nextConfig.historyAutoMobo = boolFromOption(historyEnv.HISTORY_AUTO_MOBO);
-    nextConfig.historyMobo = historyEnv.HISTORY_MOBO;
-    nextConfig.historyIncludeNoManifest = options.historyIncludeNoManifest ? true : false;
-  }
-  nextConfig.developerMode = boolFromOption(historyEnv.DEVELOPER_MODE);
-  nextConfig.dryRunDefault = Boolean(options.dryRun);
-  writeConfig(nextConfig);
-  persistPasswordFromOptions(options, nextConfig);
-
-  const fullRunId = claimDb.startRun(DB_PATH, 'full', { importHistory: Boolean(options.importHistory), dryRun: Boolean(options.dryRun) });
-  const envBase = {
-    DATA_DIR,
-    STOP_FILE,
-    CLAIMS_CSV: path.join(DATA_DIR, 'claims.csv'),
-    TRACKING_CSV: trackingCsv,
-    TRACKING_REQUEST_INTERVAL_MS: String(normalizeDelayMs(Number(config.trackingRequestDelayMs) >= DEFAULT_TRACKING_REQUEST_INTERVAL_MS ? config.trackingRequestDelayMs : DEFAULT_TRACKING_REQUEST_INTERVAL_MS)),
-    TRACKING_RESOURCE_TIMEOUT_MS: String(normalizeResourceTimeoutMs(config.trackingResourceTimeoutMs, DEFAULT_RESOURCE_TIMEOUT_MS)),
-    CANADAPOST_SECRETS_STDIN: '1',
-    CANADAPOST_API_ENVIRONMENT: trackingApiEnvironment,
-    AFTER_SUBMIT_MS: String(options.afterSubmitMs || 20000),
-    BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 750),
-    MAX_CLAIMS: options.canaryMode ? '1' : (options.maxClaims ? String(options.maxClaims) : ''),
-    BROWSER_MODE: 'builtin',
-    CANARY_MODE: options.canaryMode ? 'true' : 'false',
-    DATABASE_PATH: DB_PATH,
-    RUN_ID: String(fullRunId),
-    DRY_RUN: options.dryRun ? 'true' : 'false',
-    ...claimSettingsEnv,
-    ...historyEnv
-  };
-
-  (async () => {
-    try {
-      if (options.importHistory) {
-        const importResult = await spawnJsonProcess('shippingHistory', {
-          resolution: workerResolutions.shippingHistory,
-          env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' }, stdinJson: { username: legacyApiFiles.username, password: legacyApiFiles.password, environment: legacyApiFiles.environment, usernameSource: legacyApiFiles.usernameSource, passwordSource: legacyApiFiles.passwordSource }
-        }, 'history', logPath);
-        if (!importResult.ok) {
-          const message = importResult.code === 2
-            ? 'Shipping history import found no shipments. Full run stopped so old tracking.csv is not reused.'
-            : `Shipping history import failed with code ${importResult.code}.`;
-          claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'history', code: importResult.code });
-          emit('run', { status: 'failed', message, logPath });
-          return;
-        }
-      }
-
-      if (!fs.existsSync(trackingCsv)) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { stage: 'tracking', error: 'tracking.csv missing' });
-        emit('run', { status: 'failed', messageKey: 'event.workflow.trackingCsvMissing', messageValues: { path: trackingCsv }, message: `Missing ${trackingCsv} after history import.`, logPath });
-        return;
-      }
-
-      const trackingResult = await spawnJsonProcess(
-        'tracking',
-        { resolution: workerResolutions.tracking, env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' }, stdinJson: { clientId: trackingApiFiles.clientId, clientSecret: trackingApiFiles.clientSecret, environment: trackingApiFiles.environment } },
-        'tracking',
-        logPath
-      );
-      if (!trackingResult.ok) {
-        const circuit = trackingResult.lastEventsByType?.tracking_circuit_open;
-        const semantic = trackingResult.lastEventsByType?.tracking_semantic_circuit_open;
-        const aborted = trackingResult.lastEventsByType?.tracking_aborted;
-        const blocked = Boolean(circuit || semantic || aborted?.queuePreserved);
-        const message = aborted?.message || circuit?.message || semantic?.message || `Tracking stage failed with code ${trackingResult.code}.`;
-        claimDb.finishRun(DB_PATH, fullRunId, blocked ? 'blocked' : 'failed', { failure: Number(aborted?.errorCount || circuit?.errors || 1) }, { stage: 'tracking', code: trackingResult.code, circuit, semantic, aborted });
-        emit('run', { status: blocked ? 'blocked' : 'failed', message, logPath });
-        return;
-      }
-      const trackingSummary = trackingResult.lastEventsByType?.tracking_complete || {};
-      const promotionProof = validatePromotedTrackingSummary(trackingSummary);
-      if (!promotionProof.ok) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'blocked', { failure: 1 }, { stage: 'tracking', reason: promotionProof.reason });
-        emit('run', { status: 'blocked', message: `${promotionProof.reason} Step 3 remains blocked until Step 2 is recomputed from the beginning.`, logPath });
-        return;
-      }
-      if (Number(trackingSummary.errorCount || 0) > 0) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'complete_with_warnings', trackingRunCounts(trackingSummary), trackingSummary);
-        emit('run', {
-          status: 'failed',
-          messageKey: 'event.workflow.trackingErrors',
-          messageValues: { count: trackingSummary.errorCount },
-          message: `Tracking completed with ${trackingSummary.errorCount} lookup error(s). Claim submission was blocked until tracking is rerun successfully.`,
-          logPath
-        });
-        return;
-      }
-      if (options.fresh) {
-        for (const name of ['processed_pins.txt', 'claim-run-summary.json', 'stop-requested.txt']) fs.rmSync(path.join(DATA_DIR, name), { force: true });
-      }
-      claimDb.finishRun(DB_PATH, fullRunId, 'complete', trackingRunCounts(trackingSummary), { tracking: trackingSummary, submissionDeferredForReview: true });
-      emit('run', {
-        status: 'complete',
-        messageKey: 'event.workflow.reviewQueue',
-        message: 'Import and tracking complete. Review the newly classified queue and create a fresh queue snapshot before starting Step 3.',
-        logPath
-      });
-      return;
-
-      if (fs.existsSync(STOP_FILE)) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'stopped', trackingRunCounts(trackingSummary), trackingSummary);
-        emit('run', { status: 'stopped', messageKey: 'event.workflow.stoppedAfterTracking', message: 'Stopped after tracking stage.', logPath });
-        return;
-      }
-
-      const claimsPath = path.join(DATA_DIR, 'claims.csv');
-      if (!fs.existsSync(claimsPath) || fs.readFileSync(claimsPath, 'utf8').trim().split(/\r?\n/).length < 2) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'complete', trackingRunCounts(trackingSummary), trackingSummary);
-        emit('run', { status: 'complete', messageKey: 'event.tracking.noLate', message: 'Tracking complete. No late claims found.', logPath });
-        return;
-      }
-
-      const submitResult = await spawnJsonProcess(
-        'submitClaims',
-        {
-          env: { ...envBase, ELECTRON_RUN_AS_NODE: '1' },
-          stdinJson: { username: webUsername, password: webPassword }
-        },
-        'submit',
-        logPath,
-        { onClose: () => claimDb.markInterruptedAttempts(DB_PATH) }
-      );
-      const submitSummary = submitResult.lastEventsByType?.submit_complete || {};
-      if (!submitResult.ok) {
-        claimDb.finishRun(DB_PATH, fullRunId, 'failed', {
-          total: Number(submitSummary.total || 0),
-          success: Number(submitSummary.succeeded || 0),
-          warning: Number(submitSummary.alreadySubmitted || 0) + Number(submitSummary.rejected || 0),
-          failure: Number(submitSummary.failed || 1)
-        }, submitSummary);
-        emit('run', { status: 'failed', messageKey: 'event.submit.stageFailed', messageValues: { code: submitResult.code }, message: `Submit stage failed with code ${submitResult.code}.`, logPath });
-        return;
-      }
-
-      claimDb.finishRun(DB_PATH, fullRunId, 'complete', {
-        total: Number(submitSummary.total || trackingSummary.total || 0),
-        success: Number(submitSummary.succeeded || 0),
-        warning: Number(submitSummary.alreadySubmitted || 0) + Number(submitSummary.rejected || 0),
-        failure: Number(submitSummary.failed || 0)
-      }, { tracking: trackingSummary, submission: submitSummary, dryRun: Boolean(options.dryRun) });
-      emit('run', { status: 'complete', messageKey: options.dryRun ? 'event.workflow.fullDryComplete' : 'event.workflow.fullComplete', message: options.dryRun ? 'Full dry run complete. No claims were submitted.' : 'Full run complete.', logPath });
-    } catch (error) {
-      try { claimDb.finishRun(DB_PATH, fullRunId, 'failed', { failure: 1 }, { error: error.message }); } catch (_) {}
-      emit('run', { status: 'failed', message: error.message, logPath });
-    }
-  })();
-
-  return { ok: true, logPath };
-});
 
 
 registerIpcHandler('tracking:run', async (_event, options = {}) => {
@@ -2583,6 +2357,9 @@ registerIpcHandler('tracking:run', async (_event, options = {}) => {
         for (const name of ['processed_pins.txt', 'claim-run-summary.json', 'stop-requested.txt']) fs.rmSync(path.join(DATA_DIR, name), { force: true });
       }
       const counts = [
+        `${Number(summary.checked || 0)} shipments`,
+        `${Number(summary.cachedOnTimeCount || 0)} cached on-time`,
+        `${Number(summary.trackingApiRequestCount || 0)} Tracking API requests`,
         `${Number(summary.eligibleLateCount || 0)} late candidates`,
         `${Number(summary.overdueInTransitCount || 0)} overdue/in transit`,
         `${Number(summary.reviewRequiredCount || 0)} review required`,
@@ -2654,32 +2431,12 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   if (options.expectedClaimCount !== requestedClassificationRecords.length) {
     return { ok: false, error: 'The Step 3 candidate selection changed before the run started. Refresh the candidate queue and confirm the selection again.', code: 'STEP3_SELECTION_COUNT_CHANGED' };
   }
-  if (!options.dryRun && !options.liveSubmissionConfirmed) {
-    return { ok: false, error: 'Live submission was not explicitly confirmed. Review the selected claims and confirm the live run.' };
-  }
-  const effectiveCanaryMode = !options.dryRun && options.canaryMode;
   let selectedClassificationRecords;
-  try { selectedClassificationRecords = step3QueueService.selectionForRun(requestedClassificationRecords, { ...options, canaryMode: effectiveCanaryMode }); }
+  try { selectedClassificationRecords = step3QueueService.selectionForRun(requestedClassificationRecords); }
   catch (error) { return { ok: false, error: localizedStep3Error(error), code: error.code || 'STEP3_SELECTION_INVALID' }; }
-  if (!options.dryRun) {
-    let authorized = false;
-    try {
-      authorized = await requestNativeAuthorization({
-        dialog,
-        parent: win,
-        selectedCount: selectedClassificationRecords.length,
-        requestedCount: requestedClassificationRecords.length,
-        canaryMode: effectiveCanaryMode,
-        localize: localizedText
-      });
-    } catch (error) {
-      return { ok: false, error: error.message, code: 'LIVE_SUBMISSION_AUTHORIZATION_FAILED' };
-    }
-    if (!authorized) return { ok: false, error: 'Live submission was cancelled in the native confirmation dialog.', code: 'LIVE_SUBMISSION_CANCELLED' };
-  }
 
   const nextConfig = saveRememberedUserSettings({ ...config, developerMode: false }, options, claimSettingsEnv);
-  nextConfig.dryRunDefault = Boolean(options.dryRun);
+  delete nextConfig.dryRunDefault;
   writeConfig(nextConfig);
   persistPasswordFromOptions(options, nextConfig);
 
@@ -2687,15 +2444,14 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
 
   let submissionOperationToken;
   try {
-    submissionOperationToken = operationCoordinator.begin(options.dryRun ? 'step3_dry_run' : 'step3_live_run');
+    submissionOperationToken = operationCoordinator.begin('step3_live_run');
   } catch (error) {
     return { ok: false, error: error.message, code: error.code || 'PROTECTED_OPERATION_BLOCKED' };
   }
   const submitRunId = claimDb.startRun(DB_PATH, 'submission', {
-    dryRun: Boolean(options.dryRun),
+    dryRun: false,
     selectedClaimCount: selectedClassificationRecords.length,
-    requestedSelectedClaimCount: requestedClassificationRecords.length,
-    canaryMode: Boolean(effectiveCanaryMode),
+    requestedSelectedClaimCount: requestedClassificationRecords.length
   });
   const privateSnapshotDirectory = path.join(DATA_DIR, 'private-step3-snapshots', `run-${submitRunId}`);
   fs.mkdirSync(privateSnapshotDirectory, { recursive: true, mode: 0o700 });
@@ -2784,16 +2540,15 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
     CANADAPOST_SECRETS_STDIN: '1',
     AFTER_SUBMIT_MS: String(options.afterSubmitMs || 20000),
     BETWEEN_CLAIMS_MS: String(options.betweenClaimsMs || 750),
-    MAX_CLAIMS: effectiveCanaryMode ? '1' : '',
+    MAX_CLAIMS: '',
     BROWSER_MODE: 'builtin',
-    CANARY_MODE: effectiveCanaryMode ? 'true' : 'false',
     ELECTRON_CDP_URL: browserHandshake.endpoint,
     ELECTRON_TARGET_ID: browserHandshake.targetId,
     ELECTRON_TARGET_NONCE: browserHandshake.targetNonce,
     ELECTRON_TARGET_WEB_CONTENTS_HASH: browserHandshake.webContentsIdentityHash,
     DATABASE_PATH: DB_PATH,
     RUN_ID: String(submitRunId),
-    DRY_RUN: options.dryRun ? 'true' : 'false',
+    DRY_RUN: 'false',
     APP_VERSION,
     LOG_DIR,
     STEP3_DIAGNOSTICS_ENABLED: 'true',
@@ -2810,13 +2565,12 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   }, 'submit', logPath, {
     onSpawn: () => {
       emit('run', { status: 'started', logPath });
-      appendLog(logPath, `Canada Post claim submission started ${new Date().toISOString()}\nStep tabs version: ${STEP_TABS_VERSION}\nSelected claims: ${selectedClaims.count}\nCanary mode: ${effectiveCanaryMode ? 'yes' : 'no'}\nDry run: ${options.dryRun ? 'yes' : 'no'}\n`);
+      appendLog(logPath, `Canada Post claim submission started ${new Date().toISOString()}\nStep tabs version: ${STEP_TABS_VERSION}\nSelected claims: ${selectedClaims.count}\n`);
       appendStep3ElectronDiagnostic('submission-run-started', {
         runId: submitRunId,
-        dryRun: Boolean(options.dryRun),
+        dryRun: false,
         browserMode: 'builtin',
         selectedClaimCount: selectedClaims.count,
-        canaryMode: Boolean(effectiveCanaryMode),
         logPath
       });
     },
@@ -2869,7 +2623,7 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
         return;
       }
 
-      emit('run', { status: 'complete', messageKey: options.dryRun ? 'event.submit.dryRunComplete' : 'event.submit.claimComplete', message: options.dryRun ? 'Dry run complete. No claims were submitted.' : 'Claim submission complete.', logPath });
+      emit('run', { status: 'complete', messageKey: 'event.submit.claimComplete', message: 'Claim submission complete.', logPath });
     } catch (error) {
       appendStep3ElectronDiagnostic('submission-run-error', { message: error.message, stack: error.stack });
       activeStep3DiagnosticsDir = '';
@@ -2883,7 +2637,7 @@ registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
     }
   })();
 
-  return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir, selectedClaimCount: selectedClaims.count, canaryMode: Boolean(effectiveCanaryMode) };
+  return { ok: true, logPath, diagnosticsDir: step3DiagnosticsRunDir, selectedClaimCount: selectedClaims.count };
 });
 
 registerIpcHandler('run:requestStop', () => {

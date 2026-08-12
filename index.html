@@ -295,19 +295,9 @@
             <h2 data-i18n="step3.title"></h2>
             <span class="pill" data-i18n="step3.readsCandidates"></span>
           </div>
-          <div class="step-fields step3-fields compact-step3-fields">
-            <div class="field checkbox-field builtin-browser-field">
-              <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked disabled /> <span data-i18n="step3.useBuiltinBrowser"></span> <span class="muted-inline" data-i18n="step3.browserLayout"></span></label>
-            </div>
-            <div class="field checkbox-field">
-              <label class="checkbox-label"><input id="dryRun" type="checkbox" checked /> <span data-i18n="step3.dryRun"></span></label>
-            </div>
-          </div>
           <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
           <div class="step3-browser-session-row">
-            <button id="checkStep3BrowserSession" class="secondary compact-button" type="button" data-i18n="browserSession.check"></button>
             <button id="clearStep3BrowserSession" class="warning compact-button" type="button" data-i18n="action.clearSession"></button>
-            <p id="step3BrowserSessionStatus" class="browser-session-status" role="status" aria-live="polite" data-i18n="browserSession.notChecked"></p>
           </div>
           <section id="step3ActionAdvisory" class="step3-action-advisory hidden" aria-labelledby="step3ActionAdvisoryTitle" aria-live="assertive">
             <h3 id="step3ActionAdvisoryTitle" data-i18n="step3.actionIssues.title"></h3>
@@ -336,13 +326,6 @@
                 <button id="clearClaimSelection" class="secondary" type="button" data-i18n="step3.clearSelection"></button>
               </div>
             </div>
-            <div class="history-toolbar queue-toolbar" data-i18n-aria-label="step3.queue.filtersAria">
-              <div class="field"><label for="claimQueueSearch" data-i18n="step3.queue.search"></label><input id="claimQueueSearch" type="search" data-i18n-placeholder="step3.queue.searchPlaceholder" /></div>
-              <div class="field"><label for="claimQueueServiceFilter" data-i18n="step3.queue.service"></label><select id="claimQueueServiceFilter"><option value="all" data-i18n="step3.queue.allServices"></option></select></div>
-              <div class="field"><label for="claimQueueUrgencyFilter" data-i18n="step3.queue.deadlineGuidance"></label><select id="claimQueueUrgencyFilter"><option value="all" data-i18n="step3.queue.allGuidance"></option><option value="advisory" data-i18n="step3.queue.advisory"></option><option value="unavailable" data-i18n="step3.queue.unavailable"></option></select></div>
-              <div class="field"><label for="claimQueueDateFrom" data-i18n="step3.queue.deadlineFrom"></label><input id="claimQueueDateFrom" type="date" /></div>
-              <div class="field"><label for="claimQueueDateTo" data-i18n="step3.queue.deadlineTo"></label><input id="claimQueueDateTo" type="date" /></div>
-            </div>
             <div id="claimQueueList" class="claim-queue-list" aria-live="polite">
               <div class="history-empty" data-i18n="step3.queue.refreshEmpty"></div>
             </div>
@@ -355,7 +338,7 @@
             </div>
           </div>
         </div>
-        <div class="step-workspace step3-workspace builtin-browser-enabled">
+        <div class="step-workspace step3-workspace">
           <div class="card step-browser-card">
             <div class="row step-browser-header" style="justify-content: space-between;">
               <h2 style="margin:0;" data-i18n="step3.browserTitle"></h2>
@@ -460,30 +443,13 @@
     </section>
   </main>
 
-
-  <div id="liveSubmitModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="liveSubmitModalTitle">
-      <div class="modal-head">
-        <h2 id="liveSubmitModalTitle" data-i18n="step3.confirm.title"></h2>
-      </div>
-      <div id="liveSubmitSummary" class="live-submit-summary"></div>
-      <div class="live-submit-warning" data-i18n="step3.confirm.warning"></div>
-      <label class="live-submit-ack"><input id="liveSubmitCanary" type="checkbox" checked /> <span id="liveSubmitCanaryLabel" data-i18n="step3.confirm.canaryOption"></span></label>
-      <label class="live-submit-ack"><input id="liveSubmitAcknowledge" type="checkbox" /> <span data-i18n="step3.confirm.acknowledge"></span></label>
-      <div class="live-submit-modal-actions">
-        <button id="cancelLiveSubmit" class="secondary" type="button" data-i18n="action.cancel"></button>
-        <button id="confirmLiveSubmit" class="success" type="button" disabled data-i18n="step3.confirm.start"></button>
-      </div>
-    </div>
-  </div>
-
   <div id="trackingDiagnosticModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="trackingDiagnosticTitle">
       <div class="modal-head"><h2 id="trackingDiagnosticTitle" data-i18n="step2.diagnostic.title"></h2></div>
       <p id="trackingDiagnosticMessage" data-i18n="step2.diagnostic.message"></p>
       <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow" data-i18n="step2.diagnostic.rowLabel"></label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
-      <div id="trackingDiagnosticError" class="live-submit-warning hidden" role="alert"></div>
-      <div class="live-submit-modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmTrackingDiagnostic" class="success" type="button" data-i18n="action.continue"></button></div>
+      <div id="trackingDiagnosticError" class="modal-warning hidden" role="alert"></div>
+      <div class="modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmTrackingDiagnostic" class="success" type="button" data-i18n="action.continue"></button></div>
     </div>
   </div>
 
@@ -502,7 +468,7 @@
       <div id="privacyDeletionControls" class="privacy-management-grid hidden">
         <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel" data-i18n="privacy.destructiveConfirm"></span></label>
         <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase" data-i18n="privacy.typedPhraseLabel"></label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
-        <div id="privacyExpectedPhrase" class="live-submit-warning wide"></div>
+        <div id="privacyExpectedPhrase" class="modal-warning wide"></div>
         <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel" data-i18n="privacy.secondConfirm"></span></label>
         <button id="deletePrivacyData" class="danger wide" type="button" data-i18n="privacy.delete"></button>
       </div>
@@ -527,8 +493,8 @@
       <p id="backupPasswordMessage" data-i18n="backup.passwordMessage"></p>
       <div class="field"><label for="backupPassword" data-i18n="backup.password"></label><input id="backupPassword" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
       <div class="field" id="backupPasswordConfirmField"><label for="backupPasswordConfirm" data-i18n="backup.confirmPassword"></label><input id="backupPasswordConfirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
-      <div id="backupPasswordError" class="live-submit-warning hidden" role="alert"></div>
-      <div class="live-submit-modal-actions"><button id="cancelBackupPassword" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmBackupPassword" class="success" type="button" data-i18n="action.continue"></button></div>
+      <div id="backupPasswordError" class="modal-warning hidden" role="alert"></div>
+      <div class="modal-actions"><button id="cancelBackupPassword" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmBackupPassword" class="success" type="button" data-i18n="action.continue"></button></div>
     </div>
   </div>
 
@@ -537,9 +503,9 @@
       <div class="modal-head"><h2 id="setupWizardTitle" data-i18n="setup.title"></h2></div>
       <p id="setupIntro" data-i18n="setup.intro"></p>
       <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
-      <div id="setupSafetyNotice" class="live-submit-warning" data-i18n="setup.safety"></div>
+      <div id="setupSafetyNotice" class="modal-warning" data-i18n="setup.safety"></div>
       <label class="checkbox-row"><input id="setupSafetyAcknowledge" type="checkbox" /> <span id="setupSafetyAcknowledgeLabel" data-i18n="setup.safetyAcknowledge"></span></label>
-      <div class="live-submit-modal-actions"><button id="setupLater" class="secondary" type="button" data-i18n="action.continueLater"></button><button id="setupOpenSettings" class="secondary" type="button" data-i18n="action.settings"></button><button id="setupFinish" class="success" type="button" data-i18n="action.finishSetup"></button></div>
+      <div class="modal-actions"><button id="setupLater" class="secondary" type="button" data-i18n="action.continueLater"></button><button id="setupOpenSettings" class="secondary" type="button" data-i18n="action.settings"></button><button id="setupFinish" class="success" type="button" data-i18n="action.finishSetup"></button></div>
     </div>
   </div>
 
@@ -555,9 +521,9 @@
         <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel" data-i18n="support.component.logs"></span></label>
         <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label" data-i18n="support.component.step3"></span></label>
       </div>
-      <div id="supportBundleExclusions" class="live-submit-warning"></div>
+      <div id="supportBundleExclusions" class="modal-warning"></div>
       <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel" data-i18n="support.acknowledge"></span></label>
-      <div class="live-submit-modal-actions"><button id="cancelSupportBundle" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmSupportBundle" class="success" type="button" disabled data-i18n="support.create"></button></div>
+      <div class="modal-actions"><button id="cancelSupportBundle" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmSupportBundle" class="success" type="button" disabled data-i18n="support.create"></button></div>
     </div>
   </div>
 

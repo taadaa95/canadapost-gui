@@ -6,7 +6,7 @@ This is the operator guide for application version **0.4.1** on branch `feature/
 
 Only a completed and promoted Step 2 run can supply Step 3. A `LATE_CANDIDATE` requires an authoritative successful-delivery date after the selected original Delivery Standard date. Revised estimates do not replace the original standard, and Canada Post makes the final eligibility decision.
 
-Step 3 uses only Electron's built-in browser. Its queue contains only actionable `LATE_CANDIDATE` records; previously submitted, duplicate, terminal, unresolved, reconciliation-required, and otherwise unsafe records are excluded automatically. The same state is revalidated at selection, snapshot creation, immediate pre-submission, and the worker boundary. Dry run remains the default, live submission requires explicit confirmation, and an uncertain final action is never retried automatically.
+Step 3 uses only Electron's built-in browser. Its queue contains only actionable `LATE_CANDIDATE` records; previously submitted, duplicate, terminal, unresolved, reconciliation-required, and otherwise unsafe records are excluded automatically. The same state is revalidated at selection, snapshot creation, immediate pre-submission, and the worker boundary. Selecting candidates and pressing **Submit selected candidates** begins live sequential processing; an uncertain final action is never retried automatically.
 
 ## Current technical contract
 
@@ -32,7 +32,7 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 4. Run the one-shipment diagnostic, then run Steps 1 and 2.
 5. Review and select the actionable Step 3 queue.
 6. Resolve any **Needs attention** record directly in Claim History before retrying it.
-7. Start in dry-run mode. Supervise live processing, canary verification, CAPTCHA, and manual verification.
+7. Select the intended candidates, submit them, and supervise CAPTCHA or manual verification in the built-in browser.
 
 Never use a production account during automated testing. Automated browser suites use only the synthetic loopback mock portal.
 

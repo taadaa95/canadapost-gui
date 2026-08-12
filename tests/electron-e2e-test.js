@@ -102,7 +102,7 @@ const { loadLocale } = require('../lib/i18n');
       'status.waiting', 'step2.liveLog', 'step2.diagnostic.title', 'step2.diagnostic.message',
       'step2.diagnostic.rowLabel', 'action.cancel', 'action.continue'
     ]);
-    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique EST');
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique des envois');
     assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Exécuter l’étape 2 — Vérifier le suivi');
     assert.strictEqual(await window.locator('#stop').textContent(), 'Arrêter après l’élément en cours');
     assert.strictEqual(await window.locator('#runSiteHealth').count(), 0, 'manual workflow health-check button must be removed');
@@ -189,7 +189,7 @@ const { loadLocale } = require('../lib/i18n');
     assert.deepStrictEqual(mixedEnglish, [], 'major French workflow surfaces must not retain observed English copy');
     await window.locator('#localeSelect').selectOption('en-CA');
     await window.locator('html[lang="en-CA"]').waitFor();
-    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Run Step 1 — Import EST History');
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Run Step 1 — Import Shipment History');
     assert.strictEqual(await window.locator('#step1CurrentAction').textContent(), 'Exporting EST Desktop history and generating tracking.csv.');
     assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Run Step 2 — Check Tracking');
     assert.match(await window.locator('#step2CurrentAction').textContent(), /systemic integration failure/,
@@ -205,17 +205,7 @@ const { loadLocale } = require('../lib/i18n');
     assert.strictEqual(await window.locator('#portalCompatibilityAdvisory').count(), 0);
     assert.strictEqual(await window.locator('#portalCompatibilityOverrideModal').count(), 0);
     assert.strictEqual(await window.locator('#step3PreflightModal').count(), 0, 'the blocking Step 3 modal must not be rendered');
-    await window.evaluate(() => {
-      window.__liveConfirmationSequence = [];
-      void (async () => {
-        const live = await window.confirmLiveSubmission(1);
-        window.__liveConfirmationSequence.push(`live:${live.confirmed}`);
-      })();
-    });
-    await window.locator('#liveSubmitModal:not(.hidden)').waitFor({ state: 'visible' });
-    await window.locator('#cancelLiveSubmit').click();
-    await window.waitForFunction(() => window.__liveConfirmationSequence.length === 1);
-    assert.deepStrictEqual(await window.evaluate(() => window.__liveConfirmationSequence), ['live:false']);
+    assert.strictEqual(await window.evaluate(() => typeof window.confirmLiveSubmission), 'undefined', 'Step 3 must not expose a second confirmation flow');
     const offscreenBeforePrepare = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(offscreenBeforePrepare.created, false, 'an offscreen browser slot should not be the only creation trigger');
     const preparedTarget = await window.evaluate(() => window.cpApp.prepareBuiltinBrowser());
@@ -374,8 +364,6 @@ const { loadLocale } = require('../lib/i18n');
     const returnedDisplay = await window.evaluate(() => window.synchronizeBuiltinBrowserVisibility({ reason: 'e2e-tab-return', force: true, requireVisible: true }));
     assert.strictEqual(returnedDisplay.visible, true, 'returning to Step 3 must restore native visibility');
 
-    const status = await window.evaluate(() => window.cpApp.browserSessionStatus());
-    assert.strictEqual(status.ok, true);
     const cleared = await window.evaluate(() => window.cpApp.clearBrowserSession({ confirmed: true, resetProfile: true }));
     assert.strictEqual(cleared.ok, true);
     assert.strictEqual(cleared.claimHistoryPreserved, true);

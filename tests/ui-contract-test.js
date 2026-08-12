@@ -17,7 +17,7 @@ const requiredIds = [
   'historySubmitted', 'historyNeedsAttention', 'historyRecordTotal',
   'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
-  'dryRun', 'claimQueueList', 'step3ActionAdvisory', 'liveSubmitModal', 'liveSubmitCanary', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'checkStep3BrowserSession', 'clearStep3BrowserSession', 'step3BrowserSessionStatus', 'setupWizard', 'setupReadinessList', 'setupFinish', 'claimQueueDateFrom', 'claimQueueDateTo',
+  'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'clearStep3BrowserSession', 'setupWizard', 'setupReadinessList', 'setupFinish',
   'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
   'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
   'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
@@ -46,8 +46,9 @@ assert.match(historyTabMarkup, /data-i18n="nav\.history\.title"/);
 assert.match(historyTabMarkup, /data-i18n="nav\.history\.detail"/, 'History tab must contain only its localized normal label');
 assert.ok(/id="tabResults"[^>]*>[\s\S]*?id="notificationsBadge"/.test(html), 'Results notification indicator must remain unchanged');
 assert.ok(/data-tab="historyTab"/.test(html));
-assert.match(html, /data-i18n="step3\.dryRun"/);
-assert.match(englishLocale['step3.dryRun'], /Dry run.+stop before final review or submission/i);
+for (const removed of ['dryRun', 'builtinBrowser', 'liveSubmitModal', 'checkStep3BrowserSession', 'claimQueueSearch', 'claimQueueServiceFilter', 'claimQueueUrgencyFilter', 'claimQueueDateFrom', 'claimQueueDateTo']) {
+  assert.ok(!html.includes(`id="${removed}"`), `Removed Step 3 control #${removed} must stay absent`);
+}
 assert.match(englishLocale['step3.queue.candidateCount'], /\{count\} candidates/);
 assert.doesNotMatch(englishLocale['step3.queue.candidateCount'], /blocked|executable/i,
   'normal queue count must describe only visible actionable candidates');
@@ -115,8 +116,8 @@ assert.ok(!html.includes('id="step3PreflightModal"'), 'The blocking Step 3 prefl
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
 assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
-assert.doesNotMatch(styles, /\.field,\s*\.checkbox-field,/, 'Standard field wrappers must not share the boxed checkbox-panel treatment');
-assert.ok(/\.field:not\(\.checkbox-field\) label\s*\{[^}]*padding:\s*0 2px/s.test(styles), 'Standard field labels must remain plain text above their controls');
+assert.doesNotMatch(styles, /\.checkbox-field/, 'Removed Step 3 checkbox-panel styling must not remain');
+assert.ok(/\.field label\s*\{[^}]*padding:\s*0 2px/s.test(styles), 'Standard field labels must remain plain text above their controls');
 assert.ok(/input, select, textarea\s*\{[^}]*border:\s*1px solid var\(--line\)/s.test(styles), 'Interactive form controls must retain their borders');
 assert.ok(/\.settings-section > button,[\s\S]*?\.settings-footer-actions > button\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*180px;[^}]*justify-self:\s*start/s.test(styles), 'Settings actions must size to their content instead of stretching across their cards');
 const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step2|Step3|History|Results)"[^>]*>([\s\S]*?)<\/button>/g)];
@@ -134,6 +135,6 @@ assert.ok(renderer.includes("$('openStep3Diagnostics')?.addEventListener"), 'Mis
 
 assert.ok(renderer.includes('function refreshClaimQueue'), 'Missing Step 3 claim review queue');
 assert.ok(renderer.includes('function runStep3Preflight'), 'Missing Step 3 preflight');
-assert.ok(renderer.includes('function confirmLiveSubmission'), 'Missing explicit live submission confirmation');
+assert.ok(!renderer.includes('function confirmLiveSubmission'), 'Step 3 must not add a second submission confirmation');
 assert.ok(renderer.includes('selectedClassificationRecords'), 'Step 3 selection must use stable database classification records');
-assert.ok(/id="builtinBrowser"[^>]*checked[^>]*disabled/.test(html), 'Built-in browser must be mandatory for Step 3');
+assert.match(html, /class="step-workspace step3-workspace"/, 'The built-in browser workspace must be present in Step 3');

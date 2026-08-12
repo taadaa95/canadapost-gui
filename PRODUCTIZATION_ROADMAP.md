@@ -4,7 +4,7 @@ Status at 2026-08-01: issue [#4](https://github.com/taadaa95/canadapost-gui/issu
 
 The v0.4.0 work is intentionally split into gated phases so changes to claim safety, runtime dependencies, packaging, and commercial features can be tested independently.
 
-1. **Implemented:** operator control, preflight, reviewed cryptographic queue snapshots, explicit live confirmation, canary mode and conservative reconciliation.
+1. **Implemented:** operator control, silent preflight, reviewed cryptographic queue snapshots and conservative reconciliation.
 2. **Implemented:** local mock portal scenarios, Electron/browser tests, explicit fault points, crash recovery and site-compatibility checks.
 3. **Implemented:** Node Steps 1–2 with hardened XML, SOAP fixtures and compatibility tests; PHP is removed.
 4. **Implemented/signing gated:** Windows NSIS/Linux AppImage configuration, clean staging, checksums, SBOM/licences, package audits, beta/stable metadata verification. Production signing/publishing is external.

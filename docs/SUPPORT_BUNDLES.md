@@ -6,4 +6,4 @@ System integrity and sanitized configuration status are selected by default. Mas
 
 Support bundles are ordinary local exports and are not uploaded by the application. Store and delete them according to the approved privacy and retention process.
 
-The application has no workflow-health or automatic portal-compatibility check. Browser-session inspection and clearing are local controls, separate from Step 3 submission safeguards. Synthetic loopback portal tests validate claim navigation, CAPTCHA/text verification, duplicates, rejection, timeout, uncertain confirmation, delayed confirmation, validation failure, origin violations, and crash/network failures without contacting Canada Post.
+The application has no workflow-health or automatic portal-compatibility check. Step 3 offers one deliberate **Log Out & Clear Browser Data** action; it does not inspect the session automatically. Synthetic loopback portal tests validate claim navigation, CAPTCHA/text verification, duplicates, rejection, timeout, uncertain confirmation, delayed confirmation, validation failure, origin violations, and crash/network failures without contacting Canada Post.

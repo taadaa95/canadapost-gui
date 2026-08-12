@@ -72,13 +72,11 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
       { ...firstPreview.items[0], recordId: 999, trackingNumber: '2222222222222222', serviceCode: 'DOM.EP', deadlineState: 'urgent' }
     ]);
     assert.strictEqual(controller.snapshot().selected, 0, 'initial queue selection must be empty');
-    controller.selectVisible({ service: 'DOM.XP' });
-    assert.deepStrictEqual(controller.snapshot().selectedIds, [firstPreview.items[0].recordId], 'Select all must affect visible rows only');
-    assert.strictEqual(controller.visible({ service: 'DOM.EP' }).length, 1);
-    assert.strictEqual(controller.snapshot().selected, 1, 'filter changes must not select hidden rows');
+    controller.selectAll();
+    assert.strictEqual(controller.snapshot().selected, 2, 'Select all must include every actionable row');
     controller.clear();
     assert.strictEqual(controller.snapshot().selected, 0, 'Clear selection must clear globally');
-    controller.selectVisible({});
+    controller.selectAll();
     assert.strictEqual(controller.snapshot().selected, 2, 'selected count must remain accurate');
     controller.load(firstPreview.items);
     assert.strictEqual(controller.snapshot().selected, 0, 'queue refresh must reset selection');
@@ -172,19 +170,6 @@ function candidate(runId, trackingNumber, expected = '2026-06-01', delivered = '
     assert.strictEqual(service.deadlinePresentation({ deadline: '2026-08-10', destinationProvince: 'ON', policyGuidanceState: 'unverified_advisory' }, { today }).state, 'unverified_advisory');
     assert.strictEqual(service.deadlinePresentation({ deadline: '2027-01-15', destinationProvince: 'ON' }, { today }).state, 'policy_review_required');
     assert.strictEqual(service.deadlinePresentation({ deadline: '2026-08-10', destinationProvince: '' }, { today }).state, 'policy_review_required');
-    const filterController = queueUi.createController();
-    filterController.load([
-      { recordId: 1, evidenceHash: 'a'.repeat(64), deadlineState: 'urgent' },
-      { recordId: 2, evidenceHash: 'b'.repeat(64), deadlineState: 'expired' },
-      { recordId: 3, evidenceHash: 'c'.repeat(64), deadlineState: 'unavailable' },
-      { recordId: 4, evidenceHash: 'd'.repeat(64), deadlineState: 'policy_review_required' }
-      , { recordId: 5, evidenceHash: 'e'.repeat(64), deadlineState: 'unverified_advisory' }
-    ]);
-    assert.deepStrictEqual(filterController.visible({ urgency: 'urgent' }).map(item => item.recordId), [1]);
-    assert.deepStrictEqual(filterController.visible({ urgency: 'expired' }).map(item => item.recordId), [2]);
-    assert.deepStrictEqual(filterController.visible({ urgency: 'unavailable' }).map(item => item.recordId), [3, 4]);
-    assert.deepStrictEqual(filterController.visible({ urgency: 'advisory' }).map(item => item.recordId), [5]);
-
     process.stdout.write('SQLite Step 3 queue, selection, snapshot and deadline tests passed.\n');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

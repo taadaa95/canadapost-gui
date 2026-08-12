@@ -18,6 +18,7 @@ const {
 const { rowsAsObjects, stringifyCsv } = require('../lib/csv');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
 const claimDb = require('../lib/claim-database');
+const { reusableConfirmedOnTime } = require('../lib/on-time-cache');
 const { TrackingClient, SystemicCircuitBreaker, redactedTracking, TRACKING_MODE, TRACKING_API_VERSION, TRACKING_SCOPE, DEFAULT_RESOURCE_TIMEOUT_MS, credentialMetadata, normalizeEnvironment, normalizeResourceTimeoutMs } = require('../lib/tracking-client');
 const { normalizeEstShipmentDate } = require('../lib/est-import-schema');
 
@@ -213,6 +214,8 @@ async function main() {
   let checked = 0;
   let errors = 0;
   let noData = 0;
+  let cachedOnTimeCount = 0;
+  let trackingApiRequestCount = 0;
   let circuitOpen = false;
   let semanticCircuitOpen = false;
   let stopped = false;
@@ -228,7 +231,29 @@ async function main() {
     const pin = normalizeTracking(value(row, ['Tracking PIN', 'Tracking Number', 'PIN', 'Tracking']));
     if (!pin) { emit('pin_skipped', { row: index + 1, message: 'Missing tracking PIN.' }); continue; }
     const safePin = redactedTracking(pin);
+    const cachedOnTime = reusableConfirmedOnTime(process.env.DATABASE_PATH, row, { diagnosticMode, structureExport });
+    if (cachedOnTime) {
+      cachedOnTimeCount += 1;
+      checked += 1;
+      recordTerminal(terminalCounters, PRIMARY_TERMINAL_CATEGORIES.ON_TIME);
+      emit('pin_on_time', {
+        pin: safePin,
+        row: index + 1,
+        terminal: true,
+        primaryCategory: PRIMARY_TERMINAL_CATEGORIES.ON_TIME,
+        classification: 'ON_TIME',
+        cached: true,
+        expectedDate: cachedOnTime.expectedDeliveryDate,
+        originalExpectedDeliveryDate: cachedOnTime.originalExpectedDeliveryDate,
+        deliveryDate: cachedOnTime.actualDeliveryDate,
+        classificationInputHash: cachedOnTime.classificationInputHash,
+        eligibilityReason: 'Previously confirmed delivered within the original Delivery Standard; skipped API check.'
+      });
+      emit('tracking_progress', { current: checked, total: selectedRows.length });
+      continue;
+    }
     try {
+      trackingApiRequestCount += 1;
       const detailResponse = await limiter.run(
         () => trackingClient.getTracking(pin, credentials, { environment: apiEnvironment, includeSanitizedStructure: structureExport, signal: cancellation.signal }),
         { signal: cancellation.signal }
@@ -408,7 +433,7 @@ async function main() {
     });
   }
   const incomplete = !diagnosticMode && !completedAll;
-  const result = { generatedAt: new Date().toISOString(), total: diagnosticMode ? rows.length : selectedRows.length, sourceTotal: rows.length, duplicateRowsSkipped: diagnosticMode ? 0 : deduplicated.duplicateRows, attempted, remaining: Math.max(0, selectedRows.length - attempted), checked, eligibleLateCount: terminalCounters.late, onTimeCount: terminalCounters.onTime, notDeliveredCount: terminalCounters.notDelivered, deliveredReviewCount: terminalCounters.deliveredReview, reviewRequiredCount: reviews.length, overdueInTransitCount: overdue.length, noDataCount: noData, errorCount: terminalCounters.errors, primaryCategoryTotal: terminalCounters.late + terminalCounters.onTime + terminalCounters.notDelivered + terminalCounters.deliveredReview + terminalCounters.errors, countersReconciled: true, deliverySource: `Developer Portal Tracking API ${TRACKING_API_VERSION}`, credentialMode: TRACKING_MODE, apiEnvironment, apiVersion: TRACKING_API_VERSION, parserVersion: TRACKING_PARSER_VERSION, scope: TRACKING_SCOPE, diagnosticMode, structureExport, circuitOpen, semanticCircuitOpen, circuitDiagnostic, queuePreserved: incomplete || diagnosticMode, statePromoted: completedAll, status: circuitOpen ? 'SYSTEMIC_INTEGRATION_FAILURE' : (semanticCircuitOpen ? 'SEMANTIC_NORMALIZATION_FAILURE' : (stopped ? 'STOPPED_INCOMPLETE' : (diagnosticMode ? (errors ? 'DIAGNOSTIC_FAILED' : 'DIAGNOSTIC_COMPLETE') : (completedAll ? 'COMPLETE' : 'INCOMPLETE')))) };
+  const result = { generatedAt: new Date().toISOString(), total: diagnosticMode ? rows.length : selectedRows.length, sourceTotal: rows.length, duplicateRowsSkipped: diagnosticMode ? 0 : deduplicated.duplicateRows, attempted, remaining: Math.max(0, selectedRows.length - attempted), checked, eligibleLateCount: terminalCounters.late, onTimeCount: terminalCounters.onTime, cachedOnTimeCount, trackingApiRequestCount, notDeliveredCount: terminalCounters.notDelivered, deliveredReviewCount: terminalCounters.deliveredReview, reviewRequiredCount: reviews.length, overdueInTransitCount: overdue.length, noDataCount: noData, errorCount: terminalCounters.errors, primaryCategoryTotal: terminalCounters.late + terminalCounters.onTime + terminalCounters.notDelivered + terminalCounters.deliveredReview + terminalCounters.errors, countersReconciled: true, deliverySource: `Developer Portal Tracking API ${TRACKING_API_VERSION}`, credentialMode: TRACKING_MODE, apiEnvironment, apiVersion: TRACKING_API_VERSION, parserVersion: TRACKING_PARSER_VERSION, scope: TRACKING_SCOPE, diagnosticMode, structureExport, circuitOpen, semanticCircuitOpen, circuitDiagnostic, queuePreserved: incomplete || diagnosticMode, statePromoted: completedAll, status: circuitOpen ? 'SYSTEMIC_INTEGRATION_FAILURE' : (semanticCircuitOpen ? 'SEMANTIC_NORMALIZATION_FAILURE' : (stopped ? 'STOPPED_INCOMPLETE' : (diagnosticMode ? (errors ? 'DIAGNOSTIC_FAILED' : 'DIAGNOSTIC_COMPLETE') : (completedAll ? 'COMPLETE' : 'INCOMPLETE')))) };
   if (invariantFailure) {
     emit('tracking_aborted', { ...result, status: 'INTERNAL_CLASSIFICATION_INVARIANT_FAILURE', message: invariantFailureMessage || 'Internal classification invariant failed.', queuePreserved: true, statePromoted: false });
   } else if (circuitOpen) {

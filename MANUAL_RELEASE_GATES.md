@@ -13,7 +13,7 @@ Kris performs physical, visual, and live release testing against the exact check
 7. Confirm History is a single Claim History interface with no search/status filters, separate Reconciliation Queue, manual shipment form, Step 2 classification viewer, or browser-session controls.
 8. Confirm ordinary history rows have no reconciliation actions and an authorized synthetic/copied unresolved record shows **Needs attention** with only the valid inline actions.
 9. Confirm Step 3 shows only actionable `LATE_CANDIDATE` rows and its visible count equals the rows shown. Confirm submitted, already-submitted, terminal, unresolved, and reconciliation-required records are absent.
-10. In dry-run mode with an authorized account, verify the built-in browser, visibility checks, CAPTCHA/manual-verification handling, and final-action barrier. Do not submit a live claim during this gate unless separately authorized.
+10. With authorized test data, verify the built-in browser, visibility checks, CAPTCHA/manual-verification handling, silent preflight, and sequential selected-candidate flow. A real submission is performed only when Kris separately authorizes that live gate.
 11. Create and restore a backup using non-production test data. Confirm schema version 8 and existing claim/classification/audit history remain intact.
 12. Copy the existing application profile to a private isolated test directory. Start the AppImage with `CANADA_POST_CLAIM_RUNNER_USER_DATA_DIR` and `CANADA_POST_CLAIM_RUNNER_ISOLATED_TEST_CONFIRM=ISOLATED_MIGRATION_TEST`; confirm the isolated banner, retained data, and disabled live/update/export operations. Never point the override at the real profile.
 13. Confirm **Check for Updates** reports 0.4.0 as current after the stable release exists. Before publication, a “no stable release yet” result is expected.
@@ -24,7 +24,7 @@ Kris performs physical, visual, and live release testing against the exact check
 
 - Obtain legal/privacy approval for notices, retention, licensing, support, and lifecycle commitments.
 - Verify current Canada Post policy, customer contract, holiday, and guarantee notices immediately before release.
-- Use only an authorized Canada Post account owner for real API diagnostics, CAPTCHA/text verification, supervised claims, canary submission, or account reconciliation.
+- Use only an authorized Canada Post account owner for real API diagnostics, CAPTCHA/text verification, supervised claims, or account reconciliation.
 - Physical Windows validation remains distinct from the automated Windows package validation. Do not mark it passed unless Kris performs it.
 
 ## Exact 0.4.1 three-platform validation
@@ -35,7 +35,7 @@ Kris performs physical, visual, and live release testing against the exact check
 4. On macOS, verify the public candidate is Developer ID signed and notarized, mounts normally, can replace the copy in Applications, preserves application data, and has the expected Gatekeeper experience. Do not treat an unsigned TEST DMG as equivalent.
 5. On every platform, verify startup, schema-8 database access, backup/restore paths, browser-profile isolation, privacy deletion, update storage, and packaged Step 1/Step 2 workers.
 6. Confirm the built-in `WebContentsView` and Playwright CDP connection behave normally without a separately bundled browser.
-7. Repeat the Step 3 gates above: actionable-only queue, immutable snapshot, dry-run barrier, live confirmation, CAPTCHA/manual verification, duplicate/already-submitted prevention, and uncertain-final-action protection.
+7. Repeat the Step 3 gates above: actionable-only queue, immutable snapshot, silent authoritative preflight, immediate selected submission, CAPTCHA/manual verification, duplicate/already-submitted prevention, and uncertain-final-action protection.
 8. Exercise the updater with a newer synthetic/test release: exact asset selection, size/hash verification, protected-operation lock, pre-update database backup, and platform install behavior.
 9. Record the source SHA, filename, size, SHA-256, signing/notarization status, physical platform/architecture, results, and exceptions.
 

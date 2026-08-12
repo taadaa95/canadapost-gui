@@ -129,7 +129,6 @@ function activateTab(tabId) {
   }
   if (target === 'step3') {
     if (!state.claimQueueLoaded) refreshClaimQueue().catch((error) => console.error(error));
-    refreshBrowserSessionStatus('step3BrowserSessionStatus').catch((error) => console.error(error));
   }
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
@@ -237,7 +236,7 @@ let builtinBrowserRunActive = false;
 let builtinBrowserManualActionPending = false;
 
 function useBuiltinBrowser() {
-  return $('builtinBrowser') ? $('builtinBrowser').checked : false;
+  return true;
 }
 
 function setBuiltinBrowserStatus(text, kind = '') {
@@ -273,12 +272,6 @@ function finishBuiltinBrowserActivity(text = '', kind = '') {
       setBuiltinBrowserActivity(false, tr('step3.browser.idleStatus', 'Browser idle'));
     }
   }, 1800);
-}
-
-function syncBuiltinBrowserClass() {
-  const step3 = $('step3');
-  if (!step3) return;
-  step3.classList.toggle('builtin-browser-enabled', useBuiltinBrowser());
 }
 
 function browserSlotPlaceholder() {
@@ -405,7 +398,6 @@ async function deactivateBuiltinBrowser(reason = 'run-inactive', placeholderText
 }
 
 async function synchronizeBuiltinBrowserVisibility(options = {}) {
-  syncBuiltinBrowserClass();
   if (options.activate === true) builtinBrowserRunActive = true;
   if (!builtinBrowserRunActive) {
     if (window.cpApp?.hideBuiltinBrowser) await window.cpApp.hideBuiltinBrowser().catch(() => {});
@@ -431,7 +423,6 @@ async function synchronizeBuiltinBrowserVisibility(options = {}) {
 }
 
 function requestBuiltinBrowserLayout(reason = 'layout-request') {
-  syncBuiltinBrowserClass();
   if (builtinBrowserLayoutFrame) cancelAnimationFrame(builtinBrowserLayoutFrame);
   builtinBrowserLayoutFrame = requestAnimationFrame(async () => {
     builtinBrowserLayoutFrame = 0;
@@ -500,7 +491,6 @@ Object.assign(state, {
   trackingApiVersion: '1.0.0',
   isolatedTestMode: false,
   evidenceRetentionDays: 90,
-  dryRunDefault: true,
   claimQueueItems: [],
   claimQueueLoaded: false,
   step3ActionReport: null,
@@ -1472,6 +1462,9 @@ function describeEvent(stage, event) {
       return trf('event.tracking.late', { tracking: pin, dates: trackingDateSuffix(event) }, '{tracking} — LATE — successful delivery after delivery standard{dates}');
     }
     if (type === 'pin_on_time') {
+      if (event.cached) {
+        return trf('event.tracking.onTimeCached', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, '{tracking} — ON TIME — previously confirmed delivered within Delivery Standard — skipped API check{dates}');
+      }
       return trf('event.tracking.onTime', { tracking: trackingDisplayPin(event), dates: trackingDateSuffix(event) }, '{tracking} — ON TIME — successful delivery on or before delivery standard{dates}');
     }
     if (type === 'pin_not_delivered') {
@@ -1736,12 +1729,9 @@ function describeEvent(stage, event) {
       builtinBrowserManualActionPending = false;
       finishBuiltinBrowserActivity(tr('event.submit.runCompleteActivity', 'Submission run complete'));
       operations.finishedAt = Date.now();
-      const dryReady = Number(event.dryRunReady || 0);
-      updateCurrentItem({ step: 'Submission complete', result: dryReady ? `${dryReady} dry-run ready` : 'Done', kind: '' });
+      updateCurrentItem({ step: 'Submission complete', result: 'Done', kind: '' });
       setStatus('Complete', 'good', 'step3');
-      const summary = dryReady
-        ? trf('event.submit.dryComplete', { ready: dryReady, failed: event.failed || 0 }, 'Dry run complete. Ready: {ready}, Failed: {failed}. No claims were submitted.')
-        : trf('event.submit.complete', { succeeded: event.succeeded, already: event.alreadySubmitted || 0, rejected: event.rejected || 0, failed: event.failed }, 'Submission complete. Approved/success: {succeeded}, Already submitted: {already}, Rejected/ineligible: {rejected}, Submission errors: {failed}.');
+      const summary = trf('event.submit.complete', { succeeded: event.succeeded, already: event.alreadySubmitted || 0, rejected: event.rejected || 0, failed: event.failed }, 'Submission complete. Approved/success: {succeeded}, Already submitted: {already}, Rejected/ineligible: {rejected}, Submission errors: {failed}.');
       setAction(summary, 'step3');
       stopOperationsTimer();
       refreshHistory().catch(() => {});
@@ -2067,27 +2057,15 @@ async function deletePrivacyData() {
   closePrivacyDataModal();
 }
 
-async function refreshBrowserSessionStatus() {
-  const statuses = [$('step3BrowserSessionStatus')].filter(Boolean);
-  for (const status of statuses) setLocalizedText(status, 'browserSession.checking', {}, 'Checking local browser session…');
-  const result = await window.cpApp.browserSessionStatus();
-  const key = result.ok
-    ? (result.exists ? 'browserSession.exists' : 'browserSession.none')
-    : 'browserSession.inspectFailed';
-  const fallback = result.ok
-    ? (result.exists ? 'A local Canada Post browser session exists on this device.' : 'No saved Canada Post browser session was detected.')
-    : (result.error || 'Could not inspect browser session state.');
-  for (const status of statuses) setLocalizedText(status, key, {}, fallback);
-  return result;
-}
-
 async function clearBrowserSession() {
   const confirmed = window.confirm(tr('browserSession.clearConfirm', 'Log out and clear the Canada Post browser profile? Cookies, cache and site storage will be removed. Claim history and settings will be preserved.'));
   if (!confirmed) return;
   const result = await window.cpApp.clearBrowserSession({ confirmed: true, resetProfile: true });
-  if (!result.ok) return window.alert(result.error || tr('browserSession.clearFailed', 'Could not clear browser data.'));
-  window.alert(tr('browserSession.cleared', 'Browser cookies, cache and site storage were cleared. Claim history was preserved.'));
-  await refreshBrowserSessionStatus();
+  if (!result.ok) {
+    log(result.error || tr('browserSession.clearFailed', 'Could not clear browser data.'), 'log-submit-error', 'step3');
+    return;
+  }
+  log(tr('browserSession.cleared', 'Browser cookies, cache and site storage were cleared. Claim history was preserved.'), 'log-success', 'step3');
 }
 
 async function createDiagnosticZip() {
@@ -2168,8 +2146,7 @@ function collectUserSettingsOptions() {
     claimContactEmail: getFieldValue('claimContactEmail'),
     evidenceRetentionDays: $('evidenceRetentionDays')
       ? Math.max(7, Math.min(3650, Number(getFieldValue('evidenceRetentionDays') || state.evidenceRetentionDays || 90)))
-      : state.evidenceRetentionDays,
-    dryRunDefault: $('dryRunDefault') ? Boolean($('dryRunDefault').checked) : state.dryRunDefault
+      : state.evidenceRetentionDays
   };
 }
 
@@ -2258,19 +2235,6 @@ function buildHistoryOptions() {
   };
 }
 
-function buildRunOptions(importHistory = false) {
-  return {
-    ...collectUserSettingsOptions(),
-    fresh: $('freshRun')?.checked || false,
-    browserMode: 'builtin',
-    afterSubmitMs: 20000,
-    maxClaims: null,
-    dryRun: Boolean($('dryRun')?.checked),
-    importHistory,
-    ...buildHistoryOptions()
-  };
-}
-
 function buildTrackingOnlyOptions() {
   return {
     fresh: $('freshTracking') ? $('freshTracking').checked : true,
@@ -2335,16 +2299,6 @@ function deadlineLabel(item) {
   return tr(key, '{days} business days remaining').replace('{days}', String(item.businessDaysRemaining));
 }
 
-function filteredClaimQueue(items = []) {
-  return step3QueueController.visible({
-    search: $('claimQueueSearch')?.value,
-    service: $('claimQueueServiceFilter')?.value,
-    urgency: $('claimQueueUrgencyFilter')?.value,
-    dateFrom: $('claimQueueDateFrom')?.value,
-    dateTo: $('claimQueueDateTo')?.value
-  });
-}
-
 function executionStateLabel(item) {
   const labels = {
     executable: tr('step3.execution.executable', 'Executable'),
@@ -2367,25 +2321,12 @@ function renderClaimQueue(items = [], preserveState = false) {
     step3QueueController.load(state.claimQueueItems);
   }
   state.claimQueueLoaded = true;
-  const services = [...new Set(state.claimQueueItems.map(item => item.serviceCode).filter(Boolean))].sort();
-  const serviceFilter = $('claimQueueServiceFilter');
-  if (serviceFilter && !preserveState) {
-    serviceFilter.textContent = '';
-    for (const [value, label] of [['all', tr('step3.queue.allServices', 'All services')], ...services.map(value => [value, value])]) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = label;
-      serviceFilter.appendChild(option);
-    }
-  }
-  const visibleItems = filteredClaimQueue(state.claimQueueItems);
+  const visibleItems = step3QueueController.items();
 
   if (!visibleItems.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = state.claimQueueItems.length
-      ? tr('step3.noFilterMatches', 'No late-delivery candidates match the current filters.')
-      : tr('step3.noCandidates', 'No late-delivery candidates are available. Run Step 2, then refresh this queue.');
+    empty.textContent = tr('step3.noCandidates', 'No late-delivery candidates are available. Run Step 2, then refresh this queue.');
     list.appendChild(empty);
     updateClaimQueueCount();
     requestBuiltinBrowserLayout();
@@ -2498,88 +2439,15 @@ async function runStep3Preflight(submitOptions) {
   return result.report;
 }
 
-let liveSubmitResolver = null;
-
-function closeLiveSubmitModal(confirmed) {
-  const modal = $('liveSubmitModal');
-  if (modal) {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-  }
-  const acknowledge = $('liveSubmitAcknowledge');
-  if (acknowledge) acknowledge.checked = false;
-  const confirmButton = $('confirmLiveSubmit');
-  if (confirmButton) confirmButton.disabled = true;
-  const resolver = liveSubmitResolver;
-  liveSubmitResolver = null;
-  const canaryMode = confirmed ? Boolean($('liveSubmitCanary')?.checked) : false;
-  resolver?.({ confirmed: Boolean(confirmed), canaryMode });
-}
-
-function confirmLiveSubmission(selectedCount) {
-  const modal = $('liveSubmitModal');
-  const summary = $('liveSubmitSummary');
-  if (!modal || !summary) return Promise.resolve({ confirmed: false, canaryMode: false });
-  if ($('liveSubmitCanary')) $('liveSubmitCanary').checked = true;
-  summary.textContent = '';
-  const lines = [
-    trf('step3.confirm.selectedCount', { count: selectedCount }, 'Selected candidates: {count}'),
-    tr('step3.confirm.browser'),
-    tr('step3.confirm.dryRunOff')
-  ];
-  for (const text of lines) {
-    const line = document.createElement('div');
-    line.textContent = text;
-    summary.appendChild(line);
-  }
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden', 'false');
-  $('liveSubmitAcknowledge')?.focus();
-  return new Promise(resolve => { liveSubmitResolver = resolve; });
-}
-
-function buildSubmitOnlyOptions({ liveSubmissionConfirmed = false, canaryMode = false } = {}) {
-
+function buildSubmitOnlyOptions() {
   return {
     ...collectUserSettingsOptions(),
-    browserMode: 'builtin',
     afterSubmitMs: 20000,
     maxClaims: null,
-    dryRun: Boolean($('dryRun')?.checked),
     selectedClassificationRecords: selectedClassificationRecords(),
     expectedClaimCount: selectedClassificationRecords().length,
-    canaryMode: Boolean(canaryMode),
-    liveSubmissionConfirmed: Boolean(liveSubmissionConfirmed),
     developerMode: false
   };
-}
-
-async function startRun(importHistory = false) {
-  currentProcessStep = importHistory ? 'step1' : 'step2';
-  resetRunUi(currentProcessStep);
-  setStatus('Running', 'warn', currentProcessStep);
-  setActionLocalized(importHistory ? 'run.importAndStart' : 'run.starting', {}, importHistory ? 'Importing shipping history, then running tracking and claims.' : 'Starting tracking and claims run.', currentProcessStep);
-
-  const res = await window.cpApp.startRun(buildRunOptions(importHistory));
-  if (!res.ok) {
-    finishBuiltinBrowserActivity(tr('step3.browser.startFailed', 'Could not start browser workflow'), 'error');
-    setStatus('Failed', 'bad');
-    setAction(res.error || tr('run.startFailed', 'Could not start run.'));
-    updateCurrentItem({ step: 'Could not start run', result: res.error || 'Failed', kind: 'failed' });
-    addNeedsReview('failed', '—', res.error || 'Could not start run', '—', '', {
-      kind: 'failed',
-      result: 'Start failed',
-      status: 'Start failed',
-      message: res.error || 'Could not start run'
-    });
-    log(res.error || 'Could not start run.');
-    operations.finishedAt = Date.now();
-    stopOperationsTimer();
-    updateCounters();
-    return;
-  }
-
-  log(importHistory ? 'Import + full run started.' : 'Run started.');
 }
 
 async function startTrackingOnly() {
@@ -2691,17 +2559,13 @@ async function startSubmitOnly() {
   hideStep3ActionIssues();
   if (!state.claimQueueLoaded) await refreshClaimQueue();
   const selected = selectedClassificationRecords();
-  const dryRun = Boolean($('dryRun')?.checked);
   const basePreflightOptions = {
     ...collectUserSettingsOptions(),
-    browserMode: 'builtin',
     selectedClassificationRecords: selected,
-    expectedClaimCount: selected.length,
-    canaryMode: false,
-    liveSubmissionConfirmed: false
+    expectedClaimCount: selected.length
   };
-  const preliminaryPreflight = await runStep3Preflight({ ...basePreflightOptions, dryRun: true });
-  if (!preliminaryPreflight?.ready) {
+  const preflight = await runStep3Preflight(basePreflightOptions);
+  if (!preflight?.ready) {
     setStatus('Blocked', 'bad', 'step3');
     setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
     log(tr('step3.preflightBlockedAction', 'Step 3 preflight found blocking issues. Resolve them before running claims.'), 'log-submit-error', 'step3');
@@ -2710,44 +2574,18 @@ async function startSubmitOnly() {
   if (!selected.length) {
     setStatus('Blocked', 'bad', 'step3');
     setActionLocalized('step3.zeroSelection', {}, 'No late-delivery candidates are selected in the Step 3 candidate queue.', 'step3');
-    log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before starting a dry or live run.'), 'log-submit-error', 'step3');
+    log(tr('step3.zeroSelectionRecovery', 'Select at least one late-delivery candidate before submitting.'), 'log-submit-error', 'step3');
     return;
   }
-  const preflight = dryRun ? preliminaryPreflight : await runStep3Preflight({
-    ...basePreflightOptions,
-    dryRun: false
-  });
-  if (!preflight?.ready) {
-    setStatus('Blocked', 'bad', 'step3');
-    setActionLocalized('step3.preflightBlockedAction', {}, 'Step 3 preflight found blocking issues. Resolve them before running claims.', 'step3');
-    log(tr('step3.preflightBlockedAction', 'Step 3 preflight found blocking issues. Resolve them before running claims.'), 'log-submit-error', 'step3');
-    return;
-  }
-  let liveSubmissionConfirmed = false;
-  let canaryMode = false;
-  if (!dryRun) {
-    const confirmation = await confirmLiveSubmission(selected.length);
-    liveSubmissionConfirmed = confirmation.confirmed;
-    canaryMode = confirmation.canaryMode;
-    if (!confirmation.confirmed) {
-      setStatus('Cancelled', '', 'step3');
-      setActionLocalized('step3.liveCancelledAction', {}, 'Live submission cancelled before the browser workflow started.', 'step3');
-      log('Live submission cancelled.', 'log-warning', 'step3');
-      return;
-    }
-  }
-
   resetRunUi('step3');
   await deactivateBuiltinBrowser('validating-selection', tr('step3.browser.validating', 'Validating the selected executable claims…'), 'step3.browser.validating');
   setStatus('Validating', 'warn', 'step3');
   setBuiltinBrowserStatus(tr('step3.browser.idleStatus', 'Browser idle'), '');
-  setAction(dryRun
-    ? trf('step3.dryRunStarting', { count: selected.length })
-    : (canaryMode ? tr('step3.confirm.modeCanary') : trf('step3.liveRunStarting', { count: selected.length })), 'step3');
+  setAction(trf('step3.liveRunStarting', { count: selected.length }), 'step3');
 
   // The main process validates attempt state and creates an immutable snapshot
   // before it creates, attaches, or navigates the native browser.
-  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions({ liveSubmissionConfirmed, canaryMode }));
+  const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions());
   if (!res.ok) {
     if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
       showStep3ActionIssues({
@@ -2776,9 +2614,7 @@ async function startSubmitOnly() {
     return;
   }
 
-  log(dryRun
-    ? `Dry run started for ${res.selectedClaimCount || selected.length} selected claim(s). The runner will stop on the sender/contact page.`
-    : (canaryMode ? 'Canary live run started. Only the first selected claim will be processed.' : `Live claim submission started for ${res.selectedClaimCount || selected.length} selected claim(s).`));
+  log(`Claim submission started for ${res.selectedClaimCount || selected.length} selected claim(s).`);
   if (builtinBrowserRunActive) await resizeBuiltinBrowserToSlot('submission-worker-started');
 }
 
@@ -2838,10 +2674,7 @@ async function refreshConfig() {
   if ($('claimContactPhone')) $('claimContactPhone').value = cfg.claimContactPhone || '';
   if ($('claimContactEmail')) $('claimContactEmail').value = cfg.claimContactEmail || '';
   state.evidenceRetentionDays = Math.max(7, Math.min(3650, Number(cfg.evidenceRetentionDays || 90)));
-  state.dryRunDefault = Object.prototype.hasOwnProperty.call(cfg, 'dryRunDefault') ? Boolean(cfg.dryRunDefault) : true;
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
-  if ($('dryRunDefault')) $('dryRunDefault').checked = state.dryRunDefault;
-  if ($('dryRun')) $('dryRun').checked = state.dryRunDefault;
   if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '';
   if ($('buildTrustStatus')) {
     setLocalizedText($('buildTrustStatus'), cfg.signedBuild ? 'build.signed' : 'build.unsigned', {}, cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build');
@@ -2954,7 +2787,6 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
   $(id)?.addEventListener('change', resetPrivacyPreview);
   if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
 }
-$('checkStep3BrowserSession')?.addEventListener('click', refreshBrowserSessionStatus);
 $('clearStep3BrowserSession')?.addEventListener('click', clearBrowserSession);
 $('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
 $('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
@@ -3029,7 +2861,6 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (modal.id === 'warningModal') closeStep1Warnings();
     else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
-    else if (modal.id === 'liveSubmitModal') closeLiveSubmitModal(false);
     else if (modal.id === 'trackingDiagnosticModal') closeTrackingDiagnosticModal(null);
     else if (modal.id === 'privacyDataModal') closePrivacyDataModal();
     event.preventDefault();
@@ -3091,8 +2922,6 @@ $('importHistory')?.addEventListener('click', async () => {
   log(tr('step1.historyStarted', 'Shipping history import started.'));
 });
 
-$('importAndStart')?.addEventListener('click', () => startRun(true));
-$('start')?.addEventListener('click', () => startRun(false));
 $('runTrackingOnly')?.addEventListener('click', startTrackingOnly);
 $('testTrackingConnection')?.addEventListener('click', testTrackingConnection);
 $('exportTrackingStructure')?.addEventListener('click', exportTrackingStructure);
@@ -3100,28 +2929,13 @@ $('discardIncompleteTracking')?.addEventListener('click', discardIncompleteTrack
 $('clearTrackingApiCredentials')?.addEventListener('click', clearTrackingApiCredentials);
 $('trackingApiEnvironment')?.addEventListener('change', () => { state.trackingApiEnvironment = $('trackingApiEnvironment').value; state.trackingDiagnosticGateSatisfied = false; renderTrackingDiagnosticGate(); });
 for (const id of ['trackingClientId', 'trackingClientSecret']) $(id)?.addEventListener('input', () => { if ($(id).value) { state.trackingDiagnosticGateSatisfied = false; renderTrackingDiagnosticGate(); } });
-$('builtinBrowser')?.addEventListener('change', requestBuiltinBrowserLayout);
 $('runSubmitOnly')?.addEventListener('click', startSubmitOnly);
 $('refreshClaimQueue')?.addEventListener('click', refreshClaimQueue);
 $('selectAllClaims')?.addEventListener('click', () => {
-  step3QueueController.selectVisible({
-    search: $('claimQueueSearch')?.value,
-    service: $('claimQueueServiceFilter')?.value,
-    urgency: $('claimQueueUrgencyFilter')?.value,
-    dateFrom: $('claimQueueDateFrom')?.value,
-    dateTo: $('claimQueueDateTo')?.value
-  });
+  step3QueueController.selectAll();
   renderClaimQueue(state.claimQueueItems, true);
 });
 $('clearClaimSelection')?.addEventListener('click', () => { step3QueueController.clear(); renderClaimQueue(state.claimQueueItems, true); });
-$('claimQueueSearch')?.addEventListener('input', () => renderClaimQueue(state.claimQueueItems, true));
-$('claimQueueServiceFilter')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
-$('claimQueueUrgencyFilter')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
-$('claimQueueDateFrom')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
-$('claimQueueDateTo')?.addEventListener('change', () => renderClaimQueue(state.claimQueueItems, true));
-$('liveSubmitAcknowledge')?.addEventListener('change', () => { if ($('confirmLiveSubmit')) $('confirmLiveSubmit').disabled = !$('liveSubmitAcknowledge').checked; });
-$('cancelLiveSubmit')?.addEventListener('click', () => closeLiveSubmitModal(false));
-$('confirmLiveSubmit')?.addEventListener('click', () => closeLiveSubmitModal(true));
 
 $('stop')?.addEventListener('click', async () => {
   const res = await window.cpApp.requestStop();

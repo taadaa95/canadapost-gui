@@ -13,7 +13,7 @@ const ready = buildPreflightReport({
   webPasswordAvailable: true,
   claimAddressAvailable: true,
   claimCount: 2,
-  builtinBrowserRequired: true,
+  builtinBrowserAvailable: true,
   step3WorkersAvailable: true,
   reconciliationCount: 0
 });
@@ -23,7 +23,7 @@ assert.strictEqual(ready.blockingCount, 0);
 const liveWithoutHealthCheck = buildPreflightReport({
   scope: 'step3', storageWritable: true, databaseIntegrity: { ok: true },
   webUsernameAvailable: true, webPasswordAvailable: true, claimAddressAvailable: true,
-  claimCount: 1, builtinBrowserRequired: true, step3WorkersAvailable: true,
+  claimCount: 1, builtinBrowserAvailable: true, step3WorkersAvailable: true,
   reconciliationCount: 0, liveSubmissionRequested: true
 });
 assert.strictEqual(liveWithoutHealthCheck.ready, true);
@@ -38,7 +38,7 @@ const blocked = buildPreflightReport({
   webPasswordAvailable: false,
   claimAddressAvailable: false,
   claimCount: 0,
-  builtinBrowserRequired: true,
+  builtinBrowserAvailable: true,
   step3WorkersAvailable: true,
   reconciliationCount: 2
 });

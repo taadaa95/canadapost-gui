@@ -20,13 +20,13 @@ const history = html.match(/<section id="historyTab"[\s\S]*?<section id="results
 const step3 = html.match(/<section id="step3"[\s\S]*?<section id="historyTab"/)?.[0] || '';
 
 assert.doesNotMatch(html, /Legacy Developer Program credentials|Legacy API username|Legacy API password|Legacy API environment/i);
-assert.doesNotMatch(step3, /step3PreflightList|refreshStep3Preflight|Manual-review queue|On-time classification queue|id="canaryMode"/i);
+assert.doesNotMatch(step3, /step3PreflightList|refreshStep3Preflight|Manual-review queue|On-time classification queue/i);
 assert.doesNotMatch(history, /financialSummary|recordFinancialEntry|financialReportTitle|privacyDataTitle|privacyTrackingNumbers/i);
 assert.strictEqual((html.match(/id="manageStoredData"/g) || []).length, 1);
 assert.match(html, /id="privacyDataModal" class="modal-backdrop hidden"/);
 assert.match(html, /id="trackingDiagnosticModal" class="modal-backdrop hidden"/);
 assert.match(html, /id="trackingDiagnosticRow"[^>]*type="number"/);
-assert.match(html, /id="liveSubmitCanary"[^>]*checked/);
+assert.doesNotMatch(step3, /id="dryRun"|id="builtinBrowser"|id="liveSubmitModal"|id="checkStep3BrowserSession"/);
 assert.doesNotMatch(preload, /financial:get|financial:record|getFinancialReport|recordFinancialEntry/);
 assert.doesNotMatch(renderer, /getFinancialReport|recordFinancialEntry|refreshFinancialReport|financialSummary/);
 assert.doesNotMatch(main, /registerIpcHandler\('financial:(?:get|record)'/);
@@ -55,7 +55,7 @@ const submitHandler = main.match(/registerIpcHandler\('submit:run'[\s\S]*?regist
 assert.ok((submitHandler.match(/runPreflight\(\{ scope: 'step3'/g) || []).length >= 2, 'main must preflight and recheck immediately before snapshot creation');
 assert.match(submitHandler, /selectionForRun/);
 assert.match(submitHandler, /createRunSnapshot/);
-assert.match(submitHandler, /MAX_CLAIMS: effectiveCanaryMode \? '1' : ''/);
+assert.match(submitHandler, /MAX_CLAIMS: ''/);
 assert.ok(submitHandler.indexOf('finalPreflight') < submitHandler.indexOf('createRunSnapshot'));
 
 const rows = [{ 'Tracking PIN': '' }, { 'Tracking Number': 'SYNTHETIC-ROW-2' }, { PIN: 'SYNTHETIC-ROW-3' }];
@@ -64,10 +64,8 @@ assert.deepStrictEqual(diagnosticSelection.validateRow(rows, 2), { row: 2, rowCo
 for (const invalid of [null, '', 0, 1, 1.5, 4, 'bad']) assert.throws(() => diagnosticSelection.validateRow(rows, invalid), /valid tracking\.csv row/);
 
 const selected = [{ recordId: 1 }, { recordId: 2 }];
-assert.deepStrictEqual(step3QueueService.selectionForRun(selected, { dryRun: false, canaryMode: true }), [{ recordId: 1 }]);
-assert.deepStrictEqual(step3QueueService.selectionForRun(selected, { dryRun: false, canaryMode: false }), selected);
-assert.deepStrictEqual(step3QueueService.selectionForRun(selected, { dryRun: true, canaryMode: true }), selected, 'canary must not silently limit a dry run');
-assert.throws(() => inputValidation.validateSubmitOptions({ canaryMode: 'true' }), error => error.code === 'SUBMIT_CANARY_INVALID');
+assert.deepStrictEqual(step3QueueService.selectionForRun(selected), selected, 'all selected candidates must remain in deterministic order');
+assert.strictEqual(Object.hasOwn(inputValidation.validateSubmitOptions({ dryRun: true }), 'dryRun'), false, 'product submission options must not expose dry-run mode');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-dev9-schema-'));
 try {

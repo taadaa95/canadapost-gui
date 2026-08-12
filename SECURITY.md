@@ -86,8 +86,6 @@ Configured secrets and personal fields are added to the redaction set before for
 
 The latest Step 3 run contributes a metadata-only file inventory when included in a Diagnostic ZIP; filenames and file contents are excluded. Local detailed runs can contain operational context that the shareable archive intentionally omits and should remain private.
 
-## Live submission authorization (v0.4.0)
+## Step 3 submission authorization
 
-The renderer cannot start a live Step 3 worker with only a button click. The main process validates all submission options, requires a non-empty selected queue, snapshots that queue into a private run-specific CSV, enforces built-in-browser mode, and rejects live mode unless the renderer supplies an explicit acknowledgement produced by the live-submission confirmation dialog. This is a defense-in-depth control, not a substitute for reviewing the queue.
-
-Canary mode limits the worker to the first selected claim. It does not automatically approve or continue the remaining queue.
+The selected-candidate button is the operator's submission action. The main process still validates all submission options, requires a non-empty current `LATE_CANDIDATE` selection, checks promoted Step 2 authority and evidence hashes, blocks unsafe attempt states, snapshots the exact queue into private run-specific files, and enforces the isolated built-in browser. These authoritative checks remain mandatory even though the product does not add a second confirmation dialog.

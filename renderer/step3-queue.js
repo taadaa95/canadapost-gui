@@ -39,27 +39,12 @@
       return snapshot();
     }
 
-    function visible(filters = {}) {
-      const search = String(filters.search || '').trim().toLowerCase();
-      const service = String(filters.service || 'all');
-      const urgency = String(filters.urgency || 'all');
-      const dateFrom = String(filters.dateFrom || '');
-      const dateTo = String(filters.dateTo || '');
-      return items.filter(item => {
-        if (search && !`${item.trackingNumber || ''} ${item.referenceNumber || ''}`.toLowerCase().includes(search)) return false;
-        if (service !== 'all' && item.serviceCode !== service) return false;
-        if (urgency === 'urgent' && item.deadlineState !== 'urgent') return false;
-        if (urgency === 'expired' && item.deadlineState !== 'expired') return false;
-        if (urgency === 'advisory' && item.deadlineState !== 'unverified_advisory') return false;
-        if (urgency === 'unavailable' && !['unavailable', 'policy_review_required'].includes(item.deadlineState)) return false;
-        if (dateFrom && (!item.deadline || item.deadline < dateFrom)) return false;
-        if (dateTo && (!item.deadline || item.deadline > dateTo)) return false;
-        return true;
-      }).sort((left, right) => String(left.deadline || '9999').localeCompare(String(right.deadline || '9999')) || Number(left.recordId) - Number(right.recordId));
+    function allItems() {
+      return items.slice();
     }
 
-    function selectVisible(filters = {}) {
-      for (const item of visible(filters)) {
+    function selectAll() {
+      for (const item of items) {
         if (isExecutable(item)) selected.add(Number(item.recordId));
       }
       return snapshot();
@@ -111,8 +96,8 @@
 
     return {
       load,
-      visible,
-      selectVisible,
+      items: allItems,
+      selectAll,
       clear,
       set,
       isExecutable,

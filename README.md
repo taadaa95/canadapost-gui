@@ -93,7 +93,7 @@ The suites cover:
 - optional/missing EST metadata and Tracking API service precedence;
 - encrypted credential storage and authenticated encrypted backups;
 - claim selection, idempotency, interrupted attempts, and retry limits;
-- Step 3 `WebContentsView` isolation, dry-run safeguards, mock navigation/outcomes, selector behavior, fault points and structured diagnostic redaction;
+- Step 3 `WebContentsView` isolation, authoritative submission safeguards, mock navigation/outcomes, selector behavior, fault points and structured diagnostic redaction;
 - SQLite migrations and immutable evidence, localization completeness, integer-cent reporting, GitHub release-asset digest verification and accessibility rules.
 - current Tracking OAuth token acquisition/caching/refresh, exact official endpoints and headers, JSON schema normalization, archive/not-found/error handling, credential separation, diagnostic gating, circuit semantics and packaged loopback smokes.
 
@@ -111,22 +111,16 @@ See `docs/RELEASE_PROCESS.md`, `MANUAL_RELEASE_GATES.md`, `RELEASE_NOTES.md` and
 
 Step 3 uses the app's isolated built-in Canada Post browser session. The runner selects that exact browser target, confirms authentication, restricts top-level navigation to Canada Post, fills one claim at a time, and records the attempt transactionally before the final action. Unknown, interrupted, timed-out, or confirmation-without-number outcomes are sent to reconciliation instead of being retried automatically.
 
-Dry run is intentionally conservative. It fills the receiver, tracking, reference, sender, and contact fields, then stops on the sender/contact page before any final review or submission transition. A page-level guard also blocks final submission controls. Dry run is not a substitute for checking the Canada Post account when a previous run may have advanced unexpectedly.
-
-
-
-## Step 3 operator controls (v0.4.0)
+## Step 3 operator controls
 
 The v0.4.0 productization branch adds a safety layer before browser automation begins:
 
 - a readiness preflight verifies local storage, database integrity, credentials, sender address, the late-candidate queue, and unresolved reconciliation warnings;
 - the user reviews and selects the exact claims that may be processed;
 - the selected queue is copied to a private run-specific CSV so later changes to `claims.csv` cannot alter an active run;
-- live submission requires a separate acknowledgement dialog;
-- canary mode processes only the first selected claim and then stops; and
 - Step 3 remains restricted to the built-in Electron browser.
 
-The current canary mode is deliberately manual: after the first claim finishes, verify the Canada Post result and reconciliation state before starting the remaining queue.
+Selecting candidates and choosing **Submit selected candidates** starts silent authoritative preflight and then the sequential built-in-browser workflow. There is no browser-mode choice or second confirmation dialog.
 
 ## Step 3 detailed diagnostics
 
@@ -146,10 +140,10 @@ The directory includes:
 - `page-states/`: redacted page structure, frames, visible controls, and visible-text samples;
 - `manifest.json`: runtime and privacy metadata.
 
-The trace records selector strategies, frame scans, form readiness, navigation transitions, browser/network failures, dry-run barriers, final-action dispatch state, confirmation polling, evidence metadata, and stop/shutdown behavior. It does not intentionally record passwords, cookies, authorization data, entered form values, or full tracking numbers.
+The trace records selector strategies, frame scans, form readiness, navigation transitions, browser/network failures, final-action dispatch state, confirmation polling, evidence metadata, and stop/shutdown behavior. It does not intentionally record passwords, cookies, authorization data, entered form values, or full tracking numbers.
 
 Use **Open Detailed Diagnostics** in Step 3 to inspect the latest local run. **Settings → Advanced → Support bundle** previews its manifest and components before export. System integrity and sanitized setting status are selected by default; masked history and metadata-only log and Step 3 inventories require opt in. Credentials, tokens, cookies, browser profiles, raw Tracking API bodies, screenshots, filenames, and free-form operational text are always excluded. Review the archive before sharing; see [support bundles](docs/SUPPORT_BUNDLES.md).
 
-Step 3 remains directly accessible and does not run a portal health or compatibility check. Its actual submission protections remain mandatory: only immutable, promoted `LATE_CANDIDATE` records can be selected; dry run is the default; unresolved and terminal attempts are blocked; live runs require explicit acknowledgement and native final confirmation; canary mode limits the run to one record; and CAPTCHA or text verification remains under human control in the isolated built-in browser. Uncertain final actions are never retried automatically.
+Step 3 remains directly accessible and does not run a portal health or compatibility check. Its actual submission protections remain mandatory: only immutable, promoted `LATE_CANDIDATE` records can be selected; unresolved and terminal attempts are blocked; evidence hashes and snapshots are revalidated; CAPTCHA or text verification remains under human control in the isolated built-in browser; and uncertain final actions are never retried automatically.
 
 Detailed runs are automatically limited to the newest 20 directories and 30 days of retention.

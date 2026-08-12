@@ -66,8 +66,8 @@ assert.match(
 );
 assert.match(
   visibilityE2E,
-  /Executable dry-run start[\s\S]{0,80}60000/,
-  'executable dry-run start must be bounded'
+  /Executable synthetic submission start[\s\S]{0,80}60000/,
+  'executable synthetic submission start must be bounded'
 );
 assert.match(
   visibilityE2E,

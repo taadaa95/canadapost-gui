@@ -46,7 +46,7 @@
     {
       "id": "EXTERNAL-LIVE-CANADA-POST",
       "status": "manual_gate",
-      "detail": "Real account login, credential validation, CAPTCHA/text verification, dry runs against the real portal, claims, canary runs and reconciliation require an authorized human. None was performed."
+      "detail": "Real account login, credential validation, CAPTCHA/text verification, claims and reconciliation require an authorized human. None was performed."
     },
     {
       "id": "EXTERNAL-SIGNING-PUBLISHING",

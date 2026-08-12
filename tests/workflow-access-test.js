@@ -38,15 +38,15 @@ assert.match(html, /id="step3ActionAdvisory"[^>]*class="step3-action-advisory hi
   'action-specific prerequisite failures must render inline');
 assert.match(renderer, /function showStep3ActionIssues/);
 
-assert.match(html, /id="dryRun"[^>]*checked/, 'dry run must remain the default');
 const startSubmit = renderer.match(/async function startSubmitOnly\(\)[\s\S]*?async function refreshConfig/)?.[0] || '';
 assert.doesNotMatch(`${html}\n${renderer}\n${main}`, /portalCompatibility|portal-compatibility|runSiteHealth|siteHealth:run/,
   'health and portal-compatibility systems must be absent');
 assert.doesNotMatch(html, /manualReviewList|manualReviewCountPill|Eligibility Manual Review/,
   'eligibility manual-review UI must be absent');
-assert.match(html, /id="checkStep3BrowserSession"/, 'browser-session inspection must remain independent');
-assert.match(startSubmit, /confirmLiveSubmission/);
-assert.match(startSubmit, /buildSubmitOnlyOptions\(\{ liveSubmissionConfirmed, canaryMode \}\)/);
+assert.doesNotMatch(html, /id="checkStep3BrowserSession"|id="dryRun"|id="builtinBrowser"|id="liveSubmitModal"/);
+assert.doesNotMatch(startSubmit, /confirmLiveSubmission|liveSubmissionConfirmed/);
+assert.match(startSubmit, /await runStep3Preflight\(basePreflightOptions\)/);
+assert.match(startSubmit, /window\.cpApp\.runSubmit\(buildSubmitOnlyOptions\(\)\)/);
 
 assert.match(html, /id="claimQueueList"[^>]*aria-live="polite"[\s\S]*?step3\.queue\.refreshEmpty/,
   'missing candidates must remain an inline queue state');
@@ -66,9 +66,9 @@ for (const [sourceText, pattern, safeguard] of [
   [queueService, /createRunSnapshot/, 'immutable execution snapshots'],
   [submitWorker, /CAPTCHA/, 'CAPTCHA pause'],
   [submitWorker, /Never retry the financially significant action/, 'uncertain-final-action no-retry protection'],
-  [main, /requestNativeAuthorization/, 'native final confirmation'],
-  [main, /MAX_CLAIMS: effectiveCanaryMode \? '1' : ''/, 'one-record canary limit'],
   [main, /persist:canadapost-claims-builtin/, 'browser-session isolation']
 ]) assert.match(sourceText, pattern, `${safeguard} must remain intact`);
+assert.doesNotMatch(`${html}\n${renderer}\n${main}\n${queueService}`, /requestNativeAuthorization|liveSubmissionConfirmed/i);
+assert.match(main, /MAX_CLAIMS: ''/, 'multiple selected candidates must not be truncated');
 
 process.stdout.write('Workflow navigation and removed-feature safety tests passed.\n');

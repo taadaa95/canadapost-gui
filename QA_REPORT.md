@@ -222,9 +222,8 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 - Step 3 readiness preflight covering storage, database integrity, credentials, sender address, eligible queue, built-in browser mode, and reconciliation warnings.
 - Reviewable claim queue with per-claim selection.
 - Private immutable selected-claims CSV snapshot for every Step 3 run.
-- Explicit acknowledgement before any live submission worker starts.
-- Canary mode limited to the first selected claim.
-- Mandatory built-in browser mode.
+- Immediate silent authoritative preflight before the selected submission queue starts.
+- Mandatory built-in browser operation.
 
 ## Validation
 
@@ -238,7 +237,6 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 ## Still required before stable release
 
 - Visual test on the target Linux desktop.
-- Successful supervised dry run with two claims.
-- Successful supervised canary live run with one low-risk claim.
-- Review generated Step 3 diagnostics and reconciliation state after the canary.
+- Successful supervised Step 3 run with selected low-risk claims.
+- Review generated Step 3 diagnostics and reconciliation state after submission.
 - Obtain and verify production signing/update keys, complete physical Windows/Linux clean-install and accessibility testing, approve legal/privacy drafts, and complete a measured customer pilot.

@@ -12,7 +12,7 @@ The branch name remains for PR continuity and is not a release channel.
 
 ## Preserved safety
 
-Step 3 still requires the latest complete promoted Step 2 run, immutable evidence and snapshots, duplicate/terminal/unresolved blocking, dry-run and live-confirmation barriers, worker revalidation, visible built-in browser controls, and no automatic retry after an uncertain final action. Database schema remains 8 with migration, backup, recovery, reconciliation, and audit protections unchanged.
+Step 3 still requires the latest complete promoted Step 2 run, immutable evidence and snapshots, duplicate/terminal/unresolved blocking, worker revalidation, the visible isolated built-in browser, and no automatic retry after an uncertain final action. Selecting **Submit selected candidates** starts silent preflight and the live sequential workflow without a second confirmation. Database schema remains 8 with migration, backup, recovery, reconciliation, and audit protections unchanged.
 
 ## Stable updater
 

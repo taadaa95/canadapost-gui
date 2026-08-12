@@ -111,7 +111,7 @@ function complete(trackingNumber, status) {
 
     const controller = queueUi.createController();
     controller.load(preview.items);
-    controller.selectVisible({});
+    controller.selectAll();
     assert.strictEqual(controller.snapshot().selected, 4, 'Select all must select every displayed actionable row.');
 
     const blockedDirectory = path.join(root, 'blocked-snapshot');

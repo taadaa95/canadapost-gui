@@ -60,7 +60,7 @@ Artifact from that superseded checkpoint: `dist/packages/Canada Post Claim Runne
 
 ## Current position
 
-All feasible repository work for Phases 0–2 is implemented and validated. The verdict is **public-beta candidate**, not stable. The existing `v0.4.0-productization` branch contains substantial pre-mission operator-control work; it remains preserved as user-owned work. No reset, destructive cleanup, runtime-data deletion, push, publication, account login, real claim, CAPTCHA bypass, live canary or customer-data access was performed.
+All feasible repository work for Phases 0–2 is implemented and validated. The verdict is **public-beta candidate**, not stable. The existing `v0.4.0-productization` branch contains substantial pre-mission operator-control work; it remains preserved as user-owned work. No reset, destructive cleanup, runtime-data deletion, push, publication, account login, real claim, CAPTCHA bypass or customer-data access was performed.
 
 ## Phase 0 checkpoint
 
@@ -143,7 +143,7 @@ Result: PASS (exit 0). npm reported 0 production dependency vulnerabilities.
 
 ## Remaining actions
 
-Only external/manual gates remain: reviewed commits/clean source archive, production signing and publishing credentials, physical Windows/Linux clean-install and accessibility testing, authorized Canada Post dry-run/account reconciliation/canary, legal/privacy approval, policy recheck and a real customer pilot. See `MANUAL_RELEASE_GATES.md`.
+Only external/manual gates remain: reviewed commits/clean source archive, production signing and publishing credentials, physical Windows/Linux clean-install and accessibility testing, authorized Canada Post submission/account reconciliation, legal/privacy approval, policy recheck and a real customer pilot. See `MANUAL_RELEASE_GATES.md`.
 
 ## Step 2 canonical parity checkpoint — 2026-07-28
 

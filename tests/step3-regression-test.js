@@ -58,12 +58,11 @@ function main() {
   assert.doesNotMatch(submitSource, /launchPersistentContext|launchClaimContext|browser-profile-temp/);
   assert.match(submitSource, /require\('playwright-core'\)/);
   assert.match(mainSource, /BETWEEN_CLAIMS_MS: String\(options\.betweenClaimsMs \|\| 750\)/);
-  assert.match(rendererSource, /step3\.dryRunStarting/);
-  assert.match(englishLocale, /stopping before final review\/submission/);
-  assert.match(htmlSource, /data-i18n="step3\.dryRun"/);
-  assert.match(englishLocale, /"step3\.dryRun": "Dry run — fill fields only; stop before final review or submission"/);
+  assert.doesNotMatch(rendererSource, /step3\.dryRunStarting|liveSubmitModal|liveSubmissionConfirmed/);
+  assert.doesNotMatch(htmlSource, /id="dryRun"|id="liveSubmitModal"/);
+  assert.doesNotMatch(englishLocale, /"step3\.dryRun"|dialog\.liveSubmit/);
 
-  console.log('Step 3 dry-run and multi-claim regression tests passed.');
+  console.log('Internal worker dry-run guard and product live-only regression tests passed.');
 }
 
 main();

@@ -94,7 +94,7 @@ Rebuilt artifact: `dist/packages/Canada Post Claim Runner-0.4.0-dev.1-linux-x86_
 
 Canada Post Claim Runner `0.4.0-dev.1` has been moved from a supervised development workflow to a substantially hardened **public-beta candidate** at repository level. Phase 0 safety gates, the feasible Phase 1 engineering work, and the feasible Phase 2 commercial-readiness foundations are implemented. The product is not a stable-release candidate: code signing, physical clean-install/accessibility validation, authorized Canada Post validation, legal approval and a real pilot remain external gates.
 
-No real Canada Post account was accessed. No credential was tested against the live portal, no CAPTCHA was bypassed, no real claim or canary was submitted, no customer data was used, and nothing was pushed or published.
+No real Canada Post account was accessed. No credential was tested against the live portal, no CAPTCHA was bypassed, no real claim was submitted, no customer data was used, and nothing was pushed or published.
 
 ## 2. Initial repository state
 
@@ -254,7 +254,7 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 
 - Main/renderer and submit-worker orchestrators remain large; major domain/security responsibilities were extracted, but two complexity warnings document follow-up refactoring targets.
 - Canadian French catalog infrastructure, primary navigation/readiness/financial terminology and French support/release documents exist, but legacy UI and dynamic messages require a complete human language review before calling localization complete.
-- Automated Electron coverage does not yet drive the entire import → classification → queue → dry-run → crash/restore lifecycle inside one GUI process. Unit/integration/mock coverage exists; human end-to-end validation is required by user direction.
+- Automated Electron coverage does not yet drive the entire import → classification → queue → selected submission → crash/restore lifecycle inside one GUI process. Unit/integration/mock coverage exists; human end-to-end validation is required by user direction.
 - Fault points and duplicate/reconciliation invariants are tested at module/worker-contract level; platform crash behavior still needs supervised packaged rehearsal.
 - Linux AppImage uses the default Electron icon.
 - Policy/calendar auto-classification coverage ends in 2026 and must be updated from official sources.
@@ -266,7 +266,7 @@ Superseded 2026-07-26 artifact: `dist/packages/Canada Post Claim Runner-0.4.0-de
 
 ## 13. External manual gates
 
-The authoritative checklist is `MANUAL_RELEASE_GATES.md`: production signing/publishing, physical Windows/Linux install/upgrade/uninstall/restore, complete assistive-technology and French review, authorized EST date-range verification, one-request Tracking REST diagnostic, Canada Post dry-run/account reconciliation/one-claim canary, current policy/customer-contract verification, legal/privacy approval and a measured customer pilot.
+The authoritative checklist is `MANUAL_RELEASE_GATES.md`: production signing/publishing, physical Windows/Linux install/upgrade/uninstall/restore, complete assistive-technology and French review, authorized EST date-range verification, one-request Tracking REST diagnostic, supervised Canada Post submission/account reconciliation, current policy/customer-contract verification, legal/privacy approval and a measured customer pilot.
 
 ## 14. Local commits created
 

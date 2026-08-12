@@ -20,7 +20,7 @@ const { inspectZipBuffer } = require('../lib/zip-safety');
     claimDb.upsertShipment(sourceDb, { trackingNumber: 'SYNTHETIC000001', classification: 'AUTO_ELIGIBLE' });
 
     const destination = path.join(root, 'backup.cpcrbackup');
-    await encryptedBackup.createEncryptedBackup({ dbPath: sourceDb, dataDir: sourceData, config: { dryRunDefault: true }, destination, appVersion: 'test', password: backupPassphrase });
+    await encryptedBackup.createEncryptedBackup({ dbPath: sourceDb, dataDir: sourceData, config: { locale: 'en-CA' }, destination, appVersion: 'test', password: backupPassphrase });
     assert.ok(encryptedBackup.isEncryptedBackup(destination));
     assert.ok(!fs.readFileSync(destination).includes(Buffer.from('SQLite format 3')));
 

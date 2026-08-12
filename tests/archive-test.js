@@ -31,7 +31,7 @@ const archiveTools = require('../lib/archive-tools');
     await archiveTools.createBackup({
       dbPath: sourceDb,
       dataDir: sourceData,
-      config: { webUsername: 'user@example.com', claimStreetNumber: '123', dryRunDefault: true },
+      config: { webUsername: 'user@example.com', claimStreetNumber: '123', locale: 'en-CA' },
       destination: backupPath,
       appVersion: '0.3.2'
     });
@@ -55,7 +55,7 @@ const archiveTools = require('../lib/archive-tools');
     });
     assert.strictEqual(restored.ok, true);
     assert.ok(restored.restoredDataFiles >= 3);
-    assert.strictEqual(restoredConfig.dryRunDefault, true);
+    assert.strictEqual(Object.hasOwn(restoredConfig, 'dryRunDefault'), false);
     assert.ok(fs.existsSync(path.join(restoreData, path.basename(screenshot))));
     const restoredHistory = claimDb.listClaimHistory(restoreDb, { limit: 10 });
     assert.strictEqual(restoredHistory.length, 1);

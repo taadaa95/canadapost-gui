@@ -7,7 +7,7 @@ const { assertLocaleCompleteness, loadLocale, normalizeLocale, translate, interp
 
 const root = path.resolve(__dirname, '..');
 const keys = assertLocaleCompleteness();
-assert.ok(keys.length >= 600, 'the complete interface localization catalogue must be present');
+assert.ok(keys.length >= 570, 'the complete interface localization catalogue must be present');
 assert.strictEqual(normalizeLocale('fr'), 'fr-CA');
 assert.strictEqual(normalizeLocale('en-US'), 'en-CA');
 const french = loadLocale('fr-CA');
@@ -39,7 +39,7 @@ assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].so
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
-assert(localizedAttributes.length >= 240, 'major interface text and accessibility attributes must use declarative localization');
+assert(localizedAttributes.length >= 210, 'major interface text and accessibility attributes must use declarative localization');
 for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
 
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
@@ -51,7 +51,6 @@ assert.deepStrictEqual([...new Set(visibleTextNodes)].sort(), [...intentionalTem
 const rendererSource = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
 const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
 const updaterSource = fs.readFileSync(path.join(root, 'lib', 'github-release-updater.js'), 'utf8');
-const nativeAuthorizationSource = fs.readFileSync(path.join(root, 'lib', 'live-submission-authorization.js'), 'utf8');
 for (const forbidden of [
   '.textContent = \'No claim results yet.\'',
   '.textContent = \'View evidence\'',
@@ -70,19 +69,16 @@ for (const forbidden of [
   "buttons: ['Open data folder', 'Copy diagnostic', 'Exit']"
 ]) assert(!mainSource.includes(forbidden), `native dialog still hard-codes English: ${forbidden}`);
 for (const forbidden of [
-  "title: 'Check for updates'", "title: 'No update available'", "title: 'Update available'",
-  "title: 'Final live-submission confirmation'", "buttons: ['Cancel'"
-]) assert(!`${updaterSource}\n${nativeAuthorizationSource}`.includes(forbidden), `native module still hard-codes English: ${forbidden}`);
+  "title: 'Check for updates'", "title: 'No update available'", "title: 'Update available'"
+]) assert(!updaterSource.includes(forbidden), `native module still hard-codes English: ${forbidden}`);
 
 const staticCodeKeys = new Set();
-for (const source of [rendererSource, mainSource, updaterSource, nativeAuthorizationSource]) {
+for (const source of [rendererSource, mainSource, updaterSource]) {
   for (const match of source.matchAll(/(?:tr|localizedText)\(\s*['"]([^'"]+)['"]/g)) staticCodeKeys.add(match[1]);
 }
 for (const key of staticCodeKeys) assert(Object.hasOwn(english, key), `code localization key is missing: ${key}`);
 
 for (const key of [
-  'dialog.liveSubmit.title', 'dialog.liveSubmit.message', 'dialog.liveSubmit.canaryMessage',
-  'dialog.liveSubmit.detail', 'dialog.liveSubmit.action', 'dialog.liveSubmit.canaryAction',
   'update.check', 'update.packagedOnly', 'update.none.title', 'update.none.message',
   'update.available.title', 'update.available.message', 'update.available.downloadInstall'
 ]) {
@@ -91,10 +87,9 @@ for (const key of [
 }
 
 const observedEnglish = [
-  'Run Step 1 — Import EST History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
+  'Run Step 1 — Import Shipment History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
   'Test API connection with one shipment', 'Export sanitized response structure', 'Discard incomplete Step 2 run',
-  'Use built-in browser inside the app', 'Stop After Current Item',
-  'Check Browser Session', 'Results & Evidence — click any row for details'
+  'Stop After Current Item', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {
   assert(Object.values(english).includes(text), `English catalogue is missing reviewed copy: ${text}`);

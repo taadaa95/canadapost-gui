@@ -9,7 +9,7 @@
     { id: 'api', readiness: ['apiCredentials'], blocking: true },
     { id: 'diagnostic', readiness: ['apiDiagnostic'], blocking: true },
     { id: 'sender', readiness: ['customerNumber', 'senderInformation', 'contactInformation'], blocking: true },
-    { id: 'dryRun', readiness: ['browserAvailable', 'policyAvailable', 'safetyAcknowledged'], blocking: true },
+    { id: 'submission', readiness: ['browserAvailable', 'policyAvailable', 'safetyAcknowledged'], blocking: true },
     { id: 'external', readiness: [], blocking: false }
   ]);
 
