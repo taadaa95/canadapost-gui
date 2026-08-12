@@ -73,6 +73,19 @@ class SyntheticChild extends EventEmitter {
     assert.match(builder, /hardenedRuntime: true/);
     assert.match(builder, /notarize: true/);
     assert.match(builder, /mergeASARs: true/);
+    const legacyBraceExpansion = require(path.join(
+      __dirname,
+      '..',
+      'node_modules',
+      '@electron',
+      'universal',
+      'node_modules',
+      '@electron',
+      'asar',
+      'node_modules',
+      'brace-expansion'
+    ));
+    assert.strictEqual(typeof legacyBraceExpansion, 'function', 'universal ASAR merge requires the legacy callable API');
     process.stdout.write('macOS universal packaging, paths, worker runtime and updater contracts passed.\n');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

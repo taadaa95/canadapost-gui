@@ -24,9 +24,9 @@
     "release:guard": "node scripts/release-guard.js",
     "release:safe": "node scripts/build-safe-release.js",
     "package:dir": "electron-builder --dir",
-    "package:linux": "electron-builder --linux AppImage --x64",
-    "package:windows": "electron-builder --win nsis --x64",
-    "package:mac": "electron-builder --mac dmg --universal",
+    "package:linux": "electron-builder --linux AppImage --x64 --publish never",
+    "package:windows": "electron-builder --win nsis --x64 --publish never",
+    "package:mac": "electron-builder --mac dmg --universal --publish never",
     "package:signed-windows": "electron-builder --config electron-builder.release.yml --win nsis --x64",
     "release:package": "node scripts/stage-release-build.js",
     "package:audit": "node scripts/audit-package.js",
@@ -98,7 +98,10 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "brace-expansion": "5.0.8"
+    "brace-expansion": "5.0.8",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.13"
+    }
   },
   "engines": {
     "node": ">=22.5.0"
