@@ -145,19 +145,22 @@ jobs:
       - run: npm run release:finalize
       - run: npm run release:validate
       - run: npm run release:provenance
-      - name: Create private Linux transfer release
+      - name: Create temporary Linux transfer branch
         if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           tag="ci-transfer-linux-${{ github.run_id }}"
-          gh release create "$tag" --draft --target "$RELEASE_SOURCE_COMMIT" --title "CI transfer $tag" --notes "Temporary private transfer for manual validation."
-          gh release upload "$tag" \
+          node scripts/ci-transfer.js pack .ci-transfer \
             dist/packages/Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage \
             dist/release-metadata/SHA256SUMS.txt \
             dist/release-metadata/releases/v0.4.1.json \
             dist/release-metadata/package-size-linux.json \
             dist/release-metadata/release-provenance-linux.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -c "$tag"
+          git add -f .ci-transfer
+          git commit -m "ci: temporary Linux artifact transfer"
+          git push origin "HEAD:refs/heads/$tag"
 
   package-windows:
     name: Windows package
@@ -192,20 +195,23 @@ jobs:
       - run: npm run release:finalize
       - run: npm run release:validate
       - run: npm run release:provenance
-      - name: Create private Windows transfer release
+      - name: Create temporary Windows transfer branch
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "ci-transfer-windows-${{ github.run_id }}"
-          gh release create $tag --draft --target $env:RELEASE_SOURCE_COMMIT --title "CI transfer $tag" --notes "Temporary private transfer for manual validation."
-          gh release upload $tag `
+          node scripts/ci-transfer.js pack .ci-transfer `
             "dist/packages/Canada.Post.Claim.Runner-0.4.1-win-x64.exe" `
             "dist/release-metadata/SHA256SUMS.txt" `
             "dist/release-metadata/releases/v0.4.1.json" `
             "dist/release-metadata/package-size-windows.json" `
             "dist/release-metadata/release-provenance-windows.json"
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -c $tag
+          git add -f .ci-transfer
+          git commit -m "ci: temporary Windows artifact transfer"
+          git push origin "HEAD:refs/heads/$tag"
 
   package-macos:
     name: macOS universal package and content audit
@@ -294,21 +300,24 @@ jobs:
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
           spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
-      - name: Create private macOS transfer release
+      - name: Create temporary macOS transfer branch
         if: github.event_name == 'workflow_dispatch'
         env:
-          GH_TOKEN: ${{ github.token }}
           SIGNED_BUILD: ${{ steps.mac_credentials.outputs.signed }}
         run: |
           tag="ci-transfer-macos-${{ github.run_id }}"
-          if [[ "$SIGNED_BUILD" == "true" ]]; then status="signed and notarized candidate"; else status="unsigned TEST artifact — do not publish"; fi
-          gh release create "$tag" --draft --target "$RELEASE_SOURCE_COMMIT" --title "CI transfer $tag" --notes "Temporary private transfer: $status."
-          gh release upload "$tag" \
+          node scripts/ci-transfer.js pack .ci-transfer \
             dist/packages/Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg \
             dist/release-metadata/SHA256SUMS.txt \
             dist/release-metadata/releases/v0.4.1.json \
             dist/release-metadata/package-size-macos.json \
             dist/release-metadata/release-provenance-macos.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -c "$tag"
+          git add -f .ci-transfer
+          git commit -m "ci: temporary macOS artifact transfer ($SIGNED_BUILD)"
+          git push origin "HEAD:refs/heads/$tag"
 
   rebuild-windows-v0-4-0:
     name: Windows v0.4.0 pinned rebuild and transfer
@@ -363,9 +372,14 @@ jobs:
           }
           $record | ConvertTo-Json | Set-Content -Encoding utf8NoBOM windows-v0.4.0-build.json
           Get-Content windows-v0.4.0-build.json
-      - name: Create private draft transfer release
+      - name: Create temporary transfer branch
         shell: pwsh
         run: |
           $tag = "ci-transfer-windows-v0.4.0-${{ github.run_id }}"
-          gh release create $tag --draft --target $env:RELEASE_SOURCE_COMMIT --title "CI transfer $tag" --notes "Temporary private transfer for the pinned Windows v0.4.0 rebuild."
-          gh release upload $tag "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe" windows-v0.4.0-build.json
+          git show "$env:GITHUB_SHA`:scripts/ci-transfer.js" | node - pack .ci-transfer "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe" windows-v0.4.0-build.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -c $tag
+          git add -f .ci-transfer
+          git commit -m "ci: temporary pinned Windows artifact transfer"
+          git push origin "HEAD:refs/heads/$tag"
