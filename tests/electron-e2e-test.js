@@ -96,11 +96,10 @@ const { loadLocale } = require('../lib/i18n');
     assert.strictEqual(await window.locator('#step1WarningsCard').getAttribute('aria-label'), frenchMessages['step1.warningsAria']);
     await window.evaluate(() => window.activateTab('step2'));
     await assertFrenchKeys([
-      'step2.title', 'step2.readsTrackingCsv', 'step2.freshRun', 'step2.candidateExplanation', 'step2.run',
-      'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'action.forceStop', 'step2.statusTitle',
+      'step2.title', 'step2.readsTrackingCsv', 'step2.candidateExplanation', 'step2.run',
+      'action.forceStop', 'step2.statusTitle',
       'runStatus.idle', 'step2.checked', 'step2.lateClaims', 'step2.onTime', 'step2.notDelivered', 'step2.progress',
-      'status.waiting', 'step2.liveLog', 'step2.diagnostic.title', 'step2.diagnostic.message',
-      'step2.diagnostic.rowLabel', 'action.cancel', 'action.continue'
+      'status.waiting', 'step2.liveLog'
     ]);
     assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique des envois');
     assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Exécuter l’étape 2 — Vérifier le suivi');

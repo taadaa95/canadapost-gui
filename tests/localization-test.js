@@ -39,7 +39,7 @@ assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].so
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
-assert(localizedAttributes.length >= 210, 'major interface text and accessibility attributes must use declarative localization');
+assert(localizedAttributes.length >= 200, 'major interface text and accessibility attributes must use declarative localization after removing obsolete controls');
 for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
 
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
@@ -88,7 +88,6 @@ for (const key of [
 
 const observedEnglish = [
   'Run Step 1 — Import Shipment History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
-  'Test API connection with one shipment', 'Export sanitized response structure', 'Discard incomplete Step 2 run',
   'Stop After Current Item', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {
@@ -100,16 +99,26 @@ for (const key of [
   'step1.title', 'step1.createsTrackingCsv', 'step1.fromDate', 'step1.toDate', 'step1.run', 'step1.statusTitle',
   'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups', 'step1.warningsAria', 'step1.warningsInspect',
   'step1.progress', 'step1.liveLog', 'step1.exportStarting', 'step1.exportStartFailed', 'step1.historyImportStarting',
-  'step1.historyStartFailed', 'step1.runFailed', 'step1.runBlocked', 'step2.title', 'step2.readsTrackingCsv', 'step2.freshRun', 'step2.run',
-  'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'step2.statusTitle', 'step2.checked',
+  'step1.historyStartFailed', 'step1.runFailed', 'step1.runBlocked', 'step2.title', 'step2.readsTrackingCsv', 'step2.run',
+  'step2.statusTitle', 'step2.checked',
   'step2.lateClaims', 'step2.onTime', 'step2.notDelivered', 'step2.progress', 'step2.liveLog',
-  'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel', 'step2.comparingAction',
+  'step2.comparingAction',
   'step2.startFailed', 'step2.runFailed', 'step2.runBlocked', 'step2.diagnostic.structureAction', 'step2.diagnostic.connectionAction',
   'step2.diagnostic.confirmedLog'
 ]) {
   assert(Object.hasOwn(french.messages, key), `French workflow localization is missing: ${key}`);
   assert.notStrictEqual(french.messages[key], english[key], `French workflow text remained English: ${key}`);
 }
+for (const key of [
+  'build.signed', 'build.unsigned', 'step2.freshRun', 'step2.testConnection', 'step2.exportStructure',
+  'step2.discardIncomplete', 'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel',
+  'results.zeroNotifications', 'history.reconcile.markSubmitted', 'history.reconcile.markNotSubmitted',
+  'history.reconcile.approveRetry', 'settings.savedEncrypted', 'settings.savedWithoutPassword'
+]) {
+  assert.ok(!Object.hasOwn(english, key), `unused product UI localization key must be removed: ${key}`);
+  assert.ok(!Object.hasOwn(french.messages, key), `unused French product UI localization key must be removed: ${key}`);
+}
+assert.strictEqual(english['settings.savedStatus'], 'Settings saved');
 
 assert.match(rendererSource, /let preferredLocale = '';/, 'renderer must retain the user-selected locale while config refreshes finish');
 assert.match(rendererSource, /const requestVersion = \+\+localeRequestVersion;/, 'locale application must sequence asynchronous requests');

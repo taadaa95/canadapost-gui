@@ -228,7 +228,8 @@ async function main() {
   assert.ok(serializedSources.includes(TRACKING_MODE));
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.match(mainSource, /trackingDiagnosticGateSatisfied/);
-  assert.match(mainSource, /Step 2 is blocked until/);
+  assert.doesNotMatch(mainSource, /Step 2 is blocked until/,
+    'Normal Step 2 must not depend on the removed one-shipment diagnostic controls');
 
   const secretDiagnostic = parseCanadaPostError({ status: 401, headers: new Headers({ 'content-type': 'application/json' }), body: JSON.stringify({ error_description: `${credentials.clientId} ${credentials.clientSecret} synthetic-token-private` }), sensitiveValues: [credentials.clientId, credentials.clientSecret, 'synthetic-token-private'], diagnosticStage: 'token' });
   const safe = JSON.stringify(secretDiagnostic);

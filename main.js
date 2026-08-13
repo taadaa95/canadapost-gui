@@ -78,7 +78,7 @@ function setupReadiness(saved, trackingApiEnvironment) {
 
 function setupCompletionAllowed(readiness) {
   return [
-    'dataDirectory', 'secureStorage', 'accountFields', 'apiCredentials', 'apiDiagnostic',
+    'dataDirectory', 'secureStorage', 'accountFields', 'apiCredentials',
     'customerNumber', 'senderInformation', 'contactInformation', 'browserAvailable',
     'databaseHealth', 'policyAvailable', 'safetyAcknowledged'
   ].every(key => readiness[key] === true);
@@ -2256,9 +2256,6 @@ registerIpcHandler('tracking:run', async (_event, options = {}) => {
   if (diagnosticMode) {
     try { diagnosticRow = validateDiagnosticRow(options.diagnosticRow).row; }
     catch (error) { return { ok: false, error: error.message, code: error.code }; }
-  }
-  if (!diagnosticMode && !trackingDiagnosticGateSatisfied(config, trackingApiEnvironment)) {
-    return { ok: false, error: `Step 2 is blocked until “Test API connection with one shipment” succeeds for credential revision, ${trackingApiEnvironment}, and Tracking API ${TRACKING_API_VERSION}.` };
   }
   writeConfig({
     ...config,

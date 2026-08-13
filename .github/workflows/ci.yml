@@ -150,9 +150,9 @@ jobs:
         run: |
           tag="ci-transfer-linux-${{ github.run_id }}"
           node scripts/ci-transfer.js pack .ci-transfer \
-            dist/packages/Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage \
+            dist/packages/Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage \
             dist/release-metadata/SHA256SUMS.txt \
-            dist/release-metadata/releases/v0.4.1.json \
+            dist/release-metadata/releases/v0.4.2.json \
             dist/release-metadata/package-size-linux.json \
             dist/release-metadata/release-provenance-linux.json
           git config user.name github-actions
@@ -203,9 +203,9 @@ jobs:
         run: |
           $tag = "ci-transfer-windows-${{ github.run_id }}"
           node scripts/ci-transfer.js pack .ci-transfer `
-            "dist/packages/Canada.Post.Claim.Runner-0.4.1-win-x64.exe" `
+            "dist/packages/Canada.Post.Claim.Runner-0.4.2-win-x64.exe" `
             "dist/release-metadata/SHA256SUMS.txt" `
-            "dist/release-metadata/releases/v0.4.1.json" `
+            "dist/release-metadata/releases/v0.4.2.json" `
             "dist/release-metadata/package-size-windows.json" `
             "dist/release-metadata/release-provenance-windows.json"
           git config user.name github-actions
@@ -299,7 +299,7 @@ jobs:
       - name: Notarize, staple, and verify DMG
         if: steps.mac_credentials.outputs.signed == 'true'
         run: |
-          dmg="dist/packages/Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg"
+          dmg="dist/packages/Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg"
           xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
@@ -311,9 +311,9 @@ jobs:
         run: |
           tag="ci-transfer-macos-${{ github.run_id }}"
           node scripts/ci-transfer.js pack .ci-transfer \
-            dist/packages/Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg \
+            dist/packages/Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg \
             dist/release-metadata/SHA256SUMS.txt \
-            dist/release-metadata/releases/v0.4.1.json \
+            dist/release-metadata/releases/v0.4.2.json \
             dist/release-metadata/package-size-macos.json \
             dist/release-metadata/release-provenance-macos.json
           git config user.name github-actions

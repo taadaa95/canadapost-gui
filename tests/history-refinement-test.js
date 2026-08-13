@@ -14,6 +14,7 @@ const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, bypassCSP: true, reducedMotion: 'reduce' });
   const page = await context.newPage();
+  await page.addInitScript(value => { window.__evidencePath = value; }, evidencePath);
   await page.addInitScript(() => {
     window.__historyRecords = Array.from({ length: 500 }, (_, index) => ({
       id: index + 1,
@@ -24,7 +25,7 @@ const { chromium } = require('playwright');
       needsAttention: index === 0,
       confirmationNumber: `CONF-${index}`,
       message: index === 499 ? `Long error ${'message-with-detail/'.repeat(200)}` : (index === 496 ? '' : `Outcome ${index}`),
-      screenshotPath: '',
+      screenshotPath: index === 0 ? window.__evidencePath : '',
       textPath: ''
     }));
     window.__historyCalls = [];
@@ -34,7 +35,7 @@ const { chromium } = require('playwright');
     window.cpApp = new Proxy({
       onEvent: () => {}, onRun: () => {}, onStage: () => {}, onBrowserActivity: () => {},
       loadLocale: async () => ({ ok: true, messages: {}, locale: 'en-CA' }),
-      loadConfig: async () => ({ ok: true, appVersion: '0.4.0-dev.4', setupCompleted: true, databaseIntegrity: { ok: true }, dashboard: {}, reconciliationCount: 0 }),
+      loadConfig: async () => ({ ok: true, appVersion: '0.4.2', setupCompleted: true, databaseIntegrity: { ok: true }, dashboard: {}, reconciliationCount: 0 }),
       listHistory: async options => {
         window.__historyCalls.push({ ...options });
         return { ok: true, items: window.__historyRecords.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 500)) };
@@ -105,17 +106,18 @@ const { chromium } = require('playwright');
     assert.strictEqual(await page.locator('#clearBrowserSession').count(), 0);
     assert.strictEqual(await page.locator('#historyList').getByText('Needs attention', { exact: true }).count(), 1);
     const attentionRow = page.locator('#historyList .history-row:not(.head)').first();
-    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark submitted' }).count(), 1);
-    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark not submitted' }).count(), 1);
-    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Approve retry' }).count(), 1);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'View evidence' }).count(), 1,
+      'attention records must retain evidence access');
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark submitted' }).count(), 0);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark not submitted' }).count(), 0);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Approve retry' }).count(), 0);
     const ordinaryRow = page.locator('#historyList .history-row:not(.head)').nth(1);
     assert.strictEqual(await ordinaryRow.locator('.history-actions button').count(), 0,
       'ordinary History rows must not expose reconciliation actions');
-    await attentionRow.getByRole('button', { name: 'Approve retry' }).click();
-    await page.waitForFunction(() => window.__mutationCalls.length === 1);
-    assert.deepStrictEqual(await page.evaluate(() => window.__mutationCalls[0]), [
-      'reconcileAttempt', { attemptId: 1, action: 'retry', note: '', confirmationNumber: '' }
-    ]);
+    assert.strictEqual(await page.evaluate(() => window.__historyRecords.length), 500,
+      'History rendering must not delete historical reconciliation records');
+    assert.deepStrictEqual(await page.evaluate(() => window.__mutationCalls), [],
+      'History rendering must not invoke reconciliation mutation IPC');
     assert.deepStrictEqual(fs.readFileSync(evidencePath), evidence, 'History rendering changed an evidence file');
 
     await page.evaluate(async () => {
@@ -129,7 +131,7 @@ const { chromium } = require('playwright');
       assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), count);
     }
 
-    process.stdout.write('Simple Claim History, inline attention actions and 500-record layout tests passed.\n');
+    process.stdout.write('Simple Claim History, evidence-only attention records and 500-record layout tests passed.\n');
   } finally {
     await browser.close();
     fs.rmSync(evidenceRoot, { recursive: true, force: true });

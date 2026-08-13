@@ -1,6 +1,6 @@
 # Canada Post Claim Runner operating guide
 
-This is the operator guide for application version **0.4.1** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.0 supports Linux x64 and Windows x64. Version 0.4.1 adds macOS universal support and remains unpublished until Kris validates the exact platform packages.
+This is the operator guide for application version **0.4.2** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.0 supports Linux x64 and Windows x64. Version 0.4.2 remains unpublished until Kris validates the exact canonical packages.
 
 ## Safety model
 
@@ -12,7 +12,7 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 
 | Item | Current value |
 | --- | --- |
-| Application | `0.4.1` |
+| Application | `0.4.2` |
 | Database schema | `8` |
 | EST parser/schema | `est-import-v5` |
 | Tracking API contract | `1.0.0` |
@@ -20,18 +20,18 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 | Tracking pacing | sequential, `3100 ms` minimum plus `0–100 ms` positive jitter |
 | Tracking test gateway | `https://api-stg.canadapost-postescanada.ca` |
 | Tracking production gateway | `https://api.canadapost-postescanada.ca` |
-| Linux artifact | `Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage` |
-| Windows artifact | `Canada.Post.Claim.Runner-0.4.1-win-x64.exe` |
-| macOS artifact | `Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg` (Intel x64 + Apple Silicon arm64) |
+| Linux artifact | `Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage` |
+| Windows artifact | `Canada.Post.Claim.Runner-0.4.2-win-x64.exe` |
+| macOS artifact | `Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg` (publish only if Developer ID signed and notarized) |
 
 ## Supported workflow
 
 1. Complete first-run setup and review local-data and secure-storage status.
 2. Sign in to Canada Post only in the built-in browser.
 3. Save current Tracking API credentials without sharing or exporting them.
-4. Run the one-shipment diagnostic, then run Steps 1 and 2.
+4. Run Steps 1 and 2. Step 2 automatically performs a fresh tracking run.
 5. Review and select the actionable Step 3 queue.
-6. Resolve any **Needs attention** record directly in Claim History before retrying it.
+6. Review retained status and evidence for any **Needs attention** record; unresolved records remain protected from automatic retry.
 7. Select the intended candidates, submit them, and supervise CAPTCHA or manual verification in the built-in browser.
 
 Never use a production account during automated testing. Automated browser suites use only the synthetic loopback mock portal.

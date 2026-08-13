@@ -64,9 +64,9 @@ class SyntheticChild extends EventEmitter {
     assert.strictEqual(spawnCall.options.env.APP_ROOT, path.join(layout.resourcesPath, 'app.asar.unpacked'));
     assert.strictEqual(spawnCall.options.detached, true);
 
-    assert.strictEqual(updater.expectedArtifactName('0.4.1', 'darwin', 'x64'), 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
-    assert.strictEqual(updater.expectedArtifactName('0.4.1', 'darwin', 'arm64'), 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
-    assert.strictEqual(expectedBinaryName({ version: '0.4.1', platform: 'macos' }), 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
+    assert.strictEqual(updater.expectedArtifactName('0.4.2', 'darwin', 'x64'), 'Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg');
+    assert.strictEqual(updater.expectedArtifactName('0.4.2', 'darwin', 'arm64'), 'Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg');
+    assert.strictEqual(expectedBinaryName({ version: '0.4.2', platform: 'macos' }), 'Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg');
 
     const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
     assert.match(builder, /mac:[\s\S]*target: dmg[\s\S]*arch: \[universal\]/);

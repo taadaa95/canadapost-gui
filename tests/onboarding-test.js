@@ -16,10 +16,12 @@ assert.strictEqual(incomplete.ready, false);
 assert.ok(incomplete.blockingCount > 0);
 const complete = onboarding.readinessSummary({
   dataDirectory: true, databaseHealth: true, secureStorage: true, accountFields: true,
-  apiCredentials: true, apiDiagnostic: true, customerNumber: true, senderInformation: true, contactInformation: true,
+  apiCredentials: true, customerNumber: true, senderInformation: true, contactInformation: true,
   browserAvailable: true, policyAvailable: true, safetyAcknowledged: true
 });
 assert.strictEqual(complete.ready, true);
+assert.strictEqual(complete.steps.some(step => step.id === 'diagnostic'), false,
+  'Removed normal-user API diagnostics must not block onboarding');
 assert.strictEqual(onboarding.readinessSummary({ ...Object.fromEntries(complete.steps.flatMap(step => step.readiness).map(key => [key, true])), safetyAcknowledged: false }).ready, false);
 assert.strictEqual(complete.steps.find(step => step.id === 'external').ready, null);
 

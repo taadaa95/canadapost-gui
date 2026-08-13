@@ -1364,18 +1364,9 @@ main.tabbed-main {
 }
 
 .step2-fields {
-  grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
 }
-
-.step-checks {
-  background: var(--field);
-  border: 1px solid var(--line);
-  padding: 8px;
-  min-height: 42px;
-}
-
-.step-checks label { margin: 0; }
 
 .step-copy-box {
   background: var(--field);
@@ -2022,7 +2013,6 @@ main.tabbed-main {
   line-height: 1.5;
 }
 
-.step-checks,
 .step-copy-box,
 .current-action,
 .browser-session-status,
@@ -3163,7 +3153,7 @@ main.tabbed-main > .app-shell,
 }
 
 #step2 .step-actions {
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(140px, 190px) !important;
+  grid-template-columns: minmax(220px, 1fr) minmax(140px, 190px) !important;
 }
 
 #step3 .step3-log-card {

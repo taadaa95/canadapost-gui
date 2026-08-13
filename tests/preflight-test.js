@@ -64,6 +64,17 @@ const currentStep2 = buildPreflightReport({
 });
 assert.strictEqual(currentStep2.ready, false);
 assert.strictEqual(currentStep2.checks.find(item => item.id === 'tracking-api-environment').ok, false);
+assert.strictEqual(currentStep2.checks.some(item => item.id === 'tracking-api-diagnostic-gate'), false,
+  'Removed normal-user diagnostics must not block Step 2 preflight');
+
+const currentStep2WithoutDiagnostic = buildPreflightReport({
+  scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },
+  apiCredentialsAvailable: true,
+  apiCredentialMetadata: { selectedEnvironment: 'test', credentialEnvironment: 'test', apiVersion: TRACKING_API_VERSION },
+  trackingDiagnosticGateSatisfied: false, trackingCsvAvailable: true, nodeRuntimeAvailable: true
+});
+assert.strictEqual(currentStep2WithoutDiagnostic.ready, true,
+  'Normal Step 2 must remain runnable without the removed diagnostic UI');
 
 let gate = diagnosticGate.invalidate({}, { newRevision: true, revisionFactory: () => 'revision-one' });
 assert.strictEqual(diagnosticGate.isSatisfied(gate, 'test'), false);

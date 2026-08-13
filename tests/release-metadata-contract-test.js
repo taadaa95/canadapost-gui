@@ -12,7 +12,7 @@ const {
   validateReleaseMetadata
 } = require('../scripts/finalize-artifacts');
 
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 const SOURCE_SHA = 'a'.repeat(40);
 
 function primary(platform) {
@@ -97,8 +97,8 @@ assertFinalizeFailure('linux', [], /found 0/i);
 assertFinalizeFailure('linux', [{ name: 'Canada.Post.Claim.Runner-0.4.0-linux-x86_64-beta.AppImage' }], /filename mismatch/i);
 assertFinalizeFailure('linux', [{ name: 'Canada.Post.Claim.Runner-0.4.0-beta.1-linux-x86_64.AppImage' }], /filename mismatch/i);
 assertFinalizeFailure('windows', [{ name: 'Canada.Post.Claim.Runner-0.4.0-win-arm64.exe' }], /filename mismatch/i);
-assertFinalizeFailure('macos', [{ name: 'Canada.Post.Claim.Runner-0.4.1-mac-arm64.dmg' }], /filename mismatch/i);
-assert.throws(() => expectedBinaryName({ version: '0.4.1-beta.1', platform: 'linux' }), /stable semantic/i);
+assertFinalizeFailure('macos', [{ name: 'Canada.Post.Claim.Runner-0.4.2-mac-arm64.dmg' }], /filename mismatch/i);
+assert.throws(() => expectedBinaryName({ version: '0.4.2-beta.1', platform: 'linux' }), /stable semantic/i);
 
 fixture('linux', [primary('linux')], context => {
   finalize(context);

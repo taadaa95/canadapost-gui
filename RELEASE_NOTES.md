@@ -1,6 +1,15 @@
-# Historical release notes
+# Release notes
 
-Entries below preserve earlier development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for stable 0.4.0.
+## Canada Post Claim Runner 0.4.2 — pending physical package validation
+
+- Simplifies Step 2 by removing advanced diagnostic and incomplete-run recovery controls from the normal workflow. Normal Step 2 remains an automatic fresh tracking run and no longer requires the diagnostic gate.
+- Simplifies Claim History by removing **Mark submitted**, **Mark not submitted**, and **Approve retry**. Evidence, historical statuses, reconciliation records, and audit data remain available.
+- Shows the concise **Settings saved** confirmation after a successful settings save without changing credential encryption or storage behavior.
+- Removes the visible unsigned-development-build badge while retaining release signing and safety infrastructure.
+- Corrects Results notifications: zero-state badges are hidden, off-tab results increment the unread count, opening Results clears unread state, and zero retained results no longer show **0 notifications**.
+- Retains database schema version 8.
+
+Entries below preserve earlier release and development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for the current 0.4.2 candidate.
 
 ## Canada Post Claim Runner 0.4.1 — pending publication
 

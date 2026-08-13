@@ -16,7 +16,7 @@
     </div>
     <div class="topbar">
       <div>
-        <h1 id="appTitle" data-i18n="app.title"></h1><span id="buildTrustStatus" class="pill warn" data-i18n="build.unsigned"></span>
+        <h1 id="appTitle" data-i18n="app.title"></h1>
         <div id="appSubtitle" class="subtitle" data-i18n="app.subtitle"></div>
       </div>
       <div class="theme-control">
@@ -50,7 +50,7 @@
         <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step2.title"></span><span class="step-tab-detail" data-i18n="nav.step2.detail"></span></button>
         <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step3.title"></span><span class="step-tab-detail" data-i18n="nav.step3.detail"></span></button>
         <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.history.title"></span><span class="step-tab-detail" data-i18n="nav.history.detail"></span></button>
-        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.results.title"></span><span class="step-tab-detail" data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria"></span></button>
+        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.results.title"></span><span class="step-tab-detail" data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria" aria-hidden="true" hidden></span></button>
       </div>
 
       <section id="settingsTab" class="tab-panel settings-panel active" role="tabpanel" aria-labelledby="tabSettings">
@@ -103,7 +103,6 @@
               <div data-i18n="settings.api.defaultsNote"></div>
             </details>
             <div id="trackingApiCredentialMetadata" class="settings-note" data-i18n="settings.api.metadataPending"></div>
-            <div id="trackingDiagnosticGate" class="settings-note" data-i18n="settings.api.diagnosticGate"></div>
             <div class="settings-note" data-i18n="settings.api.accessNote"></div>
             <button id="clearTrackingApiCredentials" class="warning" type="button" data-i18n="settings.api.clear"></button>
           </div>
@@ -251,16 +250,10 @@
             <span class="pill" data-i18n="step2.readsTrackingCsv"></span>
           </div>
           <div class="step-fields step2-fields">
-            <div class="check-row step-checks">
-              <label><input id="freshTracking" type="checkbox" checked /> <span data-i18n="step2.freshRun"></span></label>
-            </div>
             <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
           </div>
           <div class="step-actions">
             <button id="runTrackingOnly" class="success" data-i18n="step2.run"></button>
-            <button id="testTrackingConnection" class="secondary" type="button" data-i18n="step2.testConnection"></button>
-            <button id="exportTrackingStructure" class="secondary" type="button" data-i18n="step2.exportStructure"></button>
-            <button id="discardIncompleteTracking" class="warning" type="button" data-i18n="step2.discardIncomplete"></button>
             <button id="forceStopStep2" class="danger" data-force-stop="step2" data-i18n="action.forceStop"></button>
           </div>
         </div>
@@ -392,7 +385,7 @@
       <section id="resultsTab" class="tab-panel results-panel" role="tabpanel" aria-labelledby="tabResults">
         <div class="step-title-row">
           <h2 data-i18n="results.title"></h2>
-          <span id="notificationsCountPill" class="pill" data-i18n="results.zeroNotifications"></span>
+          <span id="notificationsCountPill" class="pill hidden" aria-hidden="true" hidden></span>
         </div>
 
         <div id="opsListScreen" class="operations-grid">
@@ -442,16 +435,6 @@
       </section>
     </section>
   </main>
-
-  <div id="trackingDiagnosticModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card modal-card-compact" role="dialog" aria-modal="true" aria-labelledby="trackingDiagnosticTitle">
-      <div class="modal-head"><h2 id="trackingDiagnosticTitle" data-i18n="step2.diagnostic.title"></h2></div>
-      <p id="trackingDiagnosticMessage" data-i18n="step2.diagnostic.message"></p>
-      <div class="field"><label id="trackingDiagnosticRowLabel" for="trackingDiagnosticRow" data-i18n="step2.diagnostic.rowLabel"></label><input id="trackingDiagnosticRow" type="number" min="1" step="1" value="1" inputmode="numeric" /></div>
-      <div id="trackingDiagnosticError" class="modal-warning hidden" role="alert"></div>
-      <div class="modal-actions"><button id="cancelTrackingDiagnostic" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmTrackingDiagnostic" class="success" type="button" data-i18n="action.continue"></button></div>
-    </div>
-  </div>
 
   <div id="privacyDataModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card privacy-modal-card" role="dialog" aria-modal="true" aria-labelledby="privacyDataTitle">

@@ -32,7 +32,7 @@ No custom manifest, release channel, Ed25519 key, or application-specific signat
 
 ## Publishing a stable update
 
-1. Set `package.json` to the next normal semantic version, such as `0.4.1`.
+1. Set `package.json` to the intended normal semantic release version.
 2. Run the complete automated suite and build from the reviewed clean source commit.
 3. Verify `dist/release-metadata/SHA256SUMS.txt`, internal provenance, and `releases/v<version>.json`.
 4. Complete manual validation on every exact AppImage, Windows installer, and DMG that will be uploaded.
@@ -48,11 +48,11 @@ Stable 0.4.0 publishes Linux x64 and Windows x64 binaries, their legacy Dev 10 c
 - `package-manifest-windows.json`
 - `SHA256SUMS.txt`
 
-Version 0.4.1 must not be published until Kris approves the exact three-platform set:
+Version 0.4.2 must not be published until Kris approves the exact packages intended for publication:
 
-- `Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage`
-- `Canada.Post.Claim.Runner-0.4.1-win-x64.exe`
-- `Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg`
+- `Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage`
+- `Canada.Post.Claim.Runner-0.4.2-win-x64.exe`
+- `Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg` only if Developer ID signed and notarized
 
 SBOM, licence inventory, provenance, and package-audit reports remain internal metadata rather than public download clutter.
 

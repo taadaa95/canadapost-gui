@@ -485,7 +485,6 @@ Object.assign(state, {
   passwordStored: false,
   trackingApiCredentialsStored: false,
   trackingApiEnvironment: 'test',
-  trackingDiagnosticGateSatisfied: false,
   trackingDiagnosticMode: false,
   trackingTokenLogged: false,
   trackingApiVersion: '1.0.0',
@@ -619,21 +618,33 @@ function updateNotificationIndicator() {
   const badge = $('notificationsBadge');
   const pill = $('notificationsCountPill');
   const tab = $('tabResults');
+  const showUnread = unreadCount > 0 && activeTabId !== 'resultsTab';
+  const showTotal = totalCount > 0;
 
   if (badge) {
-    badge.textContent = String(unreadCount);
-    badge.classList.toggle('hidden', unreadCount === 0 || activeTabId === 'resultsTab');
-    badge.classList.toggle('flash', unreadCount > 0 && activeTabId !== 'resultsTab');
+    badge.textContent = showUnread ? String(unreadCount) : '';
+    badge.hidden = !showUnread;
+    badge.setAttribute('aria-hidden', showUnread ? 'false' : 'true');
+    badge.classList.toggle('hidden', !showUnread);
+    badge.classList.toggle('flash', showUnread);
   }
 
   if (tab) {
-    tab.classList.toggle('has-notifications', unreadCount > 0 && activeTabId !== 'resultsTab');
-    tab.classList.toggle('flash-tab', unreadCount > 0 && activeTabId !== 'resultsTab');
+    tab.classList.toggle('has-notifications', showUnread);
+    tab.classList.toggle('flash-tab', showUnread);
   }
 
   if (pill) {
-    setLocalizedText(pill, totalCount === 1 ? 'results.oneNotification' : 'results.notificationCount', { count: totalCount }, totalCount === 1 ? '1 notification' : '{count} notifications');
-    pill.className = `pill ${totalCount > 0 ? 'warn inline-count' : 'inline-count'}`.trim();
+    if (showTotal) {
+      setLocalizedText(pill, totalCount === 1 ? 'results.oneNotification' : 'results.notificationCount', { count: totalCount }, totalCount === 1 ? '1 notification' : '{count} notifications');
+    } else {
+      delete pill.dataset.i18nCurrent;
+      delete pill.dataset.i18nValues;
+      pill.textContent = '';
+    }
+    pill.hidden = !showTotal;
+    pill.setAttribute('aria-hidden', showTotal ? 'false' : 'true');
+    pill.className = `pill ${showTotal ? 'warn inline-count' : 'hidden'}`.trim();
   }
 }
 
@@ -1851,39 +1862,10 @@ function renderHistory(items = []) {
       });
       actions.appendChild(button);
     }
-    if (item.needsAttention) {
-      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markSubmitted', 'Mark submitted'), 'submitted', 'success'));
-      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.markNotSubmitted', 'Mark not submitted'), 'not_submitted', 'warning'));
-      actions.appendChild(reconciliationActionButton(item, tr('history.reconcile.approveRetry', 'Approve retry'), 'retry', 'secondary'));
-    }
     if (actions.childElementCount) messageCell.appendChild(actions);
     row.appendChild(messageCell);
     root.appendChild(row);
   }
-}
-
-function reconciliationActionButton(item, label, action, className = 'secondary') {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = className;
-  button.textContent = label;
-  button.addEventListener('click', async () => {
-    let confirmationNumber = '';
-    if (action === 'submitted') {
-      const confirmation = window.prompt(trf('history.reconcile.confirmationPrompt', { tracking: item.trackingNumber }, 'Confirmation or ticket number for {tracking} (optional):'), item.confirmationNumber || '');
-      if (confirmation === null) return;
-      confirmationNumber = confirmation.trim();
-    }
-    const noteValue = window.prompt(trf('history.reconcile.notePrompt', { tracking: item.trackingNumber }, 'Optional reconciliation note for {tracking}:'), '');
-    if (noteValue === null) return;
-    const result = await window.cpApp.reconcileAttempt({ attemptId: item.id, action, note: noteValue.trim(), confirmationNumber });
-    if (!result.ok) {
-      window.alert(result.error || tr('history.reconcile.updateFailed', 'Could not update reconciliation state.'));
-      return;
-    }
-    await refreshHistory();
-  });
-  return button;
 }
 
 async function refreshHistory() {
@@ -2181,17 +2163,15 @@ async function saveUserSettings(showLog = true) {
   if (res.ok) {
     state.passwordStored = !!res.passwordStored;
     state.trackingApiCredentialsStored = !!res.trackingApiCredentialsStored;
-    state.trackingDiagnosticGateSatisfied = !!res.trackingDiagnosticGateSatisfied;
     const status = $('settingsStatus');
     if (status) {
-      status.textContent = res.warning || (state.passwordStored ? tr('settings.savedEncrypted', 'Saved with encrypted password') : tr('settings.savedWithoutPassword', 'Saved without password'));
-      status.className = res.warning ? 'pill warn' : 'pill good';
+      setLocalizedText(status, 'settings.savedStatus', {}, 'Settings saved');
+      status.className = 'pill good';
     }
     if ($('webPassword')) $('webPassword').value = '';
     if ($('trackingClientId')) $('trackingClientId').value = '';
     if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
     if ($('trackingApiCredentialMetadata') && res.trackingApiCredentialMetadata) renderTrackingApiCredentialMetadata(res.trackingApiCredentialMetadata);
-    renderTrackingDiagnosticGate();
     if (showLog) log(res.warning || tr('settings.saved', 'User settings saved.'), res.warning ? 'log-warning' : '', 'step1');
   }
   return res;
@@ -2203,9 +2183,8 @@ async function clearTrackingApiCredentials() {
   const result = await window.cpApp.clearTrackingApiCredentials({ confirmed: true });
   if (!result.ok) return window.alert(result.error || tr('tracking.credentials.clearFailed', 'Could not clear Tracking API credentials.'));
   state.trackingApiCredentialsStored = false;
-  state.trackingDiagnosticGateSatisfied = false;
   await refreshConfig();
-  window.alert(tr('tracking.credentials.clearComplete', 'Tracking API credentials and the diagnostic gate were cleared. Website credentials were not changed.'));
+  window.alert(tr('tracking.credentials.clearComplete', 'Tracking API credentials were cleared. Website credentials were not changed.'));
 }
 
 function buildEstHistoryOptions() {
@@ -2239,7 +2218,7 @@ function buildHistoryOptions() {
 
 function buildTrackingOnlyOptions() {
   return {
-    fresh: $('freshTracking') ? $('freshTracking').checked : true,
+    fresh: true,
     trackingApiEnvironment: $('trackingApiEnvironment')?.value || state.trackingApiEnvironment || 'test',
     trackingRequestDelayMs: Number.parseInt(getFieldValue('trackingRequestDelayMs') || '3100', 10),
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
@@ -2258,15 +2237,6 @@ function renderTrackingApiCredentialMetadata(metadata = {}) {
     credentialEnvironment: metadata.credentialEnvironment || tr('common.unknown', 'unknown'),
     scope: metadata.scope || 'merchant'
   }, 'Tracking API {version} — client ID: {clientId}; client secret: {clientSecret}; selected environment: {selectedEnvironment}; credential environment: {credentialEnvironment}; scope: {scope}. No lengths, values, hashes, or token metadata are displayed.');
-}
-
-function renderTrackingDiagnosticGate() {
-  const element = $('trackingDiagnosticGate');
-  if (element) element.textContent = trf(state.trackingDiagnosticGateSatisfied ? 'settings.api.gatePassed' : 'settings.api.gateRequired', {
-    environment: state.trackingApiEnvironment,
-    version: state.trackingApiVersion
-  });
-  if ($('runTrackingOnly')) $('runTrackingOnly').disabled = !state.trackingDiagnosticGateSatisfied;
 }
 
 function selectedClassificationRecords() {
@@ -2479,41 +2449,13 @@ async function startTrackingOnly() {
   log(tr('step2.started', 'Tracking check started.'), '', 'step2');
 }
 
-let trackingDiagnosticResolver = null;
-
-function closeTrackingDiagnosticModal(row = null) {
-  $('trackingDiagnosticModal')?.classList.add('hidden');
-  $('trackingDiagnosticModal')?.setAttribute('aria-hidden', 'true');
-  const resolver = trackingDiagnosticResolver;
-  trackingDiagnosticResolver = null;
-  resolver?.(row);
-}
-
-function confirmTrackingDiagnosticRow() {
-  const raw = String($('trackingDiagnosticRow')?.value || '');
-  const row = Number(raw);
-  const error = $('trackingDiagnosticError');
-  if (!Number.isSafeInteger(row) || row < 1) {
-    if (error) { error.textContent = tr('step2.diagnostic.invalidRow', 'Choose a valid tracking CSV row.'); error.classList.remove('hidden'); }
-    return;
-  }
-  closeTrackingDiagnosticModal(row);
-}
-
 async function requestTrackingDiagnosticRow() {
-  const modal = $('trackingDiagnosticModal');
-  if (!modal) return null;
   const defaults = await window.cpApp.getTrackingDiagnosticDefaultRow();
   if (!defaults?.ok) {
     window.alert(tr('step2.diagnostic.noUsableRow', 'No usable tracking row is available.'));
     return null;
   }
-  if ($('trackingDiagnosticRow')) $('trackingDiagnosticRow').value = String(defaults.row);
-  $('trackingDiagnosticError')?.classList.add('hidden');
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden', 'false');
-  $('trackingDiagnosticRow')?.focus();
-  return new Promise(resolve => { trackingDiagnosticResolver = resolve; });
+  return defaults.row;
 }
 
 async function runTrackingDiagnostic({ structureExport = false } = {}) {
@@ -2636,7 +2578,6 @@ async function refreshConfig() {
   state.passwordStored = !!cfg.passwordStored;
   state.trackingApiCredentialsStored = !!(cfg.trackingApiCredentialsStored || cfg.hasTrackingApiCredentials);
   state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
-  state.trackingDiagnosticGateSatisfied = !!cfg.trackingDiagnosticGateSatisfied;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
@@ -2651,7 +2592,6 @@ async function refreshConfig() {
   if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
   if ($('trackingApiEnvironment')) $('trackingApiEnvironment').value = state.trackingApiEnvironment;
   renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
-  renderTrackingDiagnosticGate();
   if ($('rememberSettings')) $('rememberSettings').checked = Object.prototype.hasOwnProperty.call(cfg, 'rememberSettings') ? !!cfg.rememberSettings : true;
 
   if ($('historyFrom') && !$('historyFrom').value) $('historyFrom').value = cfg.historyFrom || isoDateFromOffset(-14);
@@ -2678,10 +2618,6 @@ async function refreshConfig() {
   state.evidenceRetentionDays = Math.max(7, Math.min(3650, Number(cfg.evidenceRetentionDays || 90)));
   if ($('evidenceRetentionDays')) $('evidenceRetentionDays').value = String(state.evidenceRetentionDays);
   if ($('appVersion')) $('appVersion').textContent = cfg.appVersion || '';
-  if ($('buildTrustStatus')) {
-    setLocalizedText($('buildTrustStatus'), cfg.signedBuild ? 'build.signed' : 'build.unsigned', {}, cfg.signedBuild ? 'Production-signed build' : 'Unsigned development build');
-    $('buildTrustStatus').className = cfg.signedBuild ? 'pill good' : 'pill warn';
-  }
   const configuredCustomer = cfg.estCustomerNumber || '';
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = configuredCustomer;
   if ($('historyAutoMobo')) $('historyAutoMobo').checked = true;
@@ -2694,7 +2630,7 @@ async function refreshConfig() {
     const webStatus = state.passwordStored
       ? (cfg.secureCredentialStorage ? tr('settings.status.webOsEncrypted') : tr('settings.status.webLocalEncrypted'))
       : tr('settings.status.webNotSaved');
-    const apiStatus = state.trackingApiCredentialsStored ? (state.trackingDiagnosticGateSatisfied ? tr('settings.status.apiReady') : tr('settings.status.apiDiagnostic')) : tr('settings.status.apiMissing');
+    const apiStatus = state.trackingApiCredentialsStored ? tr('settings.status.apiReady') : tr('settings.status.apiMissing');
     status.textContent = trf('settings.status.loaded', { webStatus, apiStatus, backend: cfg.credentialBackend ? ` (${cfg.credentialBackend})` : '' }, 'Loaded / {webStatus} / {apiStatus}{backend}');
     status.className = state.passwordStored
       ? (cfg.secureCredentialStorage ? 'pill good' : 'pill warn')
@@ -2790,9 +2726,6 @@ for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 
   if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
 }
 $('clearStep3BrowserSession')?.addEventListener('click', clearBrowserSession);
-$('cancelTrackingDiagnostic')?.addEventListener('click', () => closeTrackingDiagnosticModal(null));
-$('confirmTrackingDiagnostic')?.addEventListener('click', confirmTrackingDiagnosticRow);
-$('trackingDiagnosticRow')?.addEventListener('keydown', event => { if (event.key === 'Enter') confirmTrackingDiagnosticRow(); });
 $('cancelBackupPassword')?.addEventListener('click', () => closeBackupPasswordModal(''));
 $('confirmBackupPassword')?.addEventListener('click', submitBackupPassword);
 $('backupPassword')?.addEventListener('keydown', event => { if (event.key === 'Enter') submitBackupPassword(); if (event.key === 'Escape') closeBackupPasswordModal(''); });
@@ -2863,7 +2796,6 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (modal.id === 'warningModal') closeStep1Warnings();
     else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
-    else if (modal.id === 'trackingDiagnosticModal') closeTrackingDiagnosticModal(null);
     else if (modal.id === 'privacyDataModal') closePrivacyDataModal();
     event.preventDefault();
     return;
@@ -2925,12 +2857,8 @@ $('importHistory')?.addEventListener('click', async () => {
 });
 
 $('runTrackingOnly')?.addEventListener('click', startTrackingOnly);
-$('testTrackingConnection')?.addEventListener('click', testTrackingConnection);
-$('exportTrackingStructure')?.addEventListener('click', exportTrackingStructure);
-$('discardIncompleteTracking')?.addEventListener('click', discardIncompleteTracking);
 $('clearTrackingApiCredentials')?.addEventListener('click', clearTrackingApiCredentials);
-$('trackingApiEnvironment')?.addEventListener('change', () => { state.trackingApiEnvironment = $('trackingApiEnvironment').value; state.trackingDiagnosticGateSatisfied = false; renderTrackingDiagnosticGate(); });
-for (const id of ['trackingClientId', 'trackingClientSecret']) $(id)?.addEventListener('input', () => { if ($(id).value) { state.trackingDiagnosticGateSatisfied = false; renderTrackingDiagnosticGate(); } });
+$('trackingApiEnvironment')?.addEventListener('change', () => { state.trackingApiEnvironment = $('trackingApiEnvironment').value; });
 $('runSubmitOnly')?.addEventListener('click', startSubmitOnly);
 $('refreshClaimQueue')?.addEventListener('click', refreshClaimQueue);
 $('selectAllClaims')?.addEventListener('click', () => {

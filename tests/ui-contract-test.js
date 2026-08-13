@@ -18,9 +18,8 @@ const requiredIds = [
   'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
   'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'clearStep3BrowserSession', 'setupWizard', 'setupReadinessList', 'setupFinish',
-  'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'trackingDiagnosticGate', 'clearTrackingApiCredentials',
-  'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking',
-  'trackingDiagnosticModal', 'trackingDiagnosticRow', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
+  'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'clearTrackingApiCredentials',
+  'runTrackingOnly', 'forceStopStep2', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
   'selectAllClaims', 'clearClaimSelection', 'manageStoredData', 'privacyDataModal', 'privacyDataTitle', 'privacyTrackingNumbers',
   'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords', 'previewPrivacyData',
   'privacyPreviewCounts', 'privacyDestructiveConfirm', 'privacyTypedPhrase',
@@ -29,7 +28,7 @@ const requiredIds = [
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.1');
+assert.strictEqual(pkg.version, '0.4.2');
 assert.doesNotMatch(`${html}\n${renderer}\n${preload}\n${main}`, /unsigned beta|beta channel|release channel|signing key/i,
   'normal update UI must not expose beta, channel, or signing-key messaging');
 assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
@@ -44,7 +43,7 @@ assert.ok(!renderer.includes("$('reconciliationBadge')"), 'Renderer must not upd
 const historyTabMarkup = html.match(/<button id="tabHistory"[^>]*>([\s\S]*?)<\/button>/)?.[1] || '';
 assert.match(historyTabMarkup, /data-i18n="nav\.history\.title"/);
 assert.match(historyTabMarkup, /data-i18n="nav\.history\.detail"/, 'History tab must contain only its localized normal label');
-assert.ok(/id="tabResults"[^>]*>[\s\S]*?id="notificationsBadge"/.test(html), 'Results notification indicator must remain unchanged');
+assert.ok(/id="tabResults"[^>]*>[\s\S]*?id="notificationsBadge"[^>]*aria-hidden="true"[^>]*hidden/.test(html), 'Results notification indicator must start explicitly hidden');
 assert.ok(/data-tab="historyTab"/.test(html));
 for (const removed of ['dryRun', 'builtinBrowser', 'liveSubmitModal', 'checkStep3BrowserSession', 'claimQueueSearch', 'claimQueueServiceFilter', 'claimQueueUrgencyFilter', 'claimQueueDateFrom', 'claimQueueDateTo']) {
   assert.ok(!html.includes(`id="${removed}"`), `Removed Step 3 control #${removed} must stay absent`);
@@ -65,7 +64,7 @@ assert.ok(!/stdinJson:\s*\{\s*username:\s*webUsername,\s*password:\s*webPassword
 assert.ok(renderer.includes('MAX_VISIBLE_LOG_LINES = 2000'));
 assert.ok(renderer.includes('isLogNearBottom'));
 assert.ok(renderer.includes('function jumpToLatest'));
-assert.ok(renderer.includes('function testTrackingConnection'));
+assert.ok(renderer.includes('function testTrackingConnection'), 'Callable diagnostic support must remain available outside the normal-user UI');
 assert.ok(renderer.includes('function clearTrackingApiCredentials'));
 assert.ok(!renderer.includes('OVERDUE / NOT DELIVERED'), 'Delivered and overdue status text must not use the contradictory legacy label');
 assert.ok(renderer.includes('first qualifying code'), 'Semantic diagnostic must report first-attempt evidence without shipment descriptions');
@@ -73,8 +72,16 @@ assert.ok(main.includes('validatePromotedTrackingSummary'), 'Step 3 authority mu
 assert.match(html, /data-i18n="settings\.api\.clientId"/);
 assert.match(englishLocale['settings.api.clientId'], /Tracking API 2\.0 platform client ID/i);
 assert.doesNotMatch(html, /Legacy Developer Program credentials|Legacy API username|Legacy API password/i);
-assert.match(html, /data-i18n="step2\.diagnostic\.message"/);
-assert.match(englishLocale['step2.diagnostic.message'], /does not modify claim state/i);
+for (const removedId of ['freshTracking', 'testTrackingConnection', 'exportTrackingStructure', 'discardIncompleteTracking', 'trackingDiagnosticModal', 'trackingDiagnosticRow', 'trackingDiagnosticGate']) {
+  assert.ok(!html.includes(`id="${removedId}"`), `Removed Step 2 product control #${removedId} must stay absent`);
+}
+for (const removedKey of ['step2.freshRun', 'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel']) {
+  assert.ok(!html.includes(`data-i18n="${removedKey}"`), `Removed Step 2 product copy ${removedKey} must stay absent`);
+}
+assert.match(html, /id="runTrackingOnly"[^>]*data-i18n="step2\.run"/);
+assert.match(html, /id="forceStopStep2"[^>]*data-force-stop="step2"/);
+assert.match(main, /const diagnosticMode = options\.diagnosticMode === true/);
+assert.match(preload, /tracking:diagnosticDefaultRow/);
 assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Current credential metadata must not disclose secret lengths');
 assert.ok(/scrollbar-gutter:\s*stable both-edges/.test(styles));
 
@@ -110,11 +117,20 @@ assert.doesNotMatch(`${renderer}\n${preload}`, /listReconciliation|listClassific
   'removed History-only preload and renderer APIs must not remain exposed');
 assert.doesNotMatch(main, /registerIpcHandler\('(reconciliation:list|classification:list|shipment:listManual|shipment:manualAdd)'/,
   'removed History-only IPC handlers must not remain exposed');
-assert.match(renderer, /if \(item\.needsAttention\)[\s\S]*?reconciliationActionButton/,
-  'inline History reconciliation actions must be gated by needsAttention');
+assert.doesNotMatch(renderer, /reconciliationActionButton|Mark submitted|Mark not submitted|Approve retry/,
+  'History must not expose reconciliation mutation actions');
+assert.match(renderer, /function renderHistory[\s\S]*?history\.viewEvidence/,
+  'History evidence rendering must remain available');
+assert.match(preload, /reconcileAttempt/);
+assert.match(main, /reconciliation:update/);
 assert.ok(!html.includes('id="step3PreflightModal"'), 'The blocking Step 3 preflight modal must be removed');
 
 assert.ok(!html.includes('aria-label="Workflow summary"'), 'Obsolete workflow summary panel should be removed');
+assert.ok(!html.includes('id="buildTrustStatus"'), 'The visible build-trust badge must be absent');
+assert.ok(!renderer.includes("$('buildTrustStatus')"), 'Renderer must not update the removed build-trust badge');
+assert.ok(!Object.hasOwn(englishLocale, 'build.unsigned'));
+assert.match(html, /id="appTitle"[^>]*data-i18n="app\.title"/);
+assert.match(html, /id="appSubtitle"[^>]*data-i18n="app\.subtitle"/);
 assert.ok(/\.step-tab \.notification-badge\.hidden\s*\{[^}]*display:\s*none/s.test(styles), 'Hidden notification badges must stay hidden');
 assert.doesNotMatch(styles, /\.checkbox-field/, 'Removed Step 3 checkbox-panel styling must not remain');
 assert.ok(/\.field label\s*\{[^}]*padding:\s*0 2px/s.test(styles), 'Standard field labels must remain plain text above their controls');
