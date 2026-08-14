@@ -1113,6 +1113,100 @@ main.tabbed-main > .results-short {
   #forceStop { grid-column: auto; }
 }
 
+/* Shared compact execution controls for Steps 1–3. */
+.step-actions.step-execution-controls,
+.step-actions-3.step-execution-controls {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px !important;
+  height: auto !important;
+}
+
+.step-execution-control {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 108px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 9px 14px !important;
+  font-size: 14px !important;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+#step3 .step-browser-card {
+  grid-template-rows: auto auto 30px minmax(0, 1fr) !important;
+}
+
+.step3-automation-notice {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--info) 55%, var(--line));
+  border-left: 4px solid var(--info);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.step3-automation-notice-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid var(--info);
+  color: var(--info-text);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.step3-automation-notice-icon::before {
+  content: "i";
+}
+
+.step3-automation-notice h3 {
+  margin: 0 0 4px;
+  color: var(--info-text);
+  font-size: 14px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.step3-automation-notice p {
+  margin: 2px 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.step3-automation-notice strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--info-text);
+  font-size: 13px;
+}
+
+.step3-automation-notice.action-required {
+  border-color: var(--warning);
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.step3-automation-notice.action-required h3,
+.step3-automation-notice.action-required strong {
+  color: var(--warning-text);
+}
+
+@media (max-width: 700px) {
+  .step-actions.step-execution-controls,
+  .step-actions-3.step-execution-controls {
+    justify-content: flex-start;
+  }
+}
+
 
 /* Step-tab layout v11 */
 main.tabbed-main {
@@ -2891,21 +2985,6 @@ main.tabbed-main > .app-shell,
   font-size: 15px;
 }
 
-.step3-browser-session-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.advanced-settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
 .step3-action-advisory .blocking-check-list {
   margin-top: 8px;
 }
@@ -3673,4 +3752,20 @@ body.page-scroll-layout .history-panel.active {
   body.page-scroll-layout #step3 .step-actions-3 { grid-column: 1 !important; grid-row: auto !important; }
   #step3 .step-actions-3 { grid-template-columns: minmax(0, 1fr) !important; }
   #step3 .browser-slot { height: 650px !important; }
+}
+
+/* Keep the autonomous-browser notice in the final stacked Step 3 layout. */
+#step3 .step-browser-card {
+  grid-template-rows: auto auto 30px minmax(650px, 75vh) !important;
+}
+
+/* Final cascade guard: responsive Step 3 rules must not stretch run controls. */
+#step1 .step-execution-control,
+#step2 .step-execution-control,
+#step3 .step-execution-control {
+  width: auto !important;
+  min-width: 108px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 9px 14px !important;
 }

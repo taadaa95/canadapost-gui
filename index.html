@@ -7,6 +7,7 @@
   <title data-i18n="app.title"></title>
   <link rel="stylesheet" href="renderer/base.css" />
   <link rel="stylesheet" href="renderer/components.css" />
+  <link rel="stylesheet" href="renderer/setup-assistant.css" />
 </head>
 <body>
   <header>
@@ -35,15 +36,6 @@
 
   <main class="tabbed-main">
     <section class="card app-shell">
-      <div class="setup-head">
-        <div class="file-grid compact-actions">
-          <button id="selectCsv" class="secondary" data-i18n="action.importCsv"></button>
-          <button id="openData" class="secondary" data-i18n="action.dataFolder"></button>
-          <button id="openLogs" class="secondary" data-i18n="action.logs"></button>
-          <button id="fullRefresh" class="warning" data-i18n="action.resetUi"></button>
-        </div>
-      </div>
-
       <div class="step-tabs" role="tablist" data-i18n-aria-label="nav.sectionsAria">
         <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0"><span class="step-tab-title" data-i18n="nav.settings.title"></span><span class="step-tab-detail" data-i18n="nav.settings.detail"></span></button>
         <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step1.title"></span><span class="step-tab-detail" data-i18n="nav.step1.detail"></span></button>
@@ -57,6 +49,14 @@
         <div class="step-title-row">
           <h2 data-i18n="settings.title"></h2>
           <div><button id="resumeSetup" class="secondary hidden" type="button" data-i18n="action.resumeSetup"></button> <span id="settingsStatus" class="pill" data-i18n="settings.notSaved"></span></div>
+        </div>
+
+        <div class="guided-setup-launch">
+          <div>
+            <strong data-i18n="setupAssistant.launch.title"></strong>
+            <p data-i18n="setupAssistant.launch.description"></p>
+          </div>
+          <button id="guidedCanadaPostSetup" class="success" type="button" data-i18n="setupAssistant.launch.button"></button>
         </div>
 
         <div class="settings-grid">
@@ -85,10 +85,6 @@
             <div class="field">
               <label for="trackingClientSecret" data-i18n="settings.api.clientSecret"></label>
               <input id="trackingClientSecret" type="password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" autocomplete="new-password" />
-            </div>
-            <div class="field">
-              <label for="trackingApiEnvironment" data-i18n="settings.api.environment"></label>
-              <select id="trackingApiEnvironment"><option value="test" data-i18n="environment.test"></option><option value="production" data-i18n="environment.production"></option></select>
             </div>
             <details class="settings-note">
               <summary data-i18n="settings.api.advanced"></summary>
@@ -168,17 +164,8 @@
               <input id="claimContactEmail" type="email" data-i18n-placeholder="placeholder.email" />
             </div>
           </div>
-<div class="settings-section wide">
+          <div class="settings-section wide">
             <button id="saveUserSettings" class="success" type="button" data-i18n="settings.save"></button>
-            <details class="settings-note advanced-settings">
-              <summary id="advancedSettingsTitle" data-i18n="settings.advanced"></summary>
-              <div class="advanced-settings-actions">
-                <button id="createBackup" class="secondary" type="button" data-i18n="action.createBackup"></button>
-                <button id="restoreBackup" class="warning" type="button" data-i18n="action.restoreBackup"></button>
-                <button id="manageStoredData" class="secondary" type="button" data-i18n="privacy.manageStoredData"></button>
-                <button id="createDiagnostics" class="secondary" type="button" data-i18n="support.bundle"></button>
-              </div>
-            </details>
             <div class="settings-footer-actions">
               <button id="checkForUpdates" class="secondary" type="button" data-i18n="update.check"></button>
               <div class="app-version"><span data-i18n="app.version"></span> <strong id="appVersion"></strong></div>
@@ -193,29 +180,19 @@
             <h2 data-i18n="step1.title"></h2>
             <span class="pill" data-i18n="step1.createsTrackingCsv"></span>
           </div>
-          <div class="step-fields step1-fields">
-            <div class="field">
-              <label for="estFrom" data-i18n="step1.fromDate"></label>
-              <input id="estFrom" type="date" />
-            </div>
-            <div class="field">
-              <label for="estTo" data-i18n="step1.toDate"></label>
-              <input id="estTo" type="date" />
-            </div>
-          </div>
+          <p class="step-description" data-i18n="step1.rollingWindow"></p>
+          <p class="muted" data-i18n="step1.carryForward"></p>
           <input id="estWorkgroup" type="hidden" value="" />
           <input id="estMobo" type="hidden" value="-2" />
           <input id="estCategoryGroup" type="hidden" value="SHP" />
           <input id="estFileTypes" type="hidden" value="1,2" />
-          <input id="historyFrom" type="hidden" />
-          <input id="historyTo" type="hidden" />
           <input id="historyCustomerNumber" type="hidden" />
           <input id="historyMobo" type="hidden" />
           <input id="historyAutoMobo" type="checkbox" checked hidden />
           <input id="historyIncludeNoManifest" type="checkbox" checked hidden />
-          <div class="step-actions">
-            <button id="importEstHistory" class="success" data-i18n="step1.run"></button>
-            <button id="forceStopStep1" class="danger" data-force-stop="step1" data-i18n="action.forceStop"></button>
+          <div class="step-actions step-execution-controls">
+            <button id="importEstHistory" class="success step-execution-control" data-i18n="step1.run"></button>
+            <button id="forceStopStep1" class="danger step-execution-control" data-force-stop="step1" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
@@ -252,9 +229,9 @@
           <div class="step-fields step2-fields">
             <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
           </div>
-          <div class="step-actions">
-            <button id="runTrackingOnly" class="success" data-i18n="step2.run"></button>
-            <button id="forceStopStep2" class="danger" data-force-stop="step2" data-i18n="action.forceStop"></button>
+          <div class="step-actions step-execution-controls">
+            <button id="runTrackingOnly" class="success step-execution-control" data-i18n="step2.run"></button>
+            <button id="forceStopStep2" class="danger step-execution-control" data-force-stop="step2" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
@@ -289,19 +266,16 @@
             <span class="pill" data-i18n="step3.readsCandidates"></span>
           </div>
           <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
-          <div class="step3-browser-session-row">
-            <button id="clearStep3BrowserSession" class="warning compact-button" type="button" data-i18n="action.clearSession"></button>
-          </div>
           <section id="step3ActionAdvisory" class="step3-action-advisory hidden" aria-labelledby="step3ActionAdvisoryTitle" aria-live="assertive">
             <h3 id="step3ActionAdvisoryTitle" data-i18n="step3.actionIssues.title"></h3>
             <div id="step3ActionIssues" class="blocking-check-list"></div>
             <div id="step3ActionWarningCount" class="modal-summary"></div>
           </section>
           <input id="freshRun" type="checkbox" hidden />
-          <div class="step-actions step-actions-3">
-            <button id="runSubmitOnly" class="success" data-i18n="step3.submitSelected"></button>
-            <button id="stop" class="warning" data-i18n="step3.stopAfterCurrent"></button>
-            <button id="forceStopStep3" class="danger" data-force-stop="step3" data-i18n="action.forceStop"></button>
+          <div class="step-actions step-actions-3 step-execution-controls">
+            <button id="runSubmitOnly" class="success step-execution-control" data-i18n="step3.submitSelected"></button>
+            <button id="stop" class="warning step-execution-control" data-i18n="step3.stopAfterCurrent"></button>
+            <button id="forceStopStep3" class="danger step-execution-control" data-force-stop="step3" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step3-body">
@@ -337,6 +311,15 @@
               <h2 style="margin:0;" data-i18n="step3.browserTitle"></h2>
               <span id="builtinBrowserStatus" class="pill" data-i18n="step3.browser.idleStatus"></span>
             </div>
+            <section id="step3AutomationNotice" class="step3-automation-notice" role="note" aria-labelledby="step3AutomationNoticeTitle">
+              <div class="step3-automation-notice-icon" aria-hidden="true"></div>
+              <div>
+                <h3 id="step3AutomationNoticeTitle" data-i18n="step3.automation.title"></h3>
+                <p data-i18n="step3.automation.description"></p>
+                <p data-i18n="step3.automation.exceptions"></p>
+                <strong id="step3AutomationNoticeStatus" data-i18n="step3.automation.idle"></strong>
+              </div>
+            </section>
             <div id="builtinBrowserActivity" class="browser-activity" aria-live="polite" aria-atomic="true">
               <div class="browser-activity-copy">
                 <span class="browser-activity-dot" aria-hidden="true"></span>
@@ -436,29 +419,6 @@
     </section>
   </main>
 
-  <div id="privacyDataModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card privacy-modal-card" role="dialog" aria-modal="true" aria-labelledby="privacyDataTitle">
-      <div class="modal-head"><div><h2 id="privacyDataTitle" data-i18n="privacy.title"></h2><span id="privacyDataStatus" class="pill" data-i18n="privacy.status.previewRequired"></span></div><button id="closePrivacyDataModal" class="secondary" type="button" data-i18n="action.close"></button></div>
-      <p id="privacyDataIntro" data-i18n="privacy.intro"></p>
-      <div class="privacy-management-grid">
-        <div class="field wide"><label id="privacyTrackingLabel" for="privacyTrackingNumbers" data-i18n="privacy.trackingLabel"></label><textarea id="privacyTrackingNumbers" rows="3"></textarea></div>
-        <div class="field"><label id="privacyDateFromLabel" for="privacyDateFrom" data-i18n="privacy.dateFrom"></label><input id="privacyDateFrom" type="date" /></div>
-        <div class="field"><label id="privacyDateToLabel" for="privacyDateTo" data-i18n="privacy.dateTo"></label><input id="privacyDateTo" type="date" /></div>
-        <label class="wide"><input id="privacyAllRecords" type="checkbox" /> <span id="privacyAllRecordsLabel" data-i18n="privacy.allRecords"></span></label>
-      </div>
-      <button id="previewPrivacyData" class="secondary" type="button" data-i18n="privacy.preview"></button>
-      <div id="privacyPreviewCounts" class="privacy-preview-counts" aria-live="polite"></div>
-      <div id="privacyDeletionControls" class="privacy-management-grid hidden">
-        <label class="wide"><input id="privacyDestructiveConfirm" type="checkbox" /> <span id="privacyDestructiveConfirmLabel" data-i18n="privacy.destructiveConfirm"></span></label>
-        <div class="field wide"><label id="privacyTypedPhraseLabel" for="privacyTypedPhrase" data-i18n="privacy.typedPhraseLabel"></label><input id="privacyTypedPhrase" type="text" autocomplete="off" /></div>
-        <div id="privacyExpectedPhrase" class="modal-warning wide"></div>
-        <label id="privacySecondConfirmWrap" class="wide hidden"><input id="privacySecondConfirm" type="checkbox" /> <span id="privacySecondConfirmLabel" data-i18n="privacy.secondConfirm"></span></label>
-        <button id="deletePrivacyData" class="danger wide" type="button" data-i18n="privacy.delete"></button>
-      </div>
-      <p id="privacyExternalCopiesNotice" data-i18n="privacy.externalCopies"></p>
-    </div>
-  </div>
-
   <div id="warningModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="warningModalTitle">
       <div class="modal-head">
@@ -470,14 +430,116 @@
     </div>
   </div>
 
-  <div id="backupPasswordModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="backupPasswordTitle">
-      <div class="modal-head"><h2 id="backupPasswordTitle" data-i18n="backup.passwordTitle"></h2></div>
-      <p id="backupPasswordMessage" data-i18n="backup.passwordMessage"></p>
-      <div class="field"><label for="backupPassword" data-i18n="backup.password"></label><input id="backupPassword" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
-      <div class="field" id="backupPasswordConfirmField"><label for="backupPasswordConfirm" data-i18n="backup.confirmPassword"></label><input id="backupPasswordConfirm" type="password" minlength="12" maxlength="1024" autocomplete="new-password" /></div>
-      <div id="backupPasswordError" class="modal-warning hidden" role="alert"></div>
-      <div class="modal-actions"><button id="cancelBackupPassword" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmBackupPassword" class="success" type="button" data-i18n="action.continue"></button></div>
+  <div id="setupAssistant" class="setup-assistant hidden" aria-hidden="true" hidden>
+    <div class="setup-assistant-shell" role="dialog" aria-modal="true" aria-labelledby="setupAssistantTitle">
+      <div class="setup-assistant-header">
+        <div>
+          <h2 id="setupAssistantTitle" data-i18n="setupAssistant.title"></h2>
+          <p data-i18n="setupAssistant.subtitle"></p>
+        </div>
+        <div class="setup-assistant-header-actions">
+          <div class="setup-assistant-back-wrap">
+            <button id="setupAssistantBrowserBack" class="secondary" type="button" disabled data-i18n="setupAssistant.browserBack"></button>
+            <span id="setupAssistantBackCallout" class="setup-assistant-header-callout hidden" data-i18n="setupAssistant.callout.goBack"></span>
+          </div>
+          <button id="setupAssistantStartOver" class="secondary" type="button" data-i18n="setupAssistant.startOver"></button>
+          <div class="sound-switch-setting compact">
+            <span data-i18n="settings.guidanceSounds"></span>
+            <button id="setupAssistantGuidanceSounds" class="toggle-switch" type="button" role="switch" aria-checked="true" data-i18n-aria-label="settings.guidanceSounds">
+              <span class="toggle-switch-track" aria-hidden="true"><span class="toggle-switch-thumb"></span></span>
+              <span id="setupAssistantGuidanceSoundsState" class="toggle-switch-state" data-i18n="settings.guidanceSoundsOn"></span>
+            </button>
+          </div>
+          <button id="setupAssistantClose" class="secondary" type="button" data-i18n="setupAssistant.close"></button>
+        </div>
+      </div>
+      <div class="setup-assistant-layout">
+        <nav id="setupAssistantStepsPanel" class="setup-assistant-progress" data-i18n-aria-label="setupAssistant.progressAria" data-native-view-exclusion="true">
+          <ol id="setupAssistantSteps"></ol>
+        </nav>
+        <div class="setup-assistant-browser-area">
+          <div id="setupAssistantBrowserSlot" class="setup-assistant-browser-slot" tabindex="-1" data-native-view-slot="true">
+            <div id="setupAssistantBrowserPlaceholder" class="setup-assistant-browser-placeholder" data-i18n="setupAssistant.browserPreparing"></div>
+          </div>
+          <div id="setupAssistantCompletionSurface" class="setup-assistant-completion-surface hidden" aria-live="polite">
+            <strong data-i18n="setupAssistant.completionSurface.title"></strong>
+            <p data-i18n="setupAssistant.completionSurface.body"></p>
+          </div>
+          <div id="setupAssistantPageStatus" class="setup-assistant-page-status" role="status" aria-live="polite"></div>
+        </div>
+        <aside id="setupAssistantGuidance" class="setup-assistant-guidance" data-native-view-exclusion="true">
+          <p id="setupAssistantStepNumber" class="eyebrow"></p>
+          <h3 id="setupAssistantStepTitle"></h3>
+          <h4 class="setup-assistant-now" data-i18n="setupAssistant.whatToDoNow"></h4>
+          <p id="setupAssistantStepGuidance"></p>
+          <div class="setup-assistant-auto"><strong data-i18n="setupAssistant.whatHappensNext"></strong><span data-i18n="setupAssistant.autoContinue"></span></div>
+          <div id="setupAssistantDetectedState" class="settings-note hidden" role="status" aria-live="polite"></div>
+          <div id="setupAssistantFeedback" class="setup-assistant-feedback hidden" role="status" aria-live="polite"></div>
+          <div id="setupAssistantLocalLoading" class="setup-assistant-local-loading hidden" role="status"><span aria-hidden="true"></span><strong data-i18n="setupAssistant.settling.wait"></strong></div>
+          <div id="setupAssistantVerificationNotice" class="settings-note" data-i18n="setupAssistant.verificationNotice"></div>
+
+          <div id="setupAssistantAccountFields" class="setup-assistant-fields">
+            <div class="field"><label for="setupAssistantWebUsername" data-i18n="settings.website.username"></label><input id="setupAssistantWebUsername" type="text" autocomplete="username" data-i18n-placeholder="settings.website.usernamePlaceholder" /></div>
+            <div class="field"><label for="setupAssistantWebPassword" data-i18n="settings.website.password"></label><input id="setupAssistantWebPassword" type="password" autocomplete="current-password" data-i18n-placeholder="settings.website.passwordPlaceholder" /></div>
+            <div class="settings-note" data-i18n="setupAssistant.passwordPrivacy"></div>
+          </div>
+
+          <div id="setupAssistantCustomerCandidates" class="setup-assistant-candidates hidden" aria-live="polite">
+            <strong id="setupAssistantCustomerCandidateIntro"></strong>
+            <div id="setupAssistantCustomerCandidateList"></div>
+            <button id="setupAssistantCustomerReject" class="secondary" type="button" data-i18n="setupAssistant.customerNumber.reject"></button>
+          </div>
+          <div id="setupAssistantBusinessConfirmed" class="setup-assistant-business-confirmed hidden" aria-live="polite">
+            <strong data-i18n="setupAssistant.businessConfirmed.title"></strong>
+            <span id="setupAssistantConfirmedBusinessName"></span>
+            <span id="setupAssistantConfirmedCustomerNumber"></span>
+          </div>
+          <div id="setupAssistantCustomerFields" class="setup-assistant-fields hidden">
+            <details id="setupAssistantManualCustomer">
+              <summary data-i18n="setupAssistant.customerNumber.manualInstead"></summary>
+              <div class="field"><label for="setupAssistantCustomerNumber" data-i18n="setupAssistant.customerNumber.label"></label><input id="setupAssistantCustomerNumber" type="text" inputmode="numeric" maxlength="10" pattern="[0-9]{1,10}" autocomplete="off" data-i18n-placeholder="placeholder.customerNumber" /></div>
+              <div id="setupAssistantCustomerValidation" class="field-help" role="status"></div>
+            </details>
+          </div>
+
+          <div id="setupAssistantApiFields" class="setup-assistant-fields hidden">
+            <div id="setupAssistantCredentialStatus" class="setup-assistant-feedback hidden" role="status" aria-live="polite"></div>
+            <div id="setupAssistantApiKeyField">
+              <div class="setup-assistant-term-map"><strong data-i18n="setupAssistant.apiKey.term"></strong><span data-i18n="setupAssistant.apiKey.mapping"></span></div>
+              <div id="setupAssistantApiKeyCallout" class="setup-assistant-local-callout hidden" data-i18n="setupAssistant.callout.pasteApiKey"></div>
+              <div class="field"><label for="setupAssistantClientId" data-i18n="setupAssistant.apiKey.label"></label><input id="setupAssistantClientId" type="text" autocomplete="off" data-i18n-placeholder="settings.api.clientIdPlaceholder" /></div>
+            </div>
+            <div id="setupAssistantApiSecretField" class="hidden">
+              <div class="setup-assistant-term-map"><strong data-i18n="setupAssistant.apiSecret.term"></strong><span data-i18n="setupAssistant.apiSecret.mapping"></span></div>
+              <div id="setupAssistantApiSecretCallout" class="setup-assistant-local-callout hidden" data-i18n="setupAssistant.callout.pasteApiSecret"></div>
+              <div class="field"><label for="setupAssistantClientSecret" data-i18n="setupAssistant.apiSecret.label"></label><input id="setupAssistantClientSecret" type="password" autocomplete="new-password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" /></div>
+            </div>
+            <select id="setupAssistantApiEnvironment" class="hidden" aria-hidden="true" tabindex="-1"><option value="production" data-i18n="environment.production"></option></select>
+            <div class="settings-note" data-i18n="setupAssistant.apiSecretPrivacy"></div>
+          </div>
+
+          <div id="setupAssistantFinish" class="setup-assistant-finish hidden">
+            <div id="setupAssistantChecklist" class="setup-assistant-checklist" aria-live="polite"></div>
+            <p data-i18n="setupAssistant.finishPrivacy"></p>
+          </div>
+
+          <div id="setupAssistantFallback" class="setup-assistant-fallback hidden" role="note"></div>
+          <div id="setupAssistantError" class="modal-warning hidden" role="alert"></div>
+          <div id="setupAssistantStartOverConfirm" class="setup-assistant-confirm hidden" role="alertdialog" aria-modal="false" aria-labelledby="setupAssistantStartOverTitle">
+            <strong id="setupAssistantStartOverTitle" data-i18n="setupAssistant.startOverConfirm.title"></strong>
+            <p data-i18n="setupAssistant.startOverConfirm.body"></p>
+            <p data-i18n="setupAssistant.startOverConfirm.remoteNotice"></p>
+            <div><button id="setupAssistantStartOverConfirmButton" class="danger" type="button" data-i18n="setupAssistant.startOver"></button><button id="setupAssistantStartOverCancel" class="secondary" type="button" data-i18n="action.cancel"></button></div>
+          </div>
+          <div class="setup-assistant-actions">
+            <button id="setupAssistantBack" class="secondary" type="button" data-i18n="action.back"></button>
+            <button id="setupAssistantCantFind" class="secondary" type="button" data-i18n="setupAssistant.cantFind"></button>
+            <button id="setupAssistantRetry" class="secondary hidden" type="button" data-i18n="setupAssistant.retry"></button>
+            <button id="setupAssistantNext" class="success" type="button" data-i18n="action.continue"></button>
+            <button id="setupAssistantSaveFinish" class="success hidden" type="button" data-i18n="setupAssistant.saveFinish"></button>
+          </div>
+        </aside>
+      </div>
     </div>
   </div>
 
@@ -492,30 +554,12 @@
     </div>
   </div>
 
-  <div id="supportBundleModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supportBundleTitle">
-      <div class="modal-head"><h2 id="supportBundleTitle" data-i18n="support.title"></h2></div>
-      <p><span id="supportReferenceLabel" data-i18n="support.reference"></span>: <strong id="supportReferenceId"></strong></p>
-      <p id="supportBundleMetadata"></p>
-      <div class="preflight-list">
-        <label><input type="checkbox" data-support-component="system" /> <span id="supportSystemLabel" data-i18n="support.component.system"></span></label>
-        <label><input type="checkbox" data-support-component="settings" /> <span id="supportSettingsLabel" data-i18n="support.component.settings"></span></label>
-        <label><input type="checkbox" data-support-component="history" /> <span id="supportHistoryLabel" data-i18n="support.component.history"></span></label>
-        <label><input type="checkbox" data-support-component="logs" /> <span id="supportLogsLabel" data-i18n="support.component.logs"></span></label>
-        <label><input type="checkbox" data-support-component="step3Diagnostics" /> <span id="supportStep3Label" data-i18n="support.component.step3"></span></label>
-      </div>
-      <div id="supportBundleExclusions" class="modal-warning"></div>
-      <label><input id="supportBundleAcknowledge" type="checkbox" /> <span id="supportAcknowledgeLabel" data-i18n="support.acknowledge"></span></label>
-      <div class="modal-actions"><button id="cancelSupportBundle" class="secondary" type="button" data-i18n="action.cancel"></button><button id="confirmSupportBundle" class="success" type="button" disabled data-i18n="support.create"></button></div>
-    </div>
-  </div>
-
   <script src="renderer/shared-context.js"></script>
   <script src="renderer/onboarding.js"></script>
   <script src="renderer/step2-copy.js"></script>
   <script src="renderer/step3-queue.js"></script>
-  <script src="renderer/privacy-data-management.js"></script>
   <script src="renderer/update-progress.js"></script>
+  <script src="renderer/setup-assistant.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

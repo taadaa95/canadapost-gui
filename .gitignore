@@ -47,5 +47,6 @@ Thumbs.db
 
 # Local release and update artifacts
 canadapost-gui-v*/
+manual-recordings/
 *.zip
 SHA256SUMS.txt

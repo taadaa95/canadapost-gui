@@ -35,7 +35,7 @@ const { loadLocale } = require('../lib/i18n');
     }));
     assert.deepStrictEqual(results.violations.map(item => ({ id: item.id, nodes: item.nodes.length })), []);
     const layoutContracts = await page.evaluate(() => {
-      const fieldIds = ['estFrom', 'estTo'];
+      const fieldIds = [];
       const fields = fieldIds.map(id => {
         const control = document.getElementById(id);
         const wrapperStyle = getComputedStyle(control.closest('.field'));

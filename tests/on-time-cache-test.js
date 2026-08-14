@@ -144,9 +144,11 @@ withFixture({}, ({ root, dbPath, sourceRow, pin }) => {
   assert.strictEqual(child.status, 0, child.stderr || child.stdout);
   const events = child.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
   const cachedEvent = events.find(event => event.type === 'pin_on_time');
+  const workloadEvent = events.find(event => event.type === 'tracking_workload');
   const summary = events.find(event => event.type === 'tracking_complete');
   assert.strictEqual(cachedEvent?.cached, true, 'cache hit must emit the normal green event with cached=true');
   assert.deepStrictEqual({ checked: summary.checked, onTime: summary.onTimeCount, cached: summary.cachedOnTimeCount, requests: summary.trackingApiRequestCount }, { checked: 1, onTime: 1, cached: 1, requests: 0 });
+  assert.deepStrictEqual({ recent: workloadEvent.recentShipments, carried: workloadEvent.carryForwardShipments, skipped: workloadEvent.confirmedOnTimeSkipped }, { recent: 1, carried: 0, skipped: 1 });
   assert.strictEqual(events.some(event => event.type === 'tracking_protocol_stage' && ['tracking_request_sent', 'tracking_rate_limit_wait'].includes(event.stage)), false, 'cache hit must perform neither request nor limiter wait');
   assert.strictEqual(claimDb.classificationHistory(dbPath, pin).length, beforeClassifications, 'cache-hit run must not duplicate classification history');
   assert.strictEqual(claimDb.withDatabase(dbPath, db => Number(db.prepare('SELECT COUNT(*) AS n FROM tracking_events').get().n)), beforeEvents, 'cache-hit run must not duplicate tracking events');

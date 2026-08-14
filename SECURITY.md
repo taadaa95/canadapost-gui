@@ -56,7 +56,7 @@ Shareable diagnostic ZIPs exclude free-form log, history-message, and Step 3 tra
 
 ## Browser automation
 
-- The embedded `WebContentsView` only permits Canada Post HTTPS domains. An exact loopback mock origin is allowed only when `NODE_ENV=test`.
+- The embedded `WebContentsView` only permits user/top-level navigation to Canada Post HTTPS domains. Scripts, images, styles, fonts, CAPTCHA, authentication-support resources, and subframes are not filtered by that top-level allowlist; Chromium's existing sandbox and web security still apply. An exact loopback mock origin is allowed only when `NODE_ENV=test`.
 - Its CDP endpoint is randomized and bound to loopback.
 - CAPTCHA and verification challenges require manual completion; the app does not bypass them.
 - The main renderer is sandboxed with context isolation and Node integration disabled. Arbitrary renderer window opens are denied.

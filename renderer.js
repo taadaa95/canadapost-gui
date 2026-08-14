@@ -262,6 +262,21 @@ function setBuiltinBrowserActivity(active, text = '', kind = '') {
   container.classList.toggle('active', Boolean(active));
   container.classList.toggle('error', kind === 'error');
   container.setAttribute('aria-busy', active ? 'true' : 'false');
+  updateStep3AutomationNotice();
+}
+
+function updateStep3AutomationNotice() {
+  const notice = $('step3AutomationNotice');
+  const status = $('step3AutomationNoticeStatus');
+  if (!notice || !status) return;
+  const actionRequired = builtinBrowserManualActionPending === true;
+  const key = actionRequired
+    ? 'step3.automation.actionRequired'
+    : builtinBrowserRunActive
+      ? 'step3.automation.running'
+      : 'step3.automation.idle';
+  setLocalizedText(status, key);
+  notice.classList.toggle('action-required', actionRequired);
 }
 
 function finishBuiltinBrowserActivity(text = '', kind = '') {
@@ -484,7 +499,8 @@ Object.assign(state, {
   developerMode: false,
   passwordStored: false,
   trackingApiCredentialsStored: false,
-  trackingApiEnvironment: 'test',
+  trackingApiEnvironment: 'production',
+  guidanceSounds: true,
   trackingDiagnosticMode: false,
   trackingTokenLogged: false,
   trackingApiVersion: '1.0.0',
@@ -492,8 +508,7 @@ Object.assign(state, {
   evidenceRetentionDays: 90,
   claimQueueItems: [],
   claimQueueLoaded: false,
-  step3ActionReport: null,
-  privacyPreview: null
+  step3ActionReport: null
 });
 
 const operations = {
@@ -1430,6 +1445,16 @@ function describeEvent(stage, event) {
 
   if (stage === 'tracking') {
     applyTrackingPrimaryCategory(event);
+    if (type === 'tracking_workload') {
+      return trf('event.tracking.workload', {
+        recent: event.recentShipments || 0,
+        carried: event.carryForwardShipments || 0,
+        skipped: event.confirmedOnTimeSkipped || 0
+      }, '{recent} recent shipments; {carried} older in-transit shipments carried forward; {skipped} previously confirmed on-time shipments skipped.');
+    }
+    if (type === 'pin_recheck') {
+      return trf('event.tracking.recheck', { tracking: trackingDisplayPin(event) }, '{tracking} — RECHECK — still in transit from an earlier run');
+    }
     if (type === 'tracking_credential_metadata') {
       const valid = event.clientId?.present && event.clientSecret?.present;
       return trf('event.tracking.credentialMetadata', {
@@ -1888,215 +1913,10 @@ async function refreshHistory() {
   }
 }
 
-let backupPasswordResolver = null;
-
-function requestBackupPassword({ confirm = false, restore = false } = {}) {
-  const modal = $('backupPasswordModal');
-  const input = $('backupPassword');
-  const confirmation = $('backupPasswordConfirm');
-  const confirmationField = $('backupPasswordConfirmField');
-  const error = $('backupPasswordError');
-  setLocalizedText($('backupPasswordTitle'), restore ? 'backup.unlockTitle' : 'backup.createTitle', {}, restore ? 'Unlock encrypted backup' : 'Create encrypted backup');
-  setLocalizedText($('backupPasswordMessage'), restore ? 'backup.unlockMessage' : 'backup.createMessage', {}, restore
-    ? 'Enter the password used when this encrypted backup was created.'
-    : 'Enter a strong password of at least 12 characters. It is never saved and cannot be recovered.');
-  confirmationField?.classList.toggle('hidden', !confirm);
-  input.value = '';
-  confirmation.value = '';
-  error?.classList.add('hidden');
-  modal?.classList.remove('hidden');
-  modal?.setAttribute('aria-hidden', 'false');
-  setTimeout(() => input?.focus(), 0);
-  return new Promise(resolve => { backupPasswordResolver = resolve; });
-}
-
-function closeBackupPasswordModal(value = '') {
-  const modal = $('backupPasswordModal');
-  modal?.classList.add('hidden');
-  modal?.setAttribute('aria-hidden', 'true');
-  const resolver = backupPasswordResolver;
-  backupPasswordResolver = null;
-  if (resolver) resolver(value);
-}
-
-function submitBackupPassword() {
-  const password = $('backupPassword')?.value || '';
-  const confirmationVisible = !$('backupPasswordConfirmField')?.classList.contains('hidden');
-  const error = $('backupPasswordError');
-  if (password.length < 12) {
-    error.textContent = tr('backup.tooShort', 'Use at least 12 characters.'); error.classList.remove('hidden'); return;
-  }
-  if (confirmationVisible && password !== ($('backupPasswordConfirm')?.value || '')) {
-    error.textContent = tr('backup.mismatch', 'The passwords do not match.'); error.classList.remove('hidden'); return;
-  }
-  closeBackupPasswordModal(password);
-}
-
-async function createAppBackup() {
-  const password = await requestBackupPassword({ confirm: true });
-  if (!password) return;
-  const result = await window.cpApp.createBackup({ password });
-  if (result.ok) window.alert(trf('backup.created', { path: result.path }, 'Backup created:\n{path}'));
-  else if (!result.canceled) window.alert(result.error || tr('backup.createFailed', 'Could not create backup.'));
-}
-
-async function restoreAppBackup() {
-  if (!window.confirm(tr('backup.restoreConfirm', 'Restore a backup? The current database and replaced data files will be preserved in rollback copies.'))) return;
-  let result = await window.cpApp.restoreBackup({});
-  if (result.passwordRequired) {
-    const password = await requestBackupPassword({ restore: true });
-    if (!password) return;
-    result = await window.cpApp.restoreBackup({ password });
-  }
-  if (result.ok) {
-    window.alert(trf('backup.restored', { count: result.restoredDataFiles || 0 }, 'Backup restored. {count} data/evidence files restored.'));
-    await refreshConfig();
-    await refreshHistory();
-  } else if (!result.canceled) {
-    window.alert(result.error || tr('backup.restoreFailed', 'Could not restore backup.'));
-  }
-}
-
-function privacyElements() {
-  return {
-    trackingNumbers: $('privacyTrackingNumbers'),
-    dateFrom: $('privacyDateFrom'),
-    dateTo: $('privacyDateTo'),
-    allRecords: $('privacyAllRecords')
-  };
-}
-
-function openPrivacyDataModal() {
-  resetPrivacyPreview();
-  const modal = $('privacyDataModal');
-  modal?.classList.remove('hidden');
-  modal?.setAttribute('aria-hidden', 'false');
-  $('privacyTrackingNumbers')?.focus();
-}
-
-function closePrivacyDataModal() {
-  resetPrivacyPreview();
-  $('privacyDataModal')?.classList.add('hidden');
-  $('privacyDataModal')?.setAttribute('aria-hidden', 'true');
-  $('manageStoredData')?.focus();
-}
-
-function currentPrivacyScope() {
-  return window.PrivacyDataManagement.scopeFromElements(privacyElements());
-}
-
-function resetPrivacyPreview({ preserveStatus = false } = {}) {
-  state.privacyPreview = null;
-  $('privacyDeletionControls')?.classList.add('hidden');
-  if (!preserveStatus && $('privacyDataStatus')) {
-    $('privacyDataStatus').textContent = tr('privacy.status.previewRequired', 'Preview required');
-    $('privacyDataStatus').className = 'pill';
-  }
-}
-
-async function previewPrivacyData() {
-  const scope = currentPrivacyScope();
-  const result = await window.cpApp.previewPrivacyDeletion(scope);
-  if (!result?.ok) {
-    resetPrivacyPreview();
-    window.alert(result?.error || tr('privacy.previewFailed', 'The deletion preview could not be created.'));
-    return;
-  }
-  state.privacyPreview = { scope, result };
-  window.PrivacyDataManagement.renderCounts($('privacyPreviewCounts'), result.recordCounts, key => tr(key));
-  $('privacyDeletionControls')?.classList.remove('hidden');
-  $('privacySecondConfirmWrap')?.classList.toggle('hidden', !result.requiresSecondConfirmation);
-  if ($('privacySecondConfirm')) $('privacySecondConfirm').checked = false;
-  if ($('privacyDestructiveConfirm')) $('privacyDestructiveConfirm').checked = false;
-  if ($('privacyTypedPhrase')) $('privacyTypedPhrase').value = '';
-  const phrase = tr(result.confirmationPhraseKey === 'all' ? 'privacy.confirmation.all' : 'privacy.confirmation.selected');
-  if ($('privacyExpectedPhrase')) $('privacyExpectedPhrase').textContent = trf('privacy.expectedPhrase', { phrase }, 'Confirmation phrase: {phrase}');
-  if ($('privacyDataStatus')) {
-    $('privacyDataStatus').textContent = tr('privacy.status.previewReady', 'Deletion preview ready');
-    $('privacyDataStatus').className = 'pill warn';
-  }
-}
-
-async function deletePrivacyData() {
-  if (!state.privacyPreview || JSON.stringify(currentPrivacyScope()) !== JSON.stringify(state.privacyPreview.scope)) {
-    resetPrivacyPreview();
-    return window.alert(tr('privacy.status.previewRequired', 'Preview required'));
-  }
-  const result = await window.cpApp.deletePrivacyData({
-    ...state.privacyPreview.scope,
-    locale: document.documentElement.lang,
-    confirmed: $('privacyDestructiveConfirm')?.checked === true,
-    typedPhrase: $('privacyTypedPhrase')?.value || '',
-    secondConfirmed: $('privacySecondConfirm')?.checked === true
-  });
-  if (!result?.ok) return window.alert(result?.error || tr('privacy.deleteFailed', 'The selected data could not be deleted.'));
-  if ($('privacyDataStatus')) {
-    $('privacyDataStatus').textContent = tr('privacy.status.complete', 'Deletion complete');
-    $('privacyDataStatus').className = 'pill good';
-  }
-  window.alert(trf('privacy.deleteComplete', { operationId: result.receipt?.operationId || '' }, 'Deletion completed. Operation receipt: {operationId}'));
-  resetPrivacyPreview({ preserveStatus: true });
-  await refreshHistory();
-  await refreshClaimQueue();
-  closePrivacyDataModal();
-}
-
-async function clearBrowserSession() {
-  const confirmed = window.confirm(tr('browserSession.clearConfirm', 'Log out and clear the Canada Post browser profile? Cookies, cache and site storage will be removed. Claim history and settings will be preserved.'));
-  if (!confirmed) return;
-  const result = await window.cpApp.clearBrowserSession({ confirmed: true, resetProfile: true });
-  if (!result.ok) {
-    log(result.error || tr('browserSession.clearFailed', 'Could not clear browser data.'), 'log-submit-error', 'step3');
-    return;
-  }
-  log(tr('browserSession.cleared', 'Browser cookies, cache and site storage were cleared. Claim history was preserved.'), 'log-success', 'step3');
-}
-
-async function createDiagnosticZip() {
-  const result = await window.cpApp.previewSupportBundle({});
-  if (!result?.ok) return window.alert(result?.error || tr('support.previewFailed', 'Could not preview the support bundle.'));
-  const preview = result.preview;
-  $('supportReferenceId').textContent = preview.supportReferenceId;
-  $('supportBundleMetadata').textContent = trf('support.metadata', { version: preview.applicationVersion, platform: preview.platform, architecture: preview.architecture, schema: preview.databaseSchemaVersion, parser: preview.trackingParserVersion }, '{version} / {platform}-{architecture} / database schema {schema} / parser {parser}');
-  $('supportBundleExclusions').textContent = trf('support.exclusions', { exclusions: preview.exclusions.join(', ') }, 'Always excluded: {exclusions}.');
-  for (const [name, detail] of Object.entries(preview.components)) {
-    const input = document.querySelector(`[data-support-component="${name}"]`);
-    if (input) input.checked = detail.selected;
-  }
-  $('supportBundleAcknowledge').checked = false;
-  $('confirmSupportBundle').disabled = true;
-  $('supportBundleModal').classList.remove('hidden');
-  $('supportBundleModal').setAttribute('aria-hidden', 'false');
-}
-
-function closeSupportBundle() {
-  $('supportBundleModal')?.classList.add('hidden');
-  $('supportBundleModal')?.setAttribute('aria-hidden', 'true');
-}
-
-async function confirmSupportBundle() {
-  const components = [...document.querySelectorAll('[data-support-component]:checked')].map(input => input.dataset.supportComponent);
-  const result = await window.cpApp.createDiagnostics({
-    components,
-    supportReferenceId: $('supportReferenceId')?.textContent || '',
-    acknowledged: $('supportBundleAcknowledge')?.checked === true
-  });
-  if (result.ok) {
-    closeSupportBundle();
-    window.alert(trf('support.created', { reference: result.supportReferenceId, path: result.path }, 'Sanitized support bundle {reference} created:\n{path}'));
-  } else if (!result.canceled) window.alert(result.error || tr('support.createFailed', 'Could not create support bundle.'));
-}
-
 async function exportClaimHistory() {
   const result = await window.cpApp.exportHistory();
   if (result.ok) window.alert(trf('history.exported', { path: result.path }, 'Claim history exported:\n{path}'));
   else if (!result.canceled) window.alert(result.error || tr('history.exportFailed', 'Could not export claim history.'));
-}
-
-function isoDateFromOffset(daysOffset) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  return date.toISOString().slice(0, 10);
 }
 
 function getFieldValue(id) {
@@ -2111,7 +1931,7 @@ function collectUserSettingsOptions() {
     webPassword: $('webPassword')?.value || '',
     trackingClientId: getFieldValue('trackingClientId'),
     trackingClientSecret: $('trackingClientSecret')?.value || '',
-    trackingApiEnvironment: $('trackingApiEnvironment')?.value || state.trackingApiEnvironment || 'test',
+    trackingApiEnvironment: 'production',
     trackingRequestDelayMs: Number.parseInt(getFieldValue('trackingRequestDelayMs') || '3100', 10),
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
     rememberSettings,
@@ -2190,8 +2010,6 @@ async function clearTrackingApiCredentials() {
 function buildEstHistoryOptions() {
   return {
     ...collectUserSettingsOptions(),
-    estFrom: $('estFrom')?.value || $('historyFrom')?.value || '',
-    estTo: $('estTo')?.value || $('historyTo')?.value || '',
     estWorkgroup: '',
     estMobo: '-2',
     estCategoryGroup: 'SHP',
@@ -2205,8 +2023,6 @@ function buildHistoryOptions() {
   const autoMobo = $('historyAutoMobo') ? $('historyAutoMobo').checked : true;
   const moboRaw = autoMobo ? '' : (($('historyMobo')?.value || '').trim());
   return {
-    historyFrom: $('historyFrom')?.value || '',
-    historyTo: $('historyTo')?.value || '',
     estCustomerNumber: customerNumber,
     historyCustomerNumber: customerNumber,
     historyAutoMobo: autoMobo,
@@ -2219,7 +2035,7 @@ function buildHistoryOptions() {
 function buildTrackingOnlyOptions() {
   return {
     fresh: true,
-    trackingApiEnvironment: $('trackingApiEnvironment')?.value || state.trackingApiEnvironment || 'test',
+    trackingApiEnvironment: 'production',
     trackingRequestDelayMs: Number.parseInt(getFieldValue('trackingRequestDelayMs') || '3100', 10),
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
     developerMode: false
@@ -2233,7 +2049,7 @@ function renderTrackingApiCredentialMetadata(metadata = {}) {
     version: metadata.apiVersion || state.trackingApiVersion,
     clientId: tr(metadata.clientId?.present ? 'common.present' : 'common.missing'),
     clientSecret: tr(metadata.clientSecret?.present ? 'common.present' : 'common.missing'),
-    selectedEnvironment: metadata.selectedEnvironment || 'test',
+    selectedEnvironment: metadata.selectedEnvironment || 'production',
     credentialEnvironment: metadata.credentialEnvironment || tr('common.unknown', 'unknown'),
     scope: metadata.scope || 'merchant'
   }, 'Tracking API {version} — client ID: {clientId}; client secret: {clientSecret}; selected environment: {selectedEnvironment}; credential environment: {credentialEnvironment}; scope: {scope}. No lengths, values, hashes, or token metadata are displayed.');
@@ -2531,6 +2347,9 @@ async function startSubmitOnly() {
   // before it creates, attaches, or navigates the native browser.
   const res = await window.cpApp.runSubmit(buildSubmitOnlyOptions());
   if (!res.ok) {
+    const startError = res.code === 'SETUP_ASSISTANT_ACTIVE'
+      ? tr('setupAssistant.error.step3Blocked')
+      : (res.error || tr('step3.startFailed', 'Could not start claim submission.'));
     if (res.code === 'STEP3_PREFLIGHT_BLOCKED' && res.preflight) {
       showStep3ActionIssues({
         checks: (res.preflight.failedChecks || []).map(item => ({ ...item, ok: false, severity: 'blocking' })),
@@ -2538,15 +2357,15 @@ async function startSubmitOnly() {
       });
     }
     setStatus('Failed', 'bad');
-    setAction(res.error || tr('step3.startFailed', 'Could not start claim submission.'));
-    updateCurrentItem({ step: 'Could not start claim submission', result: res.error || 'Failed', kind: 'failed' });
-    addNeedsReview('failed', '—', res.error || 'Could not start claim submission', '—', '', {
+    setAction(startError);
+    updateCurrentItem({ step: startError, result: startError, kind: 'failed' });
+    addNeedsReview('failed', '—', startError, '—', '', {
       kind: 'failed',
       result: 'Submission start failed',
       status: 'Submission start failed',
-      message: res.error || 'Could not start claim submission'
+      message: startError
     });
-    log(res.error || 'Could not start claim submission.');
+    log(startError);
     const blockedPlaceholder = ['STEP3_UNRESOLVED_ATTEMPT', 'STEP3_TERMINAL_OUTCOME', 'STEP3_NO_EXECUTABLE_CLAIMS'].includes(res.code)
       ? { key: 'step3.browser.noExecutableSelected', fallback: 'No executable claims are selected. Review blocked attempts in History.' }
       : idleBrowserPlaceholderLocalization();
@@ -2569,7 +2388,7 @@ async function refreshConfig() {
   if (isolatedBanner) isolatedBanner.hidden = !state.isolatedTestMode;
   if ($('isolatedTestPath')) $('isolatedTestPath').textContent = state.isolatedTestMode ? String(cfg.isolatedUserDataPath || '') : '';
   if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
-  for (const id of ['runSubmitOnly', 'checkForUpdates', 'createBackup', 'restoreBackup', 'createDiagnostics', 'exportHistory']) {
+  for (const id of ['runSubmitOnly', 'guidedCanadaPostSetup', 'checkForUpdates', 'exportHistory']) {
     const control = $(id);
     if (!control) continue;
     control.disabled = state.isolatedTestMode;
@@ -2577,7 +2396,8 @@ async function refreshConfig() {
   }
   state.passwordStored = !!cfg.passwordStored;
   state.trackingApiCredentialsStored = !!(cfg.trackingApiCredentialsStored || cfg.hasTrackingApiCredentials);
-  state.trackingApiEnvironment = cfg.trackingApiEnvironment || 'test';
+  state.trackingApiEnvironment = 'production';
+  state.guidanceSounds = Object.prototype.hasOwnProperty.call(cfg, 'guidanceSounds') ? cfg.guidanceSounds !== false : true;
   state.trackingApiVersion = cfg.trackingApiVersion || '1.0.0';
   if ($('trackingRequestDelayMs')) $('trackingRequestDelayMs').value = String(Math.max(3100, Number(cfg.trackingRequestDelayMs || 3100)));
   if ($('trackingResourceTimeoutMs')) $('trackingResourceTimeoutMs').value = String(cfg.trackingResourceTimeoutMs || 45000);
@@ -2590,15 +2410,9 @@ async function refreshConfig() {
   }
   if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientIdSavedPlaceholder' : 'settings.api.clientIdPlaceholder'); }
   if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
-  if ($('trackingApiEnvironment')) $('trackingApiEnvironment').value = state.trackingApiEnvironment;
   renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
   if ($('rememberSettings')) $('rememberSettings').checked = Object.prototype.hasOwnProperty.call(cfg, 'rememberSettings') ? !!cfg.rememberSettings : true;
 
-  if ($('historyFrom') && !$('historyFrom').value) $('historyFrom').value = cfg.historyFrom || isoDateFromOffset(-14);
-  if ($('historyTo') && !$('historyTo').value) $('historyTo').value = cfg.historyTo || isoDateFromOffset(0);
-
-  if ($('estFrom') && !$('estFrom').value) $('estFrom').value = cfg.estFrom || cfg.historyFrom || isoDateFromOffset(-14);
-  if ($('estTo') && !$('estTo').value) $('estTo').value = cfg.estTo || cfg.historyTo || isoDateFromOffset(0);
   if ($('estCustomerNumber') && !$('estCustomerNumber').value) $('estCustomerNumber').value = cfg.estCustomerNumber || '';
   if ($('estWorkgroup')) $('estWorkgroup').value = '';
   if ($('estMobo')) $('estMobo').value = '-2';
@@ -2700,44 +2514,17 @@ $('estCustomerNumber')?.addEventListener('input', () => {
   if ($('historyCustomerNumber')) $('historyCustomerNumber').value = getFieldValue('estCustomerNumber');
 });
 
-$('selectCsv')?.addEventListener('click', async () => {
-  const res = await window.cpApp.selectTrackingCsv();
-  if (res.ok) log(tr('settings.trackingCsvSelected', 'tracking.csv selected.'));
-  await refreshConfig();
-});
-
-$('openData')?.addEventListener('click', () => window.cpApp.openDataFolder());
-$('openLogs')?.addEventListener('click', () => window.cpApp.openLogsFolder());
 $('openStep3Diagnostics')?.addEventListener('click', async () => {
   const result = await window.cpApp.openStep3Diagnostics();
   if (!result?.ok) log(result?.error || tr('diagnostics.noneAvailable', 'No Step 3 diagnostics are available yet.'), 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
-$('createBackup')?.addEventListener('click', createAppBackup);
-$('restoreBackup')?.addEventListener('click', restoreAppBackup);
-$('manageStoredData')?.addEventListener('click', openPrivacyDataModal);
-$('closePrivacyDataModal')?.addEventListener('click', closePrivacyDataModal);
-$('privacyDataModal')?.addEventListener('click', event => { if (event.target === $('privacyDataModal')) closePrivacyDataModal(); });
-$('previewPrivacyData')?.addEventListener('click', previewPrivacyData);
-$('deletePrivacyData')?.addEventListener('click', deletePrivacyData);
-for (const id of ['privacyTrackingNumbers', 'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords']) {
-  $(id)?.addEventListener('change', resetPrivacyPreview);
-  if (id === 'privacyTrackingNumbers') $(id)?.addEventListener('input', resetPrivacyPreview);
-}
-$('clearStep3BrowserSession')?.addEventListener('click', clearBrowserSession);
-$('cancelBackupPassword')?.addEventListener('click', () => closeBackupPasswordModal(''));
-$('confirmBackupPassword')?.addEventListener('click', submitBackupPassword);
-$('backupPassword')?.addEventListener('keydown', event => { if (event.key === 'Enter') submitBackupPassword(); if (event.key === 'Escape') closeBackupPasswordModal(''); });
 $('setupOpenSettings')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); activateTab('settingsTab'); $('webUsername')?.focus(); });
 $('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); });
 $('resumeSetup')?.addEventListener('click', async () => showSetupWizard(await window.cpApp.loadConfig()));
 $('setupFinish')?.addEventListener('click', finishSetupWizard);
 $('setupSafetyAcknowledge')?.addEventListener('change', async () => renderSetupWizardReadiness(await window.cpApp.loadConfig()));
-$('createDiagnostics')?.addEventListener('click', createDiagnosticZip);
-$('cancelSupportBundle')?.addEventListener('click', closeSupportBundle);
-$('confirmSupportBundle')?.addEventListener('click', confirmSupportBundle);
-$('supportBundleAcknowledge')?.addEventListener('change', () => { $('confirmSupportBundle').disabled = !$('supportBundleAcknowledge').checked; });
 $('checkForUpdates')?.addEventListener('click', async () => {
   const res = await window.cpApp.openUpdatePage();
   const message = res?.message || res?.error || tr(res?.ok ? 'update.checkCompleteMessage' : 'update.checkFailedMessage', res?.ok ? 'Update check complete.' : 'Could not check for updates.');
@@ -2747,10 +2534,6 @@ $('checkForUpdates')?.addEventListener('click', async () => {
     status.className = res?.ok ? 'pill good' : 'pill bad';
   }
   log(message, res?.ok ? '' : 'log-late', 'step1');
-});
-$('fullRefresh')?.addEventListener('click', () => {
-  resetAllUiState();
-  window.location.reload();
 });
 $('developerMode')?.addEventListener('change', async () => {
   state.developerMode = $('developerMode').checked;
@@ -2795,8 +2578,6 @@ document.addEventListener('keydown', (event) => {
   if (!modal) return;
   if (event.key === 'Escape') {
     if (modal.id === 'warningModal') closeStep1Warnings();
-    else if (modal.id === 'backupPasswordModal') closeBackupPasswordModal('');
-    else if (modal.id === 'privacyDataModal') closePrivacyDataModal();
     event.preventDefault();
     return;
   }
@@ -2858,7 +2639,6 @@ $('importHistory')?.addEventListener('click', async () => {
 
 $('runTrackingOnly')?.addEventListener('click', startTrackingOnly);
 $('clearTrackingApiCredentials')?.addEventListener('click', clearTrackingApiCredentials);
-$('trackingApiEnvironment')?.addEventListener('change', () => { state.trackingApiEnvironment = $('trackingApiEnvironment').value; });
 $('runSubmitOnly')?.addEventListener('click', startSubmitOnly);
 $('refreshClaimQueue')?.addEventListener('click', refreshClaimQueue);
 $('selectAllClaims')?.addEventListener('click', () => {
@@ -3033,6 +2813,25 @@ window.cpApp.onStage(({ stage, status, code }) => {
     log(trf('event.stage.finished', { stage, code }, '{stage} process finished with code {code}.'), '', step);
   }
 });
+
+const guidedSetupController = window.SetupAssistantRenderer.createController({
+  document,
+  api: window.cpApp,
+  tr: key => tr(key),
+  storedState: () => ({
+    webUsername: getFieldValue('webUsername'),
+    webPassword: state.passwordStored,
+    customerNumber: getFieldValue('estCustomerNumber'),
+    trackingApiEnvironment: state.trackingApiEnvironment,
+    trackingClientId: state.trackingApiCredentialsStored,
+    trackingClientSecret: state.trackingApiCredentialsStored
+  }),
+  saveSettings: () => saveUserSettings(true),
+  guidanceSounds: () => state.guidanceSounds,
+  onGuidanceSoundsChanged: enabled => { state.guidanceSounds = enabled !== false; }
+});
+guidedSetupController.bind();
+rendererEvents.on('locale:changed', () => guidedSetupController.localize());
 
 initThemePicker();
 initStepTabs();

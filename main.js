@@ -23,6 +23,7 @@ const { isAllowedCanadaPostUrl, portalUrl } = require('./lib/origin-policy');
 const i18n = require('./lib/i18n');
 const runtimeWorkers = require('./lib/runtime-workers');
 const { credentialMetadata: trackingCredentialMetadata, normalizeEnvironment: normalizeTrackingEnvironment, normalizeResourceTimeoutMs, TRACKING_API_VERSION, DEFAULT_RESOURCE_TIMEOUT_MS } = require('./lib/tracking-client');
+const { runtimeTrackingEnvironment, legacyTrackingEnvironmentNeedsNormalization } = require('./lib/runtime-tracking-environment');
 const trackingDiagnosticGate = require('./lib/tracking-diagnostic-gate');
 const { TRACKING_PARSER_VERSION } = require('./lib/tracking-json');
 const { DEFAULT_DELAY_MS, normalizeDelayMs } = require('./lib/tracking-rate-limiter');
@@ -31,8 +32,10 @@ const { rowsAsObjects } = require('./lib/csv');
 const trackingDiagnosticSelection = require('./lib/tracking-diagnostic-selection');
 const { publishBrowserTarget, targetIdentityHash } = require('./lib/step3-browser-handshake');
 const { calculateBrowserDisplay, boundsIntersectContent } = require('./lib/browser-visibility');
+const { createSetupAssistantController } = require('./main/setup-assistant-controller');
 const { createFocusedRegistrar } = require('./main/ipc');
 const { validateWorkerEvent } = require('./lib/ipc-contracts');
+const { shipmentHistoryRangeForRun } = require('./lib/shipment-history-range');
 const supportBundle = require('./lib/support-bundle');
 const { resolveOwnedRegularFile } = require('./lib/path-confinement');
 const registerIpcHandler = createFocusedRegistrar(ipcMain);
@@ -145,6 +148,8 @@ let builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false
 const pendingBrowserVisibilityRequests = new Map();
 let activeBrowserVisibilityFile = '';
 let isShuttingDown = false;
+let setupWindowClosePending = false;
+let setupQuitPending = false;
 let databaseReady = false;
 let startupFailureHandled = false;
 let activeStep3DiagnosticsDir = '';
@@ -152,6 +157,24 @@ let latestStep3DiagnosticsDir = '';
 let lastBrowserBoundsDiagnosticAt = 0;
 let pendingRestorePath = '';
 let updateRecovery = Object.freeze({ pending: false });
+
+const setupAssistantController = createSetupAssistantController({
+  WebContentsView,
+  getWindow: () => win,
+  coordinator: operationCoordinator,
+  emit,
+  beforeOpen: async () => {
+    hideBuiltinBrowserView('setup-assistant-opening');
+    destroyBuiltinBrowserView();
+  }
+});
+
+function assertSetupAssistantInactive() {
+  if (!setupAssistantController.active() && !operationCoordinator.hasActive('setup_assistant')) return;
+  const error = new Error('SETUP_ASSISTANT_ACTIVE');
+  error.code = 'SETUP_ASSISTANT_ACTIVE';
+  throw error;
+}
 
 
 function sanitizeDiagnosticUrl(value) {
@@ -309,6 +332,17 @@ function createWindow() {
   win.on('close', event => {
     const operation = operationCoordinator.blockingOperation();
     if (!operation) return;
+    if (operation === 'setup_assistant') {
+      event.preventDefault();
+      if (setupWindowClosePending) return;
+      setupWindowClosePending = true;
+      setupAssistantController.closeSetupAssistant('renderer-window-close')
+        .finally(() => {
+          setupWindowClosePending = false;
+          if (win && !win.isDestroyed()) win.close();
+        });
+      return;
+    }
     event.preventDefault();
     const bundle = i18n.loadLocale(readConfig().locale || 'en-CA');
     dialog.showMessageBox(win, {
@@ -321,6 +355,7 @@ function createWindow() {
   });
   win.on('closed', () => {
     stopActiveChildForShutdown();
+    setupAssistantController.closeSetupAssistant('renderer-window-closed').catch(() => {});
     destroyBuiltinBrowserView();
     win = null;
   });
@@ -463,6 +498,7 @@ async function styleBuiltinBrowserMarker(view = builtinBrowserView) {
 }
 
 function ensureBuiltinBrowserView() {
+  assertSetupAssistantInactive();
   if (!win || win.isDestroyed()) throw new Error('Main window is not available.');
   if (builtinBrowserView && !builtinBrowserView.webContents.isDestroyed()) return builtinBrowserView;
 
@@ -1088,8 +1124,8 @@ function buildHistoryEnv(options = {}, config = {}) {
     : boolFromOption(config.developerMode);
 
   return {
-    HISTORY_FROM: pickOptionString(options, config, 'historyFrom', 'historyFrom', ''),
-    HISTORY_TO: pickOptionString(options, config, 'historyTo', 'historyTo', ''),
+    HISTORY_FROM: String(options.historyFrom || ''),
+    HISTORY_TO: String(options.historyTo || ''),
     HISTORY_CUSTOMER_NUMBER: customerNumber,
     HISTORY_AUTO_MOBO: autoMobo ? 'true' : 'false',
     HISTORY_MOBO: mobo,
@@ -1106,8 +1142,8 @@ function buildEstHistoryEnv(options = {}, config = {}) {
     : boolFromOption(config.developerMode);
 
   return {
-    EST_FROM: pickOptionString(options, config, 'estFrom', 'estFrom', config.historyFrom || ''),
-    EST_TO: pickOptionString(options, config, 'estTo', 'estTo', config.historyTo || ''),
+    EST_FROM: String(options.estFrom || ''),
+    EST_TO: String(options.estTo || ''),
     EST_CUSTOMER_NUMBER: pickOptionString(options, config, 'estCustomerNumber', 'estCustomerNumber', ''),
     EST_WORKGROUP: pickOptionString(options, config, 'estWorkgroup', 'estWorkgroup', ''),
     EST_MOBO: pickOptionString(options, config, 'estMobo', 'estMobo', '-2'),
@@ -1456,7 +1492,7 @@ function runPreflight(rawOptions = {}) {
   }
   const reconciliationCount = claimDb.listReconciliation(DB_PATH, 10000).length;
   const workerReady = name => preflightWorkerLaunch(name).ok;
-  const trackingEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
+  const trackingEnvironment = runtimeTrackingEnvironment(config.trackingApiEnvironment);
   const report = buildPreflightReport({
     scope: options.scope,
     storageWritable: applicationStorageWritable(),
@@ -1546,15 +1582,17 @@ registerIpcHandler('tracking:discardIncomplete', async (_event, payload = {}) =>
 registerIpcHandler('browser:showBuiltin', async (_event, options = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'The live claim browser is disabled while isolated test data is active.' };
   try {
+    assertSetupAssistantInactive();
     return await showBuiltinBrowser(options.bounds || options);
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message, code: error.code || 'BROWSER_SHOW_FAILED' };
   }
 });
 
 registerIpcHandler('browser:prepareBuiltin', async () => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'The live claim browser is disabled while isolated test data is active.', code: 'BROWSER_DISABLED' };
   try {
+    assertSetupAssistantInactive();
     const publication = await prepareBuiltinBrowserForWorker({ reason: 'renderer-preflight' });
     return {
       ok: true,
@@ -1621,6 +1659,9 @@ registerIpcHandler('browser:focusBuiltin', () => {
 registerIpcHandler('browser:clearSession', async (_event, payload = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Browser profile actions are disabled while isolated test data is active.' };
   if (payload.confirmed !== true) return { ok: false, error: 'Confirmation is required.' };
+  if (setupAssistantController.active() || operationCoordinator.hasActive('setup_assistant')) {
+    return { ok: false, code: 'SETUP_ASSISTANT_ACTIVE', error: 'SETUP_ASSISTANT_ACTIVE' };
+  }
   if (activeChild) return { ok: false, error: 'Stop the active process before clearing browser data.' };
   return operationCoordinator.run('authoritative_data_mutation', async () => {
     hideBuiltinBrowserView();
@@ -1636,6 +1677,39 @@ registerIpcHandler('browser:clearSession', async (_event, payload = {}) => {
   });
 });
 
+registerIpcHandler('setupAssistant:open', async (_event, payload = {}) => {
+  if (USER_DATA_PROFILE.active) return { ok: false, code: 'SETUP_DISABLED_IN_ISOLATION', error: 'SETUP_DISABLED_IN_ISOLATION' };
+  try {
+    return await setupAssistantController.open(payload);
+  } catch (error) {
+    return { ok: false, code: error.code || 'SETUP_OPEN_FAILED', error: error.message };
+  }
+});
+
+registerIpcHandler('setupAssistant:setStep', async (_event, payload = {}) => {
+  try {
+    return await setupAssistantController.setStep(payload);
+  } catch (error) {
+    return { ok: false, code: error.code || 'SETUP_STEP_FAILED', error: error.message };
+  }
+});
+
+registerIpcHandler('setupAssistant:setBounds', (_event, bounds = {}) => {
+  try { return setupAssistantController.setBounds(bounds); }
+  catch (error) { return { ok: false, code: error.code || 'SETUP_BOUNDS_FAILED', error: error.message }; }
+});
+
+registerIpcHandler('setupAssistant:focus', () => setupAssistantController.focus());
+registerIpcHandler('setupAssistant:retry', async (_event, payload = {}) => {
+  try { return await setupAssistantController.retryCurrentStep(payload); }
+  catch (error) { return { ok: false, code: error.code || 'SETUP_RECOVERY_FAILED', error: error.message }; }
+});
+registerIpcHandler('setupAssistant:back', async () => setupAssistantController.navigateBack());
+registerIpcHandler('setupAssistant:startOver', async (_event, payload = {}) => setupAssistantController.startOver(payload));
+registerIpcHandler('setupAssistant:useCustomerNumber', (_event, payload = {}) => setupAssistantController.useCustomerNumber(payload));
+registerIpcHandler('setupAssistant:state', () => setupAssistantController.snapshot());
+registerIpcHandler('setupAssistant:close', async () => setupAssistantController.closeSetupAssistant('renderer-request'));
+
 registerIpcHandler('config:load', () => {
   ensureDirs();
   const config = storage.publicConfig();
@@ -1643,7 +1717,7 @@ registerIpcHandler('config:load', () => {
   delete publicConfig.apiEnvironment;
   delete publicConfig.apiCredentialsStored;
   delete publicConfig.apiCredentialEnvironment;
-  const trackingApiEnvironment = normalizeTrackingEnvironment(config.trackingApiEnvironment || 'test');
+  const trackingApiEnvironment = runtimeTrackingEnvironment(config.trackingApiEnvironment);
   return {
     ...publicConfig,
     trackingApiEnvironment,
@@ -1695,12 +1769,19 @@ registerIpcHandler('config:save', (_event, input = {}) => {
   if (trackingClientIdSupplied !== trackingClientSecretSupplied) {
     return { ok: false, error: 'Enter both the Tracking API client ID and client secret together. Legacy and website credentials are never copied into these fields.' };
   }
+  if (Object.prototype.hasOwnProperty.call(input, 'estCustomerNumber') && String(input.estCustomerNumber || '').trim()) {
+    const customerNumber = inputValidation.validateCustomerNumber(input.estCustomerNumber);
+    if (!customerNumber.valid) {
+      return { ok: false, code: 'CUSTOMER_NUMBER_INVALID', error: 'Canada Post customer number must contain 1 to 10 numeric digits.' };
+    }
+    input = { ...input, estCustomerNumber: customerNumber.normalized };
+  }
   const sanitized = storage.sanitizeConfig(input);
   delete sanitized.apiEnvironment;
-  sanitized.trackingApiEnvironment = normalizeTrackingEnvironment(input.trackingApiEnvironment || existing.trackingApiEnvironment || 'test');
+  sanitized.trackingApiEnvironment = runtimeTrackingEnvironment(input.trackingApiEnvironment || existing.trackingApiEnvironment);
   sanitized.trackingRequestDelayMs = trackingRequestDelayMs;
   sanitized.trackingResourceTimeoutMs = trackingResourceTimeoutMs;
-  const trackingEnvironmentChanged = sanitized.trackingApiEnvironment !== normalizeTrackingEnvironment(existing.trackingApiEnvironment || 'test');
+  const trackingEnvironmentChanged = legacyTrackingEnvironmentNeedsNormalization(existing.trackingApiEnvironment);
   if (activeChild && (trackingClientIdSupplied || trackingEnvironmentChanged)) {
     return { ok: false, error: 'Stop the active process before changing Tracking API credentials or environment.' };
   }
@@ -1710,16 +1791,45 @@ registerIpcHandler('config:save', (_event, input = {}) => {
     && !setupCompletionAllowed(setupReadiness(next, sanitized.trackingApiEnvironment))) {
     return { ok: false, error: 'Setup cannot be completed until every required readiness check and the safety acknowledgement are satisfied.' };
   }
-  writeConfig(next);
+  const previousPassword = storage.loadPassword();
+  const previousTrackingCredentials = storage.loadTrackingApiCredentials();
+  const previousTrackingEnvironment = storage.trackingApiCredentialEnvironment()
+    || runtimeTrackingEnvironment(existing.trackingApiEnvironment);
+  const rollbackCredentials = () => {
+    storage.savePassword(previousPassword, Boolean(previousPassword));
+    if (previousTrackingCredentials.clientId && previousTrackingCredentials.clientSecret) {
+      storage.saveTrackingApiCredentials(previousTrackingCredentials.clientId, previousTrackingCredentials.clientSecret, { environment: previousTrackingEnvironment });
+    } else {
+      storage.clearTrackingApiCredentials();
+    }
+  };
   const credentialResult = persistPasswordFromOptions(input, next);
   let trackingApiResult = { stored: storage.trackingApiCredentialsStored(), warning: '' };
   if (trackingClientIdSupplied && trackingClientSecretSupplied) {
     trackingApiResult = storage.saveTrackingApiCredentials(input.trackingClientId, input.trackingClientSecret, { environment: sanitized.trackingApiEnvironment });
   }
+  const passwordUpdateRequired = Boolean(String(input.webPassword || '')) && boolFromOption(input.rememberSettings);
+  const credentialWriteFailed = (passwordUpdateRequired && credentialResult.updated !== true)
+    || (trackingClientIdSupplied && trackingApiResult.updated !== true);
+  if (credentialWriteFailed) {
+    rollbackCredentials();
+    return {
+      ok: false,
+      error: credentialResult.warning || trackingApiResult.warning || 'One or more credentials could not be saved securely.'
+    };
+  }
+  try {
+    writeConfig(next);
+  } catch (error) {
+    rollbackCredentials();
+    return { ok: false, error: error.message };
+  }
   return {
     ok: true,
     passwordStored: credentialResult.stored,
+    passwordCredentialUpdated: credentialResult.updated === true,
     trackingApiCredentialsStored: trackingApiResult.stored,
+    trackingApiCredentialsUpdated: trackingApiResult.updated === true,
     trackingApiCredentialMetadata: trackingApiCredentialStatus(sanitized.trackingApiEnvironment),
     trackingDiagnosticGateSatisfied: trackingDiagnosticGateSatisfied(next, sanitized.trackingApiEnvironment),
     credentialBackend: credentialResult.backend,
@@ -1739,30 +1849,6 @@ registerIpcHandler('credentials:clearTrackingApi', (_event, payload = {}) => {
 registerIpcHandler('locale:load', (_event, locale) => {
   try { return { ok: true, ...i18n.loadLocale(locale) }; }
   catch (error) { return { ok: false, error: error.message, ...i18n.loadLocale('en-CA') }; }
-});
-
-registerIpcHandler('file:selectTrackingCsv', async () => {
-  const result = await dialog.showOpenDialog(win, {
-    title: localizedText('dialog.selectTrackingCsv.title', {}, 'Select tracking.csv'),
-    properties: ['openFile'],
-    filters: [{ name: localizedText('dialog.csvFiles', {}, 'CSV files'), extensions: ['csv'] }]
-  });
-
-  if (result.canceled || result.filePaths.length === 0) return { ok: false };
-  const source = result.filePaths[0];
-  const dest = path.join(DATA_DIR, 'tracking.csv');
-  fs.copyFileSync(source, dest);
-  return { ok: true, path: dest };
-});
-
-registerIpcHandler('folder:openData', async () => {
-  await shell.openPath(DATA_DIR);
-  return { ok: true };
-});
-
-registerIpcHandler('folder:openLogs', async () => {
-  await shell.openPath(LOG_DIR);
-  return { ok: true };
 });
 
 registerIpcHandler('folder:openStep3Diagnostics', async () => {
@@ -2063,7 +2149,18 @@ registerIpcHandler('est:importHistory', async (_event, options = {}) => {
 
   const config = readConfig();
   const credentials = resolveWebCredentials(options, config);
-  const credentialOptions = { ...options, webUsername: credentials.username, webPassword: credentials.password };
+  const range = shipmentHistoryRangeForRun({
+    now: new Date(),
+    testMode: process.env.NODE_ENV === 'test' && USER_DATA_PROFILE.active,
+    override: { from: options.estFrom, to: options.estTo }
+  });
+  const credentialOptions = {
+    ...options,
+    estFrom: range.from,
+    estTo: range.to,
+    webUsername: credentials.username,
+    webPassword: credentials.password
+  };
   const estEnv = buildEstHistoryEnv(credentialOptions, config);
 
   if (!estEnv.EST_FROM || !estEnv.EST_TO) {
@@ -2072,6 +2169,11 @@ registerIpcHandler('est:importHistory', async (_event, options = {}) => {
   if (!estEnv.EST_CUSTOMER_NUMBER) {
     return { ok: false, error: 'Missing Canada Post customer number. Enter it in User Settings.' };
   }
+  const customerNumber = inputValidation.validateCustomerNumber(estEnv.EST_CUSTOMER_NUMBER);
+  if (!customerNumber.valid) {
+    return { ok: false, code: 'CUSTOMER_NUMBER_INVALID', error: 'Canada Post customer number must contain 1 to 10 numeric digits.' };
+  }
+  estEnv.EST_CUSTOMER_NUMBER = customerNumber.normalized;
   if (!credentials.username || !credentials.password) {
     return { ok: false, error: 'Missing Canada Post web username/password. The EST Desktop export endpoints use the web/EST login, not the developer API key.' };
   }
@@ -2079,8 +2181,6 @@ registerIpcHandler('est:importHistory', async (_event, options = {}) => {
   const claimEnvForSave = buildClaimSettingsEnv(options, config);
   const nextConfig = saveRememberedUserSettings({
     ...config,
-    estFrom: estEnv.EST_FROM,
-    estTo: estEnv.EST_TO,
     estCustomerNumber: estEnv.EST_CUSTOMER_NUMBER,
     estWorkgroup: estEnv.EST_WORKGROUP,
     estMobo: estEnv.EST_MOBO,
@@ -2159,7 +2259,12 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
   const apiEnvironment = normalizeLegacyEnvironment(config.apiEnvironment || 'production');
   const apiFiles = ensureApiCredentialFiles(apiEnvironment);
   if (!apiFiles.ok) return apiFiles;
-  const historyEnv = buildHistoryEnv(options, config);
+  const range = shipmentHistoryRangeForRun({
+    now: new Date(),
+    testMode: process.env.NODE_ENV === 'test' && USER_DATA_PROFILE.active,
+    override: { from: options.historyFrom, to: options.historyTo }
+  });
+  const historyEnv = buildHistoryEnv({ ...options, historyFrom: range.from, historyTo: range.to }, config);
 
   if (!historyEnv.HISTORY_FROM || !historyEnv.HISTORY_TO) {
     return { ok: false, error: 'Missing shipping history date range.' };
@@ -2170,8 +2275,6 @@ registerIpcHandler('history:import', async (_event, options = {}) => {
 
   writeConfig({
     ...config,
-    historyFrom: historyEnv.HISTORY_FROM,
-    historyTo: historyEnv.HISTORY_TO,
     historyCustomerNumber: historyEnv.HISTORY_CUSTOMER_NUMBER,
     historyAutoMobo: boolFromOption(historyEnv.HISTORY_AUTO_MOBO),
     historyMobo: historyEnv.HISTORY_MOBO,
@@ -2238,7 +2341,7 @@ registerIpcHandler('tracking:run', async (_event, options = {}) => {
   fs.rmSync(STOP_FILE, { force: true });
 
   const config = readConfig();
-  const trackingApiEnvironment = normalizeTrackingEnvironment(options.trackingApiEnvironment || config.trackingApiEnvironment || 'test');
+  const trackingApiEnvironment = runtimeTrackingEnvironment(options.trackingApiEnvironment || config.trackingApiEnvironment);
   const trackingApiFiles = ensureTrackingApiCredentials(trackingApiEnvironment);
   if (!trackingApiFiles.ok) return trackingApiFiles;
 
@@ -2387,6 +2490,9 @@ registerIpcHandler('tracking:run', async (_event, options = {}) => {
 
 registerIpcHandler('submit:run', async (_event, rawOptions = {}) => {
   if (USER_DATA_PROFILE.active) return { ok: false, error: 'Live claim submission is disabled while isolated test data is active.' };
+  if (setupAssistantController.active() || operationCoordinator.hasActive('setup_assistant')) {
+    return { ok: false, code: 'SETUP_ASSISTANT_ACTIVE', error: 'SETUP_ASSISTANT_ACTIVE' };
+  }
   ensureDirs();
   hideBuiltinBrowserView('submission-validation');
   let options;
@@ -2749,6 +2855,17 @@ app.whenReady()
   .catch(() => app.exit(1));
 
 app.on('before-quit', event => {
+  if (setupAssistantController.active() || operationCoordinator.hasActive('setup_assistant')) {
+    event.preventDefault();
+    if (setupQuitPending) return;
+    setupQuitPending = true;
+    setupAssistantController.closeSetupAssistant('app-shutdown')
+      .finally(() => {
+        setupQuitPending = false;
+        app.quit();
+      });
+    return;
+  }
   try {
     operationCoordinator.assertInactive();
   } catch (error) {

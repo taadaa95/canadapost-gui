@@ -14,6 +14,7 @@ const preload = read('preload.js');
 const claimDatabase = read('lib/claim-database.js');
 const migrations = read('lib/database-migrations.js');
 const english = require('../locales/en-CA.json');
+const { runtimeTrackingEnvironment, legacyTrackingEnvironmentNeedsNormalization } = require('../lib/runtime-tracking-environment');
 
 function functionSource(source, name, nextName) {
   const functionStart = source.indexOf(`function ${name}(`);
@@ -121,6 +122,22 @@ function testFreshTrackingDefault() {
   vm.runInContext(functionSource(renderer, 'buildTrackingOnlyOptions', 'renderTrackingApiCredentialMetadata'), context);
   const options = vm.runInContext('buildTrackingOnlyOptions()', context);
   assert.strictEqual(options.fresh, true, 'Normal Step 2 must default to fresh=true without a checkbox');
+  assert.strictEqual(options.trackingApiEnvironment, 'production', 'Normal Step 2 must always use production');
+}
+
+function testProductionRuntimeInvariant() {
+  for (const legacy of [undefined, '', 'production', 'test', 'sandbox', 'development', 'another obsolete environment']) {
+    assert.strictEqual(runtimeTrackingEnvironment(legacy), 'production');
+  }
+  assert.strictEqual(legacyTrackingEnvironmentNeedsNormalization(undefined), false);
+  assert.strictEqual(legacyTrackingEnvironmentNeedsNormalization('production'), false);
+  for (const legacy of ['test', 'sandbox', 'development']) {
+    assert.strictEqual(legacyTrackingEnvironmentNeedsNormalization(legacy), true);
+  }
+  assert.doesNotMatch(html, /id="trackingApiEnvironment"/);
+  assert.match(main, /const trackingApiEnvironment = runtimeTrackingEnvironment\(options\.trackingApiEnvironment \|\| config\.trackingApiEnvironment\)/);
+  assert.match(main, /sanitized\.trackingApiEnvironment = runtimeTrackingEnvironment/);
+  assert.match(main, /persist:canadapost-claims-builtin/);
 }
 
 async function testSettingsSaveStatus() {
@@ -240,6 +257,7 @@ function testResultNotifications() {
 (async () => {
   assertProductSurfaceCleanup();
   testFreshTrackingDefault();
+  testProductionRuntimeInvariant();
   await testSettingsSaveStatus();
   testResultNotifications();
   process.stdout.write('Dev11 product UI cleanup tests passed.\n');

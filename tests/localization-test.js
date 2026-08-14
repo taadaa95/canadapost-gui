@@ -96,7 +96,7 @@ for (const text of observedEnglish) {
 }
 
 for (const key of [
-  'step1.title', 'step1.createsTrackingCsv', 'step1.fromDate', 'step1.toDate', 'step1.run', 'step1.statusTitle',
+  'step1.title', 'step1.createsTrackingCsv', 'step1.rollingWindow', 'step1.carryForward', 'step1.run', 'step1.statusTitle',
   'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups', 'step1.warningsAria', 'step1.warningsInspect',
   'step1.progress', 'step1.liveLog', 'step1.exportStarting', 'step1.exportStartFailed', 'step1.historyImportStarting',
   'step1.historyStartFailed', 'step1.runFailed', 'step1.runBlocked', 'step2.title', 'step2.readsTrackingCsv', 'step2.run',

@@ -45,7 +45,8 @@ const removedIds = [
   'liveSubmitModal', 'liveSubmitAcknowledge', 'confirmLiveSubmit', 'cancelLiveSubmit'
 ];
 for (const id of removedIds) assert.doesNotMatch(html, new RegExp(`id="${id}"`), `${id} must be removed`);
-assert.match(html, /id="clearStep3BrowserSession"/);
+assert.doesNotMatch(html, /id="clearStep3BrowserSession"/);
+assert.match(main, /browser:clearSession/, 'low-level browser-session recovery must remain internal');
 assert.match(html, /class="step-workspace step3-workspace"/);
 assert.doesNotMatch(`${renderer}\n${css}`, /builtin-browser-enabled/);
 

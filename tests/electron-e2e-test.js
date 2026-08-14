@@ -89,7 +89,7 @@ const { loadLocale } = require('../lib/i18n');
       assert.deepStrictEqual(mismatches, []);
     };
     await assertFrenchKeys([
-      'step1.title', 'step1.createsTrackingCsv', 'step1.fromDate', 'step1.toDate', 'step1.run', 'action.forceStop',
+      'step1.title', 'step1.createsTrackingCsv', 'step1.rollingWindow', 'step1.carryForward', 'step1.run', 'action.forceStop',
       'step1.statusTitle', 'runStatus.idle', 'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups',
       'step1.warningsInspect', 'step1.progress', 'status.waiting', 'step1.liveLog'
     ]);

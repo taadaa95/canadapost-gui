@@ -11,15 +11,6 @@
 .update-progress-detail { margin-top: 4px; color: var(--muted); min-height: 20px; }
 #updateProgressCancel { margin-top: 18px; width: 100%; min-height: 40px; }
 #step3CanadaPostSupport { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid var(--line-strong); border-left: 4px solid var(--accent-2); background: var(--panel-soft); color: var(--text); line-height: 1.45; }
-.privacy-management-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.privacy-management-grid .wide { grid-column: 1 / -1; }
-.privacy-preview-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.privacy-preview-count { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); background: var(--panel-soft); }
-@media (max-width: 800px) { .privacy-management-grid, .privacy-preview-counts { grid-template-columns: 1fr; } }
-.advanced-settings { margin-top: 12px; }
-.advanced-settings > summary { cursor: pointer; margin-bottom: 10px; }
-.advanced-settings > button { min-height: 34px; }
-.modal-card-compact { width: min(520px, calc(100vw - 48px)); grid-template-rows: auto auto auto auto; overflow: auto; }
 .privacy-modal-card { width: min(760px, calc(100vw - 48px)); display: block; overflow: auto; padding: 16px; }
 .privacy-modal-card > * + * { margin-top: 12px; }
 .blocking-check-list { display: grid; gap: 8px; }

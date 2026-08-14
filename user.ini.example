@@ -7,5 +7,5 @@ apiPassword=YOUR_DEVELOPER_PROGRAM_API_PASSWORD
 apiEnvironment=production
 ; Save the current Tracking API client ID / API Key and client secret / API Secret
 ; in the app Settings screen so they use encrypted secret storage. They are not
-; accepted from this plaintext file. Select trackingApiEnvironment=test or production in Settings.
+; accepted from this plaintext file. Claim Runner always uses the production Tracking API environment.
 ; mobo=OPTIONAL_MAILED_ON_BEHALF_OF_NUMBER

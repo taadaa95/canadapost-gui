@@ -40,10 +40,10 @@ No custom manifest, release channel, Ed25519 key, or application-specific signat
 6. Upload only the platform binaries being published and one `SHA256SUMS.txt` covering them.
 7. Confirm GitHub reports a SHA-256 digest for every binary asset before declaring the release ready.
 
-Stable 0.4.0 publishes Linux x64 and Windows x64 binaries, their legacy Dev 10 compatibility manifests, and one checksum file:
+Stable 0.4.1 publishes Linux x64 and Windows x64 binaries, their legacy Dev 10 compatibility manifests, and one checksum file:
 
-- `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`
-- `Canada.Post.Claim.Runner-0.4.0-win-x64.exe`
+- `Canada.Post.Claim.Runner-0.4.1-linux-x86_64.AppImage`
+- `Canada.Post.Claim.Runner-0.4.1-win-x64.exe`
 - `package-manifest-linux.json`
 - `package-manifest-windows.json`
 - `SHA256SUMS.txt`

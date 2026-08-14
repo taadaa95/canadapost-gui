@@ -5,6 +5,7 @@ const {
   cleanString,
   asBoolean,
   boundedInteger,
+  validateCustomerNumber,
   validateTrackingSelection,
   validateSubmitOptions
 } = require('../lib/input-validation');
@@ -14,6 +15,11 @@ assert.strictEqual(asBoolean('yes'), true);
 assert.strictEqual(asBoolean('off', true), false);
 assert.strictEqual(boundedInteger('500000', { min: 1, max: 100, fallback: 5 }), 100);
 assert.deepStrictEqual(validateTrackingSelection([' 123 ', '123', '', '456']), ['123', '456']);
+assert.deepStrictEqual(validateCustomerNumber('12345678'), { valid: true, normalized: '0012345678' });
+assert.strictEqual(validateCustomerNumber('1').valid, true);
+assert.strictEqual(validateCustomerNumber('1234567890').valid, true);
+assert.strictEqual(validateCustomerNumber('12345678901').valid, false);
+assert.strictEqual(validateCustomerNumber('12 345').valid, false);
 
 const validated = validateSubmitOptions({
   browserMode: 'external',

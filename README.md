@@ -1,6 +1,6 @@
 # Canada Post Claim Runner
 
-Current public stable version: **0.4.0** for Linux x64 and Windows x64. Version **0.4.2** is the next release candidate and remains unpublished until Kris validates the exact canonical packages. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
+Current public stable version: **0.4.1** for Linux x64 and Windows x64. Version **0.4.2** is the next release candidate and remains unpublished until Kris validates the exact canonical packages. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
 
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 
@@ -21,7 +21,7 @@ Node.js implements Steps 1 and 2. Step 2 uses the current Canada Post Developer 
 
 Step 1 uses EST parser `est-import-v5`. It requests both Manifest and ManifestItems, joins the documented Manifest `Mailing Date` to item rows by `Order Id`, maps ManifestItems `MATNR – Article Number` through the documented service table, and persists available normalized enrichment with source-field/provenance columns. Tracking PIN is mandatory. Missing Shipment Date or Service Code is never invented and does not exclude a row with a valid PIN; aggregate optional-metadata warnings are reported instead.
 
-Create a current Canada Post Developer Portal application, add Tracking product access, and save its API Key as the **Tracking API 2.0 platform client ID** and its API Secret as the **Tracking API 2.0 platform client secret** in User Settings. Select the matching test or production environment, then run Step 1 and Step 2. Normal Step 2 automatically performs a fresh tracking run and does not require a separate diagnostic gate.
+Create a current Canada Post Developer Portal Production application, add Tracking product access, and save its API Key as the **Tracking API 2.0 platform client ID** and its API Secret as the **Tracking API 2.0 platform client secret** in User Settings. Claim Runner always uses the production Tracking environment. Then run Step 1 and Step 2. Normal Step 2 automatically performs a fresh tracking run and does not require a separate diagnostic gate.
 
 Tracking API service is preferred, EST service is the fallback, and unknown service remains valid optional enrichment. Internal semantic diagnostics, sanitized response inspection, and incomplete-run staging/recovery remain available for support and automated testing without appearing in the normal workflow. Incomplete Step 2 runs remain excluded from Step 3 and do not delete completed history.
 
@@ -64,7 +64,7 @@ An interrupted or uncertain claim appears as **Needs attention** in Claim Histor
 
 ## Claim History
 
-History is a single newest-first claim record with Refresh and CSV export. It shows tracking number, attempt time, status, confirmation when available, a concise result, and useful evidence. Reconciliation mutation buttons are not exposed in the normal History interface. Backup, restore, stored-data management, and support bundles are under **Settings → Advanced**. Browser-session controls remain in Step 3.
+History is a single newest-first claim record with Refresh and CSV export. It shows tracking number, attempt time, status, confirmation when available, a concise result, and useful evidence. Reconciliation mutation buttons and developer utility controls are not exposed in the normal customer interface. Step 3 explains that Claim Runner controls the built-in browser and pauses explicitly when login, verification, or CAPTCHA input is required.
 
 ## Validation and stable build
 

@@ -15,15 +15,11 @@ const pkg = require('../package.json');
 const requiredIds = [
   'historyTab', 'historyList', 'historyResultCount',
   'historySubmitted', 'historyNeedsAttention', 'historyRecordTotal',
-  'createBackup', 'restoreBackup', 'createDiagnostics',
   'exportHistory', 'refreshHistory',
-  'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'openStep3Diagnostics', 'clearStep3BrowserSession', 'setupWizard', 'setupReadinessList', 'setupFinish',
-  'trackingClientId', 'trackingClientSecret', 'trackingApiEnvironment', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'clearTrackingApiCredentials',
+  'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'step3AutomationNotice', 'step3AutomationNoticeStatus', 'openStep3Diagnostics', 'setupWizard', 'setupReadinessList', 'setupFinish',
+  'trackingClientId', 'trackingClientSecret', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'clearTrackingApiCredentials',
   'runTrackingOnly', 'forceStopStep2', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
-  'selectAllClaims', 'clearClaimSelection', 'manageStoredData', 'privacyDataModal', 'privacyDataTitle', 'privacyTrackingNumbers',
-  'privacyDateFrom', 'privacyDateTo', 'privacyAllRecords', 'previewPrivacyData',
-  'privacyPreviewCounts', 'privacyDestructiveConfirm', 'privacyTypedPhrase',
-  'privacySecondConfirm', 'deletePrivacyData'
+  'selectAllClaims', 'clearClaimSelection'
 ];
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
@@ -36,8 +32,8 @@ assert.ok(!preload.includes('document.createElement'), 'Preload must remain a na
 assert.ok(englishLocale['step3.supportGuidance'].includes('1-888-550-6333'), 'Missing Canada Post customer-service number');
 assert.ok(englishLocale['step3.supportGuidance'].includes('Unsure about a claim?'), 'Missing Step 3 claim-verification guidance');
 assert.match(html, /data-i18n="step3\.supportGuidance"/);
-assert.ok(renderer.includes("$('createBackup')?.addEventListener"));
-assert.ok(renderer.includes("$('clearStep3BrowserSession')?.addEventListener"));
+assert.ok(!renderer.includes("$('createBackup')?.addEventListener"));
+assert.ok(!renderer.includes("$('clearStep3BrowserSession')?.addEventListener"));
 assert.ok(!html.includes('id="reconciliationBadge"'), 'History tab must not contain a notification badge');
 assert.ok(!renderer.includes("$('reconciliationBadge')"), 'Renderer must not update a removed History badge');
 const historyTabMarkup = html.match(/<button id="tabHistory"[^>]*>([\s\S]*?)<\/button>/)?.[1] || '';
@@ -106,13 +102,12 @@ for (const removedId of [
   'historyClassificationList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus'
 ]) assert.ok(!historyMarkup.includes(`id="${removedId}"`), `History must not retain #${removedId}`);
 assert.doesNotMatch(historyMarkup, /Reconciliation Queue|Manually add|classification records/i);
-assert.strictEqual((html.match(/id="createBackup"/g) || []).length, 1);
-assert.strictEqual((html.match(/id="restoreBackup"/g) || []).length, 1);
-assert.strictEqual((html.match(/id="createDiagnostics"/g) || []).length, 1);
 const settingsMarkup = html.match(/<section id="settingsTab"[\s\S]*?<section id="step1"/)?.[0] || '';
-for (const id of ['createBackup', 'restoreBackup', 'manageStoredData', 'createDiagnostics']) {
-  assert.ok(settingsMarkup.includes(`id="${id}"`), `${id} must be available in Settings → Advanced`);
+for (const id of ['trackingApiEnvironment', 'createBackup', 'restoreBackup', 'manageStoredData', 'createDiagnostics']) {
+  assert.ok(!settingsMarkup.includes(`id="${id}"`), `${id} must not appear in customer Settings`);
 }
+assert.doesNotMatch(settingsMarkup, /advancedSettingsTitle|class="[^"]*advanced-settings/);
+assert.match(settingsMarkup, /id="checkForUpdates"/);
 assert.doesNotMatch(`${renderer}\n${preload}`, /listReconciliation|listClassificationQueue|listManualShipments|addManualShipment/,
   'removed History-only preload and renderer APIs must not remain exposed');
 assert.doesNotMatch(main, /registerIpcHandler\('(reconciliation:list|classification:list|shipment:listManual|shipment:manualAdd)'/,
@@ -144,6 +139,20 @@ for (const [, tabMarkup] of stepTabs) {
   assert.doesNotMatch(tabMarkup, /<br\s*\/?\s*>/i, 'Workflow tab layout must not depend on an extra flex line-break element');
 }
 assert.ok(/\.step-tab,[\s\S]*?\.step-tab\.active\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*gap:\s*4px\s*!important/s.test(styles), 'Workflow tab text must remain vertically centred with explicit title/subtitle spacing');
+for (const id of ['importEstHistory', 'forceStopStep1', 'runTrackingOnly', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {
+  assert.match(html, new RegExp(`id="${id}"[^>]*class="[^"]*step-execution-control`), `${id} must use the shared execution-control class`);
+}
+assert.match(styles, /\.step-execution-control\s*\{[^}]*min-width:\s*108px\s*!important;[^}]*height:\s*48px\s*!important;/s);
+assert.match(styles, /#step1 \.step-execution-control,[\s\S]*?#step3 \.step-execution-control\s*\{[^}]*width:\s*auto\s*!important;[^}]*min-width:\s*108px\s*!important;[^}]*height:\s*48px\s*!important;/s);
+for (const id of ['selectCsv', 'openData', 'openLogs', 'fullRefresh', 'clearStep3BrowserSession']) {
+  assert.ok(!html.includes(`id="${id}"`), `Removed customer utility #${id} must stay absent`);
+}
+assert.match(html, /id="step3AutomationNotice"[^>]*role="note"/);
+for (const key of ['step3.automation.title', 'step3.automation.description', 'step3.automation.exceptions']) {
+  assert.ok(Object.hasOwn(englishLocale, key), `Missing automated-browser localization ${key}`);
+}
+assert.match(englishLocale['step3.automation.exceptions'], /Do not click, type, scroll or navigate/);
+assert.match(englishLocale['step3.automation.exceptions'], /login, verification or CAPTCHA/);
 console.log('UI contract tests passed.');
 require('./workflow-access-test');
 

@@ -49,15 +49,18 @@ function testOsCredentialStorage() {
     const storage = loadStorage(tempRoot, fakeSafeStorage);
     storage.ensureDirs();
 
-    storage.writeConfig({ webUsername: 'example', webPassword: 'must-not-persist', arbitrary: 'blocked' });
+    storage.writeConfig({ webUsername: 'example', estCustomerNumber: '1234567', guidanceSounds: false, webPassword: 'must-not-persist', arbitrary: 'blocked' });
     const config = storage.readConfig();
     assert.strictEqual(config.webUsername, 'example');
+    assert.strictEqual(config.estCustomerNumber, '0001234567', 'stored customer numbers must use the canonical ten-digit form');
+    assert.strictEqual(config.guidanceSounds, false, 'the non-sensitive Guidance sounds preference persists without a schema change');
     assert.ok(!Object.prototype.hasOwnProperty.call(config, 'webPassword'));
     assert.ok(!Object.prototype.hasOwnProperty.call(config, 'arbitrary'));
 
     const passwordResult = storage.savePassword('web-secret', true);
     const expectedBackend = process.platform === 'linux' ? 'kwallet6' : 'os-crypt';
     assert.strictEqual(passwordResult.stored, true);
+    assert.strictEqual(passwordResult.updated, true);
     assert.strictEqual(passwordResult.backend, expectedBackend);
     assert.strictEqual(storage.loadPassword(), 'web-secret');
     assert.strictEqual(storage.passwordStored(), true);
@@ -68,7 +71,9 @@ function testOsCredentialStorage() {
     assert.strictEqual(storage.apiCredentialEnvironment(), 'development');
     assert.notStrictEqual(storage.loadPassword(), storage.loadApiCredentials().password, 'website password was copied into API credentials');
 
-    assert.strictEqual(storage.saveTrackingApiCredentials(' current-client ', ' current-secret ', { environment: 'test' }).stored, true);
+    const trackingWrite = storage.saveTrackingApiCredentials(' current-client ', ' current-secret ', { environment: 'test' });
+    assert.strictEqual(trackingWrite.stored, true);
+    assert.strictEqual(trackingWrite.updated, true);
     assert.deepStrictEqual(storage.loadTrackingApiCredentials(), { clientId: 'current-client', clientSecret: 'current-secret' });
     assert.strictEqual(storage.trackingApiCredentialEnvironment(), 'test');
     assert.strictEqual(storage.trackingApiCredentialsStored(), true);

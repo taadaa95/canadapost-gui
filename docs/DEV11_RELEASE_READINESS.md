@@ -1,11 +1,11 @@
-# Stable 0.4.0 release readiness
+# Stable 0.4.2 release readiness
 
 ## Candidate identity
 
 - Canonical source branch: `feature/dev11-beta-release-hardening`
-- Target application version: `0.4.0`
-- Linux artifact: `Canada.Post.Claim.Runner-0.4.0-linux-x86_64.AppImage`
-- Windows artifact: `Canada.Post.Claim.Runner-0.4.0-win-x64.exe`
+- Target application version: `0.4.2`
+- Linux artifact: `Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage`
+- Windows artifact: `Canada.Post.Claim.Runner-0.4.2-win-x64.exe`
 - Final source SHA: recorded by the clean build and final handoff
 
 The branch name remains for PR continuity and is not a release channel.

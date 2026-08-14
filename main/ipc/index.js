@@ -4,6 +4,7 @@ const { validateIpcPayload } = require('../../lib/ipc-contracts');
 
 const groups = Object.freeze({
   settings: require('./settings'),
+  setupAssistant: require('./setup-assistant'),
   step1: require('./step1'),
   step2: require('./step2'),
   step3Browser: require('./step3-browser'),
