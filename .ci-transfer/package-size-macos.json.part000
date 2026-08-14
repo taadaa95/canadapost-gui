@@ -1,0 +1,24 @@
+{
+  "format": "canadapost-claim-runner-package-size-report",
+  "version": 1,
+  "generatedAt": "2026-08-14T04:26:51.748Z",
+  "commit": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "platform": "mac-universal-dmg",
+  "budgetBytes": 260000000,
+  "baselineBytes": null,
+  "artifacts": [
+    {
+      "name": "Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg",
+      "bytes": 220408409,
+      "withinBudget": true,
+      "reductionFromDev10Bytes": null,
+      "reductionFromDev10Percent": null
+    }
+  ],
+  "majorUnpackedContributors": [
+    {
+      "name": "Canada Post Claim Runner.app",
+      "bytes": 923278179
+    }
+  ]
+}

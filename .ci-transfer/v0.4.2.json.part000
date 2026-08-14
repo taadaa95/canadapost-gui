@@ -1,0 +1,22 @@
+{
+  "format": "canadapost-claim-runner-release-metadata",
+  "metadataVersion": 1,
+  "version": "0.4.2",
+  "tag": "v0.4.2",
+  "sourceRepository": "taadaa95/canadapost-gui",
+  "sourceSha": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "artifacts": {
+    "macos": {
+      "file": "Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg",
+      "bytes": 220408409,
+      "sha256": "710b136471dc3d91377427fbcb51b2902352ef479c912b0714dd183f3ed9a032"
+    }
+  },
+  "manualValidation": {
+    "status": "pending",
+    "validatedAt": null,
+    "notes": ""
+  },
+  "buildOrigin": "github-actions:31769630452",
+  "releaseUrl": "https://github.com/taadaa95/canadapost-claim-runner-releases/releases/tag/v0.4.2"
+}

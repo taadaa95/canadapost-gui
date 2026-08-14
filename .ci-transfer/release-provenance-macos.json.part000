@@ -1,0 +1,33 @@
+{
+  "format": "canadapost-claim-runner-release-provenance",
+  "version": 1,
+  "generatedAt": "2026-08-14T04:26:56.168Z",
+  "applicationVersion": "0.4.2",
+  "platform": "macos",
+  "architecture": "universal (x64, arm64)",
+  "sourceBranch": "feature/dev11-beta-release-hardening",
+  "sourceCommit": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "buildOrigin": "github-actions:31769630452",
+  "materials": [
+    {
+      "name": "SHA256SUMS-macos.txt",
+      "bytes": 115,
+      "sha256": "e64bee504ee178b5e752271892a152e09b9d842e3c8cde884786ac1153a63a15"
+    },
+    {
+      "name": "package-size-macos.json",
+      "bytes": 621,
+      "sha256": "6a74201756615a26a7471edded4c83ba5c3b42aba72c4cff02342d4351419bb3"
+    },
+    {
+      "name": "sbom.cyclonedx.json",
+      "bytes": 4696,
+      "sha256": "6b75abe7e965c71c1cc9beee9d8474f1891612ae4c01dd9dd3dedf7923918bca"
+    },
+    {
+      "name": "dependency-licenses.json",
+      "bytes": 1045,
+      "sha256": "fea529c03396dec4d19296cefb9b97872868123844765b67271c9f3254935dc5"
+    }
+  ]
+}
