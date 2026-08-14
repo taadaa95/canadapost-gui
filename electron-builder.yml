@@ -1,0 +1,81 @@
+appId: ca.claimrunner.canadapost
+productName: Canada Post Claim Runner
+asar: true
+asarUnpack:
+  - scripts/import-est-history.js
+  - scripts/import-shipping-history.js
+  - scripts/get-tracking.js
+  - scripts/database-startup-probe.js
+  - scripts/submit-claims.js
+  - lib/**/*.js
+  - config/*.json
+  - cacert.pem
+  - wsdl/**
+  - node_modules/fast-xml-parser/**
+  - node_modules/strnum/**
+  - node_modules/playwright-core/**
+  - "!node_modules/playwright-core/.local-browsers/**"
+files:
+  - bootstrap.js
+  - main.js
+  - main/**/*.js
+  - preload.js
+  - renderer.js
+  - renderer/**/*.js
+  - renderer/**/*.css
+  - index.html
+  - package.json
+  - lib/**/*.js
+  - config/policy-rules.json
+  - config/holiday-calendar.json
+  - config/update-source.json
+  - locales/*.json
+  - scripts/import-est-history.js
+  - scripts/import-shipping-history.js
+  - scripts/get-tracking.js
+  - scripts/database-startup-probe.js
+  - scripts/submit-claims.js
+  - cacert.pem
+  - wsdl/**
+  - "!**/data/**"
+  - "!**/logs/**"
+  - "!**/tests/**"
+  - "!**/*.map"
+  - "!**/.env*"
+  - "!**/user.ini"
+  - "!**/config.local.json"
+  - "!**/*.sqlite*"
+  - "!**/*browser-profile*"
+  - "!**/node_modules/playwright/**"
+  - "!**/node_modules/playwright-core/.local-browsers/**"
+artifactName: "Canada.Post.Claim.Runner-${version}-${os}-${arch}.${ext}"
+directories:
+  output: dist/packages
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  verifyUpdateCodeSignature: true
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  differentialPackage: false
+linux:
+  category: Office
+  syncDesktopName: true
+  target:
+    - target: AppImage
+      arch: [x64]
+mac:
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch: [universal]
+  hardenedRuntime: true
+  notarize: true
+  mergeASARs: true
+dmg:
+  sign: false
+publish: null

@@ -4,3773 +4,31 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: file:;" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Canada Post Claim Runner</title>
-  <style>
-    :root {
-      --bg: #07101f;
-      --appbar: #0b1220;
-      --panel: #111827;
-      --panel-strong: #0b1220;
-      --panel-soft: #0f172a;
-      --field: #07101f;
-      --log-bg: #020617;
-      --text: #eef2ff;
-      --muted: #a8b3c7;
-      --muted-2: #748199;
-      --line: #273449;
-      --line-strong: #3a4a63;
-      --accent: #3b82f6;
-      --accent-2: #38bdf8;
-      --accent-soft: rgba(56, 189, 248, .14);
-      --success: #22c55e;
-      --success-2: #16a34a;
-      --success-soft: rgba(34, 197, 94, .14);
-      --success-text: #9ff0bc;
-      --warning: #f59e0b;
-      --warning-2: #b45309;
-      --warning-soft: rgba(245, 158, 11, .14);
-      --warning-text: #fcd34d;
-      --danger: #ef4444;
-      --danger-2: #b91c1c;
-      --danger-soft: rgba(239, 68, 68, .14);
-      --danger-text: #fca5a5;
-      --button-secondary: #1e293b;
-      --button-secondary-text: #dbeafe;
-      --scroll-thumb: #334155;
-      --font-mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "JetBrains Mono NL", "CaskaydiaCove Nerd Font", "Cascadia Mono", Consolas, monospace;
-    }
-
-    [data-theme="light"] {
-      --bg: #eef2f7;
-      --appbar: #e2e8f0;
-      --panel: #f8fafc;
-      --panel-strong: #ffffff;
-      --panel-soft: #f1f5f9;
-      --field: #ffffff;
-      --log-bg: #ffffff;
-      --text: #0f172a;
-      --muted: #475569;
-      --muted-2: #64748b;
-      --line: #cbd5e1;
-      --line-strong: #94a3b8;
-      --accent: #2563eb;
-      --accent-2: #0284c7;
-      --accent-soft: rgba(37, 99, 235, .12);
-      --button-secondary: #e2e8f0;
-      --button-secondary-text: #0f172a;
-      --scroll-thumb: #94a3b8;
-    }
-
-
-    [data-theme="tokyo-night"] {
-      --bg: #10131f;
-      --appbar: #0b0e18;
-      --panel: #161a2a;
-      --panel-strong: #0d101b;
-      --panel-soft: #1b2033;
-      --field: #080b14;
-      --log-bg: #050711;
-      --text: #eef3ff;
-      --muted: #c3ccef;
-      --muted-2: #8792c5;
-      --line: #343b5e;
-      --line-strong: #59658f;
-      --accent: #7aa2f7;
-      --accent-2: #2ac3de;
-      --success: #9ece6a;
-      --success-2: #4fbf86;
-      --success-text: #d7ffad;
-      --warning: #e0af68;
-      --warning-2: #c67a2d;
-      --warning-text: #ffe0a3;
-      --danger: #f7768e;
-      --danger-2: #c53b53;
-      --danger-text: #ffc0cb;
-      --button-secondary: #1b2033;
-      --button-secondary-text: #eef3ff;
-      --scroll-thumb: #59658f;
-    }
-
-
-    [data-theme="tokyo-storm"] {
-      --bg: #141724;
-      --appbar: #0f121d;
-      --panel: #1b2030;
-      --panel-strong: #111522;
-      --panel-soft: #22283a;
-      --field: #0d1019;
-      --log-bg: #080a11;
-      --text: #f0f4ff;
-      --muted: #c8d0ef;
-      --muted-2: #8f98c9;
-      --line: #3f486d;
-      --line-strong: #64709d;
-      --accent: #7aa2f7;
-      --accent-2: #bb9af7;
-      --success: #9ece6a;
-      --success-2: #4fbf86;
-      --success-text: #d7ffad;
-      --warning: #e0af68;
-      --warning-2: #c67a2d;
-      --warning-text: #ffe0a3;
-      --danger: #f7768e;
-      --danger-2: #c53b53;
-      --danger-text: #ffc0cb;
-      --button-secondary: #22283a;
-      --button-secondary-text: #f0f4ff;
-      --scroll-thumb: #64709d;
-    }
-
-
-    [data-theme="catppuccin-mocha"] {
-      --bg: #090912;
-      --appbar: #0d0d17;
-      --panel: #151521;
-      --panel-strong: #0b0b14;
-      --panel-soft: #202034;
-      --field: #07070f;
-      --log-bg: #030307;
-      --text: #f2f5ff;
-      --muted: #cdd4ef;
-      --muted-2: #9da5c3;
-      --line: #34364d;
-      --line-strong: #5a5f7a;
-      --accent: #89b4fa;
-      --accent-2: #74c7ec;
-      --success: #a6e3a1;
-      --success-2: #5dbf80;
-      --success-text: #d9ffd5;
-      --warning: #f9e2af;
-      --warning-2: #c2873e;
-      --warning-text: #fff1c7;
-      --danger: #f38ba8;
-      --danger-2: #c94f69;
-      --danger-text: #ffc7d4;
-      --button-secondary: #202034;
-      --button-secondary-text: #f2f5ff;
-      --scroll-thumb: #5a5f7a;
-    }
-
-
-    [data-theme="catppuccin-macchiato"] {
-      --bg: #0f1019;
-      --appbar: #121420;
-      --panel: #191c2c;
-      --panel-strong: #10121d;
-      --panel-soft: #25293d;
-      --field: #0b0c14;
-      --log-bg: #06070c;
-      --text: #f1f4ff;
-      --muted: #c9d1ef;
-      --muted-2: #9aa2c0;
-      --line: #3a405a;
-      --line-strong: #5e6684;
-      --accent: #8aadf4;
-      --accent-2: #7dc4e4;
-      --success: #a6da95;
-      --success-2: #58b978;
-      --success-text: #d7ffd0;
-      --warning: #eed49f;
-      --warning-2: #bd7840;
-      --warning-text: #ffe9b8;
-      --danger: #ed8796;
-      --danger-2: #c44a5a;
-      --danger-text: #ffc2ca;
-      --button-secondary: #25293d;
-      --button-secondary-text: #f1f4ff;
-      --scroll-thumb: #5e6684;
-    }
-
-
-    [data-theme="catppuccin-frappe"] {
-      --bg: #161922;
-      --appbar: #1a1d28;
-      --panel: #222636;
-      --panel-strong: #171a24;
-      --panel-soft: #2e3348;
-      --field: #11131b;
-      --log-bg: #0b0d12;
-      --text: #f0f3ff;
-      --muted: #cad2ef;
-      --muted-2: #9ca5c0;
-      --line: #454b64;
-      --line-strong: #69718d;
-      --accent: #8caaee;
-      --accent-2: #85c1dc;
-      --success: #a6d189;
-      --success-2: #58b579;
-      --success-text: #d7ffc5;
-      --warning: #e5c890;
-      --warning-2: #b87538;
-      --warning-text: #ffe3a3;
-      --danger: #e78284;
-      --danger-2: #bd474b;
-      --danger-text: #ffc0c2;
-      --button-secondary: #2e3348;
-      --button-secondary-text: #f0f3ff;
-      --scroll-thumb: #69718d;
-    }
-
-    [data-theme="catppuccin-latte"] {
-      --bg: #eff1f5;
-      --appbar: #e6e9ef;
-      --panel: #f5f7fb;
-      --panel-strong: #ffffff;
-      --panel-soft: #e6e9ef;
-      --field: #ffffff;
-      --log-bg: #ffffff;
-      --text: #4c4f69;
-      --muted: #6c6f85;
-      --muted-2: #8c8fa1;
-      --line: #ccd0da;
-      --line-strong: #acb0be;
-      --accent: #1e66f5;
-      --accent-2: #04a5e5;
-      --success: #40a02b;
-      --success-2: #179299;
-      --success-text: #40a02b;
-      --warning: #df8e1d;
-      --warning-2: #fe640b;
-      --warning-text: #df8e1d;
-      --danger: #d20f39;
-      --danger-2: #e64553;
-      --danger-text: #d20f39;
-      --button-secondary: #e6e9ef;
-      --button-secondary-text: #4c4f69;
-      --scroll-thumb: #acb0be;
-    }
-
-
-    [data-theme="nord"] {
-      --bg: #1b212b;
-      --appbar: #141922;
-      --panel: #242c39;
-      --panel-strong: #171d26;
-      --panel-soft: #2e3847;
-      --field: #121720;
-      --log-bg: #0b0f15;
-      --text: #f4f7fb;
-      --muted: #d6deeb;
-      --muted-2: #a5b0c1;
-      --line: #4e5c70;
-      --line-strong: #7393b8;
-      --accent: #7fa8d6;
-      --accent-2: #88c0d0;
-      --success: #a3be8c;
-      --success-2: #5f9f7d;
-      --success-text: #d7efc8;
-      --warning: #ebcb8b;
-      --warning-2: #b77855;
-      --warning-text: #ffe7ad;
-      --danger: #d86f7a;
-      --danger-2: #a84350;
-      --danger-text: #ffc2c9;
-      --button-secondary: #2e3847;
-      --button-secondary-text: #f4f7fb;
-      --scroll-thumb: #7393b8;
-    }
-
-
-    [data-theme="gruvbox-dark"] {
-      --bg: #161819;
-      --appbar: #1b1d1e;
-      --panel: #242321;
-      --panel-strong: #171819;
-      --panel-soft: #302d2a;
-      --field: #111314;
-      --log-bg: #090b0c;
-      --text: #fff0c2;
-      --muted: #e5d5ad;
-      --muted-2: #b8a98b;
-      --line: #5f564e;
-      --line-strong: #8a7b6d;
-      --accent: #83b7aa;
-      --accent-2: #8ecf8b;
-      --success: #b8bb26;
-      --success-2: #7f9f22;
-      --success-text: #eff799;
-      --warning: #fabd2f;
-      --warning-2: #b87912;
-      --warning-text: #ffe08a;
-      --danger: #fb4934;
-      --danger-2: #b83224;
-      --danger-text: #ffb8ad;
-      --button-secondary: #302d2a;
-      --button-secondary-text: #fff0c2;
-      --scroll-thumb: #8a7b6d;
-    }
-
-    [data-theme="gruvbox-light"] {
-      --bg: #f2e5bc;
-      --appbar: #ebdbb2;
-      --panel: #fbf1c7;
-      --panel-strong: #f9f5d7;
-      --panel-soft: #ebdbb2;
-      --field: #f9f5d7;
-      --log-bg: #f9f5d7;
-      --text: #3c3836;
-      --muted: #665c54;
-      --muted-2: #7c6f64;
-      --line: #d5c4a1;
-      --line-strong: #bdae93;
-      --accent: #076678;
-      --accent-2: #427b58;
-      --success: #79740e;
-      --success-2: #98971a;
-      --warning: #b57614;
-      --warning-2: #af3a03;
-      --danger: #9d0006;
-      --danger-2: #cc241d;
-      --button-secondary: #ebdbb2;
-      --button-secondary-text: #3c3836;
-      --scroll-thumb: #bdae93;
-    }
-
-
-    [data-theme="dracula"] {
-      --bg: #151621;
-      --appbar: #10111a;
-      --panel: #202231;
-      --panel-strong: #12131d;
-      --panel-soft: #2c2f43;
-      --field: #0d0e16;
-      --log-bg: #07080d;
-      --text: #ffffff;
-      --muted: #d7daea;
-      --muted-2: #9aa3c7;
-      --line: #50566f;
-      --line-strong: #7580a6;
-      --accent: #bd93f9;
-      --accent-2: #8be9fd;
-      --success: #50fa7b;
-      --success-2: #18a957;
-      --success-text: #b8ffc9;
-      --warning: #f1fa8c;
-      --warning-2: #c17a29;
-      --warning-text: #fbffbd;
-      --danger: #ff5555;
-      --danger-2: #c83c45;
-      --danger-text: #ffc0c0;
-      --button-secondary: #2c2f43;
-      --button-secondary-text: #ffffff;
-      --scroll-thumb: #7580a6;
-    }
-
-
-    [data-theme="solarized-dark"] {
-      --bg: #001b22;
-      --appbar: #002631;
-      --panel: #00303d;
-      --panel-strong: #00151b;
-      --panel-soft: #073642;
-      --field: #001117;
-      --log-bg: #000b0f;
-      --text: #fff6dc;
-      --muted: #c9d4cf;
-      --muted-2: #9fb0ad;
-      --line: #24515a;
-      --line-strong: #6f8d94;
-      --accent: #2f9ee8;
-      --accent-2: #2dc2b1;
-      --success: #9db20d;
-      --success-2: #228a7e;
-      --success-text: #ddec86;
-      --warning: #d3a20a;
-      --warning-2: #b45b1b;
-      --warning-text: #ffe282;
-      --danger: #e3423f;
-      --danger-2: #b7316d;
-      --danger-text: #ffb9b7;
-      --button-secondary: #073642;
-      --button-secondary-text: #fff6dc;
-      --scroll-thumb: #6f8d94;
-    }
-
-    [data-theme="solarized-light"] {
-      --bg: #eee8d5;
-      --appbar: #fdf6e3;
-      --panel: #fdf6e3;
-      --panel-strong: #fffaf0;
-      --panel-soft: #eee8d5;
-      --field: #fffaf0;
-      --log-bg: #fffaf0;
-      --text: #073642;
-      --muted: #586e75;
-      --muted-2: #839496;
-      --line: #d8cfb7;
-      --line-strong: #93a1a1;
-      --accent: #268bd2;
-      --accent-2: #2aa198;
-      --success: #859900;
-      --success-2: #2aa198;
-      --warning: #b58900;
-      --warning-2: #cb4b16;
-      --danger: #dc322f;
-      --danger-2: #d33682;
-      --button-secondary: #eee8d5;
-      --button-secondary-text: #073642;
-      --scroll-thumb: #93a1a1;
-    }
-
-
-    [data-theme="rose-pine"] {
-      --bg: #0f0d18;
-      --appbar: #14121f;
-      --panel: #1e1b2d;
-      --panel-strong: #11101b;
-      --panel-soft: #2b2740;
-      --field: #0b0a12;
-      --log-bg: #06050a;
-      --text: #f5f2ff;
-      --muted: #c9c4e0;
-      --muted-2: #9b94b6;
-      --line: #4a4563;
-      --line-strong: #716a91;
-      --accent: #c4a7e7;
-      --accent-2: #9ccfd8;
-      --success: #55a5c0;
-      --success-2: #2f7d98;
-      --success-text: #c2f3ff;
-      --warning: #f6c177;
-      --warning-2: #b77b31;
-      --warning-text: #ffe4aa;
-      --danger: #eb6f92;
-      --danger-2: #b34867;
-      --danger-text: #ffc4d2;
-      --button-secondary: #2b2740;
-      --button-secondary-text: #f5f2ff;
-      --scroll-thumb: #716a91;
-    }
-
-
-    [data-theme="rose-pine-moon"] {
-      --bg: #171425;
-      --appbar: #1d1a2d;
-      --panel: #292540;
-      --panel-strong: #181525;
-      --panel-soft: #34304c;
-      --field: #11101a;
-      --log-bg: #090812;
-      --text: #f5f2ff;
-      --muted: #c9c4e0;
-      --muted-2: #9b94b6;
-      --line: #504b69;
-      --line-strong: #756f91;
-      --accent: #c4a7e7;
-      --accent-2: #9ccfd8;
-      --success: #55a5c0;
-      --success-2: #2f7d98;
-      --success-text: #c2f3ff;
-      --warning: #f6c177;
-      --warning-2: #b77b31;
-      --warning-text: #ffe4aa;
-      --danger: #eb6f92;
-      --danger-2: #b34867;
-      --danger-text: #ffc4d2;
-      --button-secondary: #34304c;
-      --button-secondary-text: #f5f2ff;
-      --scroll-thumb: #756f91;
-    }
-
-    [data-theme="rose-pine-dawn"] {
-      --bg: #faf4ed;
-      --appbar: #fffaf3;
-      --panel: #fffaf3;
-      --panel-strong: #ffffff;
-      --panel-soft: #f2e9e1;
-      --field: #ffffff;
-      --log-bg: #ffffff;
-      --text: #575279;
-      --muted: #797593;
-      --muted-2: #9893a5;
-      --line: #dfdad9;
-      --line-strong: #cecacd;
-      --accent: #907aa9;
-      --accent-2: #56949f;
-      --success: #286983;
-      --success-2: #56949f;
-      --warning: #ea9d34;
-      --warning-2: #d7827e;
-      --danger: #b4637a;
-      --danger-2: #d7827e;
-      --button-secondary: #f2e9e1;
-      --button-secondary-text: #575279;
-      --scroll-thumb: #cecacd;
-    }
-
-
-    [data-theme="kanagawa"] {
-      --bg: #121219;
-      --appbar: #0d0d13;
-      --panel: #1b1b27;
-      --panel-strong: #0e0e15;
-      --panel-soft: #282839;
-      --field: #09090f;
-      --log-bg: #050508;
-      --text: #f2ead0;
-      --muted: #d8cfa9;
-      --muted-2: #a9a185;
-      --line: #48485f;
-      --line-strong: #747494;
-      --accent: #8badf0;
-      --accent-2: #7fc1b7;
-      --success: #98bb6c;
-      --success-2: #628b56;
-      --success-text: #d6efb5;
-      --warning: #e6c384;
-      --warning-2: #b36c31;
-      --warning-text: #ffe5aa;
-      --danger: #e46876;
-      --danger-2: #ab3639;
-      --danger-text: #ffc1c7;
-      --button-secondary: #282839;
-      --button-secondary-text: #f2ead0;
-      --scroll-thumb: #747494;
-    }
-
-
-    [data-theme="everforest-dark"] {
-      --bg: #182024;
-      --appbar: #141b1e;
-      --panel: #222c31;
-      --panel-strong: #151c1f;
-      --panel-soft: #2c383d;
-      --field: #101719;
-      --log-bg: #0a0e10;
-      --text: #f1e2c2;
-      --muted: #d0c4aa;
-      --muted-2: #9eaa9d;
-      --line: #4b5b5d;
-      --line-strong: #71817d;
-      --accent: #7fbbb3;
-      --accent-2: #83c092;
-      --success: #a7c080;
-      --success-2: #5f9f72;
-      --success-text: #dcf4bd;
-      --warning: #dbbc7f;
-      --warning-2: #b56f43;
-      --warning-text: #ffe0a0;
-      --danger: #e67e80;
-      --danger-2: #b85065;
-      --danger-text: #ffc3c4;
-      --button-secondary: #2c383d;
-      --button-secondary-text: #f1e2c2;
-      --scroll-thumb: #71817d;
-    }
-
-
-    [data-theme="monokai"] {
-      --bg: #171812;
-      --appbar: #11120d;
-      --panel: #22231a;
-      --panel-strong: #13140f;
-      --panel-soft: #303023;
-      --field: #0d0e0a;
-      --log-bg: #070806;
-      --text: #fffef5;
-      --muted: #dddccf;
-      --muted-2: #aaa68d;
-      --line: #555340;
-      --line-strong: #817c5f;
-      --accent: #66d9ef;
-      --accent-2: #ae81ff;
-      --success: #a6e22e;
-      --success-2: #78a914;
-      --success-text: #dcff8a;
-      --warning: #e6db74;
-      --warning-2: #b96b13;
-      --warning-text: #fff7a0;
-      --danger: #f92672;
-      --danger-2: #b91d56;
-      --danger-text: #ffb8d2;
-      --button-secondary: #303023;
-      --button-secondary-text: #fffef5;
-      --scroll-thumb: #817c5f;
-    }
-
-
-    [data-theme="one-dark"] {
-      --bg: #171a20;
-      --appbar: #12151a;
-      --panel: #202530;
-      --panel-strong: #141820;
-      --panel-soft: #2a313d;
-      --field: #0d1015;
-      --log-bg: #07090d;
-      --text: #f1f5ff;
-      --muted: #cbd4e4;
-      --muted-2: #9aa6b9;
-      --line: #485363;
-      --line-strong: #6e7c91;
-      --accent: #61afef;
-      --accent-2: #56b6c2;
-      --success: #98c379;
-      --success-2: #57945e;
-      --success-text: #d2efc0;
-      --warning: #e5c07b;
-      --warning-2: #b27736;
-      --warning-text: #ffe3a5;
-      --danger: #e06c75;
-      --danger-2: #aa3d46;
-      --danger-text: #ffc1c7;
-      --button-secondary: #2a313d;
-      --button-secondary-text: #f1f5ff;
-      --scroll-thumb: #6e7c91;
-    }
-
-    [data-theme="cyberpunk"] {
-      --bg: #09090d;
-      --appbar: #101018;
-      --panel: #151526;
-      --panel-strong: #0b0b13;
-      --panel-soft: #1e1e34;
-      --field: #09090d;
-      --log-bg: #040408;
-      --text: #f7f7ff;
-      --muted: #8be9fd;
-      --muted-2: #ff79c6;
-      --line: #34345c;
-      --line-strong: #bd93f9;
-      --accent: #00e5ff;
-      --accent-2: #ff2bd6;
-      --success: #39ff14;
-      --success-2: #00e5ff;
-      --warning: #fcee0a;
-      --warning-2: #ff9f1c;
-      --danger: #ff2bd6;
-      --danger-2: #ff0055;
-      --button-secondary: #1e1e34;
-      --button-secondary-text: #f7f7ff;
-      --scroll-thumb: #bd93f9;
-    }
-
-
-    [data-theme="high-contrast"] {
-      --bg: #000814;
-      --appbar: #000000;
-      --panel: #020b18;
-      --panel-strong: #00040a;
-      --panel-soft: #07162a;
-      --field: #000711;
-      --log-bg: #00030a;
-      --text: #f8fbff;
-      --muted: #cad7e8;
-      --muted-2: #8da2ba;
-      --line: #35506d;
-      --line-strong: #6a8eb7;
-      --accent: #2f81ff;
-      --accent-2: #39d0ff;
-      --success: #2ee66b;
-      --success-2: #11b950;
-      --success-text: #a8ffc8;
-      --warning: #ffb020;
-      --warning-2: #d77700;
-      --warning-text: #ffe1a3;
-      --danger: #ff4d5d;
-      --danger-2: #c5162d;
-      --danger-text: #ffc2ca;
-      --button-secondary: #07162a;
-      --button-secondary-text: #f8fbff;
-      --scroll-thumb: #6a8eb7;
-    }
-
-    [data-theme="amoled"] {
-      --bg: #000000;
-      --appbar: #000000;
-      --panel: #050505;
-      --panel-strong: #000000;
-      --panel-soft: #0d0d0d;
-      --field: #000000;
-      --log-bg: #000000;
-      --text: #f2f2f2;
-      --muted: #c7c7c7;
-      --muted-2: #8a8a8a;
-      --line: #2a2a2a;
-      --line-strong: #666666;
-      --accent: #00a6ff;
-      --accent-2: #00e5ff;
-      --success: #00d160;
-      --success-2: #009c46;
-      --success-text: #8cffbd;
-      --warning: #ffb000;
-      --warning-2: #b66f00;
-      --warning-text: #ffd98a;
-      --danger: #ff304f;
-      --danger-2: #a8001e;
-      --danger-text: #ff9daf;
-      --button-secondary: #0d0d0d;
-      --button-secondary-text: #f2f2f2;
-      --scroll-thumb: #666666;
-    }
-
-    [data-theme="terminal-green"] {
-      --bg: #020804;
-      --appbar: #000000;
-      --panel: #061109;
-      --panel-strong: #010502;
-      --panel-soft: #0b1c0f;
-      --field: #000000;
-      --log-bg: #000000;
-      --text: #d9ffe4;
-      --muted: #8fd6a1;
-      --muted-2: #5c9d6b;
-      --line: #1e5f31;
-      --line-strong: #49b96a;
-      --accent: #28ff74;
-      --accent-2: #8cffaa;
-      --success: #28ff74;
-      --success-2: #00b84c;
-      --success-text: #baffcc;
-      --warning: #d8ff5c;
-      --warning-2: #93a800;
-      --warning-text: #eeff9e;
-      --danger: #ff5c7a;
-      --danger-2: #b00024;
-      --danger-text: #ffb3c0;
-      --button-secondary: #0b1c0f;
-      --button-secondary-text: #d9ffe4;
-      --scroll-thumb: #49b96a;
-    }
-
-    [data-theme="terminal-amber"] {
-      --bg: #0b0700;
-      --appbar: #000000;
-      --panel: #140d02;
-      --panel-strong: #050300;
-      --panel-soft: #211603;
-      --field: #000000;
-      --log-bg: #000000;
-      --text: #fff0c2;
-      --muted: #e2bd63;
-      --muted-2: #a67c28;
-      --line: #5a3b08;
-      --line-strong: #c48b1f;
-      --accent: #ffb020;
-      --accent-2: #ffd166;
-      --success: #8bd450;
-      --success-2: #4d9f18;
-      --success-text: #d4ffb5;
-      --warning: #ffb020;
-      --warning-2: #b86b00;
-      --warning-text: #ffe0a1;
-      --danger: #ff554a;
-      --danger-2: #a41610;
-      --danger-text: #ffbab5;
-      --button-secondary: #211603;
-      --button-secondary-text: #fff0c2;
-      --scroll-thumb: #c48b1f;
-    }
-
-    [data-theme="github-dark"] {
-      --bg: #0d1117;
-      --appbar: #010409;
-      --panel: #0d1117;
-      --panel-strong: #010409;
-      --panel-soft: #161b22;
-      --field: #010409;
-      --log-bg: #010409;
-      --text: #f0f6fc;
-      --muted: #c9d1d9;
-      --muted-2: #8b949e;
-      --line: #30363d;
-      --line-strong: #6e7681;
-      --accent: #2f81f7;
-      --accent-2: #58a6ff;
-      --success: #3fb950;
-      --success-2: #238636;
-      --success-text: #7ee787;
-      --warning: #d29922;
-      --warning-2: #9e6a03;
-      --warning-text: #f2cc60;
-      --danger: #f85149;
-      --danger-2: #da3633;
-      --danger-text: #ff7b72;
-      --button-secondary: #161b22;
-      --button-secondary-text: #f0f6fc;
-      --scroll-thumb: #6e7681;
-    }
-
-    [data-theme="night-owl"] {
-      --bg: #011627;
-      --appbar: #010b14;
-      --panel: #061c2f;
-      --panel-strong: #01111f;
-      --panel-soft: #0b2942;
-      --field: #01111f;
-      --log-bg: #000812;
-      --text: #d6deeb;
-      --muted: #9fb3c8;
-      --muted-2: #637777;
-      --line: #1d3b53;
-      --line-strong: #5f7e97;
-      --accent: #82aaff;
-      --accent-2: #21c7a8;
-      --success: #addb67;
-      --success-2: #22da6e;
-      --success-text: #d8ffa1;
-      --warning: #ffeb95;
-      --warning-2: #ecc48d;
-      --warning-text: #fff1b8;
-      --danger: #ef5350;
-      --danger-2: #d3423e;
-      --danger-text: #ffb1ae;
-      --button-secondary: #0b2942;
-      --button-secondary-text: #d6deeb;
-      --scroll-thumb: #5f7e97;
-    }
-
-    [data-theme="deep-ocean"] {
-      --bg: #001018;
-      --appbar: #00080d;
-      --panel: #031923;
-      --panel-strong: #000c12;
-      --panel-soft: #082633;
-      --field: #000a0f;
-      --log-bg: #000609;
-      --text: #e5fbff;
-      --muted: #b2dce4;
-      --muted-2: #6a98a3;
-      --line: #174858;
-      --line-strong: #4da7bd;
-      --accent: #1bc7ff;
-      --accent-2: #00f0c8;
-      --success: #34e89e;
-      --success-2: #0ca678;
-      --success-text: #b6ffe6;
-      --warning: #ffd166;
-      --warning-2: #c98400;
-      --warning-text: #ffe6aa;
-      --danger: #ff5c8a;
-      --danger-2: #b51648;
-      --danger-text: #ffc1d4;
-      --button-secondary: #082633;
-      --button-secondary-text: #e5fbff;
-      --scroll-thumb: #4da7bd;
-    }
-
-    [data-theme="paper-light"] {
-      --bg: #f7f7f2;
-      --appbar: #ecebe3;
-      --panel: #ffffff;
-      --panel-strong: #fbfbf7;
-      --panel-soft: #ecebe3;
-      --field: #ffffff;
-      --log-bg: #ffffff;
-      --text: #171717;
-      --muted: #4b5563;
-      --muted-2: #737373;
-      --line: #c9c7bb;
-      --line-strong: #8b887a;
-      --accent: #0f766e;
-      --accent-2: #2563eb;
-      --success: #15803d;
-      --success-2: #166534;
-      --success-text: #14532d;
-      --warning: #b45309;
-      --warning-2: #92400e;
-      --warning-text: #78350f;
-      --danger: #dc2626;
-      --danger-2: #991b1b;
-      --danger-text: #7f1d1d;
-      --button-secondary: #ecebe3;
-      --button-secondary-text: #171717;
-      --scroll-thumb: #8b887a;
-    }
-
-    * {
-      box-sizing: border-box;
-      font-family: var(--font-mono);
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      text-shadow: none !important;
-      backdrop-filter: none !important;
-      background-image: none !important;
-    }
-
-    html, body {
-      min-height: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 17px;
-      letter-spacing: 0;
-      -webkit-font-smoothing: auto;
-      text-rendering: auto;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    header {
-      padding: 7px 8px;
-      border-bottom: 1px solid var(--line);
-      background: var(--appbar);
-    }
-
-    .topbar {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 290px;
-      gap: 2px;
-      align-items: end;
-    }
-
-    h1 {
-      margin: 0 0 2px;
-      font-size: 24px;
-      font-weight: 900;
-      letter-spacing: -0.02em;
-    }
-
-    h2 {
-      margin: 0 0 5px;
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: .03em;
-      text-transform: uppercase;
-      color: var(--text);
-    }
-
-    .subtitle {
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    main {
-      display: grid;
-      grid-template-columns: 440px minmax(0, 1fr);
-      grid-template-rows: minmax(520px, 72fr) minmax(150px, 28fr);
-      gap: 2px;
-      padding: 2px;
-      align-items: stretch;
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    main > .card:first-child {
-      min-height: 0;
-      height: 100%;
-      overflow: auto;
-    }
-
-    main > section:nth-child(2) {
-      min-height: 0;
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 2px;
-      overflow: hidden;
-    }
-
-    main > section:nth-child(2) > .card {
-      min-height: 0;
-    }
-
-    main > section:nth-child(2) > .card:nth-child(2) {
-      margin-top: 0 !important;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      overflow: hidden;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 6px;
-      box-shadow: none;
-    }
-
-    label {
-      display: block;
-      margin: 6px 0 2px;
-      color: var(--muted);
-      font-size: 14px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .03em;
-      line-height: 1.15;
-    }
-
-    input[type="text"],
-    input[type="password"],
-    input[type="number"],
-    select {
-      width: 100%;
-      height: 42px;
-      background: var(--field);
-      border: 1px solid var(--line-strong);
-      padding: 7px 8px;
-      color: var(--text);
-      outline: none;
-      font-size: 17px;
-      line-height: 1.2;
-      transition: none;
-    }
-
-    select { cursor: pointer; }
-
-    input[type="text"]:focus,
-    input[type="password"]:focus,
-    input[type="number"]:focus,
-    select:focus {
-      border-color: var(--accent-2);
-      outline: 1px solid var(--accent-2);
-      outline-offset: -2px;
-    }
-
-    input[type="checkbox"] {
-      transform: translateY(1px) scale(1.1);
-      accent-color: var(--accent);
-    }
-
-    .file-grid {
-      display: grid;
-      grid-template-columns: 1.25fr .78fr .78fr;
-      gap: 2px;
-      align-items: stretch;
-    }
-
-    .file-grid button,
-    .run-grid button { width: 100%; min-height: 40px; }
-
-    .grid2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      align-items: stretch;
-    }
-
-    .field {
-      display: grid;
-      grid-template-rows: 38px 42px;
-      min-width: 0;
-      align-items: stretch;
-    }
-
-    .field label {
-      margin: 0;
-      display: flex;
-      align-items: flex-end;
-    }
-
-    .row {
-      display: flex;
-      gap: 2px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .run-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      align-items: stretch;
-    }
-
-    #forceStop { grid-column: 1; }
-
-    button {
-      border: 1px solid var(--line-strong);
-      padding: 7px 9px;
-      background: var(--accent);
-      color: white;
-      font-size: 17px;
-      line-height: 1.15;
-      font-weight: 900;
-      cursor: pointer;
-      transition: none;
-    }
-
-    button:hover:not(:disabled) {
-      border-color: var(--text);
-    }
-
-    button.secondary {
-      background: var(--button-secondary);
-      border-color: var(--line-strong);
-      color: var(--button-secondary-text);
-    }
-
-    button.danger { background: var(--danger-2); }
-    button.warning { background: var(--warning-2); }
-    button.success { background: var(--success-2); }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-
-    .check-row label {
-      margin: 5px 0 0;
-      text-transform: none;
-      letter-spacing: 0;
-      font-weight: 800;
-      color: var(--text);
-      font-size: 16px;
-    }
-
-    .status-grid {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 2px;
-      margin-top: 5px;
-    }
-
-    .stat {
-      background: var(--panel-strong);
-      border: 1px solid var(--line-strong);
-      padding: 8px;
-      min-height: 74px;
-      display: grid;
-      align-content: center;
-    }
-
-    .stat .num {
-      font-size: 34px;
-      line-height: 1;
-      font-weight: 900;
-      letter-spacing: -0.03em;
-    }
-
-    .stat .label {
-      margin-top: 5px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.2;
-    }
-
-    .progress-wrap { margin: 8px 0 2px; }
-
-    .progress-label {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      font-size: 14px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .03em;
-      margin-bottom: 2px;
-    }
-
-    progress {
-      width: 100%;
-      height: 30px;
-      display: block;
-      border: 1px solid var(--line-strong);
-      overflow: hidden;
-      background: var(--field);
-      accent-color: var(--success);
-    }
-
-    progress::-webkit-progress-bar { background: var(--field); }
-    progress::-webkit-progress-value { background: var(--success); }
-    progress::-moz-progress-bar { background: var(--success); }
-
-    .log {
-      height: auto;
-      min-height: 0;
-      overflow: auto;
-      background: var(--log-bg);
-      border: 1px solid var(--line-strong);
-      padding: 8px;
-      font-size: 16px;
-      white-space: normal;
-      line-height: 1.35;
-      color: var(--text);
-    }
-
-    .log-line {
-      white-space: pre-wrap;
-      color: var(--text);
-    }
-
-    .log-line.log-on-time,
-    .log-line.log-submit-success,
-    .log-line.log-success {
-      color: var(--success-text);
-      background: rgba(34, 197, 94, .055);
-      border-left: 3px solid var(--success);
-      padding-left: 7px;
-      font-weight: 850;
-    }
-
-    .log-line.log-not-delivered,
-    .log-line.log-warning {
-      color: var(--warning-text);
-      background: rgba(245, 158, 11, .055);
-      border-left: 3px solid var(--warning);
-      padding-left: 7px;
-      font-weight: 850;
-    }
-
-    .log-line.log-late,
-    .log-line.log-submit-error,
-    .log-line.log-submit-failed,
-    .log-line.log-error {
-      color: var(--danger-text);
-      background: rgba(239, 68, 68, .055);
-      border-left: 3px solid var(--danger);
-      padding-left: 7px;
-      font-weight: 900;
-    }
-
-    .log-line.log-captcha {
-      color: var(--warning-text);
-      background: rgba(245, 158, 11, .07);
-      border: 1px solid rgba(245, 158, 11, .32);
-      border-left: 3px solid var(--warning);
-      padding: 3px 7px;
-      margin: 3px 0;
-      font-size: 14px;
-      line-height: 1.3;
-      font-weight: 850;
-    }
-
-    .log-line.log-submit-already,
-    .log-line.log-already {
-      color: #93c5fd;
-      background: rgba(59, 130, 246, .055);
-      border-left: 3px solid #60a5fa;
-      padding-left: 7px;
-      font-weight: 850;
-    }
-
-    .log-line.log-dev {
-      color: var(--muted);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-      line-height: 1.35;
-      border-top: 1px solid var(--line);
-      padding-top: 6px;
-      margin-top: 6px;
-    }
-
-    .setup-note.strong-warning {
-      border: 1px solid var(--warning);
-      background: var(--warning-soft);
-      color: var(--warning-text);
-      padding: 8px;
-      font-weight: 800;
-    }
-
-    .log::-webkit-scrollbar { width: 12px; height: 12px; }
-    .log::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 1px solid var(--log-bg); }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 4px 8px;
-      font-size: 14px;
-      font-weight: 900;
-      background: var(--button-secondary);
-      color: var(--text);
-      border: 1px solid var(--line-strong);
-    }
-
-    .pill.good { background: var(--field); border-color: var(--success); color: var(--success-text); }
-    .pill.warn { background: var(--field); border-color: var(--warning); color: var(--warning-text); }
-    .pill.bad { background: var(--field); border-color: var(--danger); color: var(--danger-text); }
-
-    .current-action {
-      margin-top: 6px;
-      padding: 8px;
-      background: var(--panel-strong);
-      border: 1px solid var(--line-strong);
-      min-height: 40px;
-      color: var(--text);
-      font-size: 17px;
-      line-height: 1.35;
-    }
-
-    .section-gap { margin-top: 8px; }
-
-
-    .setup-note {
-      margin: 0 0 6px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .theme-control label {
-      margin: 0 0 2px;
-      font-size: 13px;
-    }
-
-    .dashboard-card {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      margin-top: 0;
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .operations-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 2px;
-      margin-top: 5px;
-      align-items: stretch;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .operations-panel {
-      background: var(--panel-strong);
-      border: 1px solid var(--line-strong);
-      padding: 7px;
-      min-height: 100%;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      min-width: 0;
-    }
-
-    .mini-title {
-      margin: 0 0 7px;
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 4px;
-    }
-
-    .ops-detail-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      align-content: start;
-    }
-
-    .ops-field {
-      background: var(--field);
-      border: 1px solid var(--line);
-      padding: 7px;
-      min-height: 54px;
-      min-width: 0;
-    }
-
-    .ops-field.wide { grid-column: 1 / -1; }
-
-    .ops-label {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.15;
-      text-transform: uppercase;
-      font-weight: 900;
-      letter-spacing: .03em;
-    }
-
-    .ops-value {
-      margin-top: 4px;
-      color: var(--text);
-      font-size: 18px;
-      line-height: 1.15;
-      font-weight: 900;
-      letter-spacing: -0.02em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .ops-table {
-      background: var(--field);
-      border: 1px solid var(--line);
-      overflow: hidden;
-      min-height: 0;
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .ops-body {
-      min-height: 0;
-      overflow: auto;
-      background: var(--field);
-    }
-
-    .ops-body::-webkit-scrollbar,
-    .log::-webkit-scrollbar { width: 12px; height: 12px; }
-    .ops-body::-webkit-scrollbar-thumb,
-    .log::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 1px solid var(--log-bg); }
-
-    .ops-head,
-    .ops-row {
-      display: grid;
-      align-items: center;
-      column-gap: 14px;
-      row-gap: 0;
-      border-bottom: 1px solid var(--line);
-      min-width: 0;
-    }
-
-    .ops-head {
-      position: relative;
-      z-index: 1;
-      background: var(--panel-soft);
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.15;
-      text-transform: uppercase;
-      font-weight: 900;
-      letter-spacing: .03em;
-      padding: 6px 10px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .ops-row {
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1.25;
-      padding: 7px 10px;
-      min-height: 36px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .ops-row:last-child { border-bottom: 0; }
-
-    .ops-row.clickable {
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .ops-row.clickable:hover,
-    .ops-row.clickable:focus {
-      outline: 1px solid var(--accent);
-      background: var(--panel-soft);
-    }
-
-    .results-grid {
-      grid-template-columns:
-        110px
-        70px
-        minmax(300px, .9fr)
-        minmax(285px, .8fr)
-        minmax(380px, 1.15fr)
-        minmax(340px, 1fr);
-    }
-    .recent-grid { grid-template-columns: 110px 70px minmax(300px, .9fr) minmax(285px, .8fr); }
-    .review-grid { grid-template-columns: 70px minmax(300px, .9fr) minmax(380px, 1.15fr); }
-
-    .ops-cell {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-width: 0;
-      padding: 0 2px;
-    }
-
-    .results-grid .ops-cell:nth-child(4),
-    .results-grid .ops-cell:nth-child(5) {
-      padding-left: 10px;
-    }
-
-    .results-grid .ops-cell:nth-child(3) {
-      padding-left: 6px;
-    }
-
-    .ops-empty {
-      min-height: 100%;
-      display: grid;
-      place-items: start center;
-      padding: 28px 8px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 16px;
-      line-height: 1.35;
-    }
-
-    .ops-good { color: var(--success-text); }
-    .ops-warn { color: var(--warning-text); }
-    .ops-already { color: #93c5fd; }
-    .ops-bad { color: var(--danger-text); }
-    .ops-captcha { color: var(--warning-text); font-weight: 950; }
-    .ops-muted { color: var(--muted-2); }
-
-    .ops-row.outcome-submitted { background: rgba(34, 197, 94, .055); border-left: 3px solid var(--success); }
-    .ops-row.outcome-already { background: rgba(59, 130, 246, .055); border-left: 3px solid #60a5fa; }
-    .ops-row.outcome-failed { background: rgba(239, 68, 68, .055); border-left: 3px solid var(--danger); }
-    .ops-row.outcome-captcha { background: rgba(245, 158, 11, .06); border-left: 3px solid var(--warning); }
-    .ops-row.outcome-warning { background: rgba(245, 158, 11, .055); border-left: 3px solid var(--warning); }
-
-    .hidden { display: none !important; }
-
-    .detail-screen {
-      margin-top: 5px;
-      background: var(--panel-strong);
-      border: 1px solid var(--line-strong);
-      padding: 7px;
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .detail-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 6px;
-      margin-bottom: 7px;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: minmax(420px, .72fr) minmax(720px, 1.28fr);
-      gap: 2px;
-      min-width: 0;
-      min-height: 0;
-      align-items: stretch;
-    }
-
-    .detail-card {
-      background: var(--field);
-      border: 1px solid var(--line);
-      padding: 8px;
-      min-width: 0;
-      min-height: 0;
-      overflow: auto;
-    }
-
-    .detail-card.evidence-card {
-      display: grid;
-      grid-template-rows: auto auto auto minmax(0, 1fr);
-      align-content: stretch;
-      overflow: hidden;
-    }
-
-    .detail-title {
-      margin: 0 0 8px;
-      color: var(--text);
-      font-size: 22px;
-      line-height: 1.2;
-      font-weight: 900;
-      letter-spacing: -0.02em;
-    }
-
-    .detail-meta-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 2px;
-      margin-bottom: 8px;
-    }
-
-    .detail-meta {
-      border: 1px solid var(--line);
-      background: var(--panel-strong);
-      padding: 7px;
-      min-width: 0;
-    }
-
-    .detail-meta.wide { grid-column: 1 / -1; }
-
-    .detail-label {
-      color: var(--muted);
-      font-size: 13px;
-      text-transform: uppercase;
-      font-weight: 900;
-      letter-spacing: .03em;
-      margin-bottom: 4px;
-    }
-
-    .detail-value {
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1.25;
-      font-weight: 800;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .detail-section-title {
-      color: var(--muted);
-      font-size: 13px;
-      text-transform: uppercase;
-      font-weight: 900;
-      letter-spacing: .03em;
-      margin: 10px 0 5px;
-    }
-
-    .detail-copy {
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1.45;
-      white-space: pre-wrap;
-    }
-
-    .detail-evidence-actions {
-      display: flex;
-      gap: 2px;
-      margin: 7px 0;
-      flex-wrap: wrap;
-    }
-
-    .detail-screenshot-wrap {
-      border: 1px solid var(--line);
-      background: var(--log-bg);
-      min-height: 0;
-      max-height: none;
-      height: 100%;
-      overflow: auto;
-    }
-
-    .detail-screenshot {
-      display: block;
-      width: 100%;
-      max-width: none;
-      height: auto;
-      image-rendering: auto;
-    }
-
-    .detail-page-text {
-      margin: 7px 0 0;
-      border: 1px solid var(--line);
-      background: var(--log-bg);
-      color: var(--text);
-      min-height: 96px;
-      max-height: 180px;
-      overflow: auto;
-      padding: 7px;
-      font-size: 12px;
-      line-height: 1.35;
-      white-space: pre-wrap;
-    }
-
-    .detail-empty {
-      padding: 28px 8px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 15px;
-      line-height: 1.35;
-    }
-
-
-    /* Crisp dark-theme normalization: no translucent status wash, no haze, stronger hard edges. */
-    [data-theme="dark"],
-    [data-theme="tokyo-night"],
-    [data-theme="tokyo-storm"],
-    [data-theme="catppuccin-mocha"],
-    [data-theme="catppuccin-macchiato"],
-    [data-theme="catppuccin-frappe"],
-    [data-theme="nord"],
-    [data-theme="gruvbox-dark"],
-    [data-theme="dracula"],
-    [data-theme="solarized-dark"],
-    [data-theme="rose-pine"],
-    [data-theme="rose-pine-moon"],
-    [data-theme="kanagawa"],
-    [data-theme="everforest-dark"],
-    [data-theme="monokai"],
-    [data-theme="one-dark"],
-    [data-theme="cyberpunk"],
-    [data-theme="high-contrast"],
-    [data-theme="amoled"],
-    [data-theme="terminal-green"],
-    [data-theme="terminal-amber"],
-    [data-theme="github-dark"],
-    [data-theme="night-owl"],
-    [data-theme="deep-ocean"] {
-      --accent-soft: var(--field);
-      --success-soft: var(--field);
-      --warning-soft: var(--field);
-      --danger-soft: var(--field);
-    }
-
-    .card,
-    .stat,
-    .operations-panel,
-    .detail-card,
-    .detail-screen,
-    .ops-field,
-    .ops-table,
-    .current-action,
-    .log,
-    input,
-    select,
-    button,
-    progress,
-    .pill {
-      background-blend-mode: normal !important;
-      opacity: 1 !important;
-      filter: none !important;
-    }
-
-    @media (max-width: 1200px) {
-      .operations-grid,
-      .detail-grid { grid-template-columns: 1fr; }
-      .detail-screen { min-height: 0; }
-      .detail-screenshot-wrap { min-height: 0; }
-      .topbar { grid-template-columns: 1fr; }
-      .theme-control { max-width: 420px; }
-    }
-
-    @media (max-height: 820px) {
-      header { padding: 5px 8px; }
-      h1 { font-size: 22px; }
-      .subtitle { font-size: 13px; }
-      main { grid-template-rows: minmax(390px, 58fr) minmax(200px, 42fr); }
-      .stat { min-height: 64px; padding: 6px; }
-      .stat .num { font-size: 30px; }
-      progress { height: 24px; }
-      .current-action { min-height: 34px; padding: 6px; }
-    }
-
-
-
-    main.tabbed-main > .app-shell {
-      height: auto;
-      overflow: hidden;
-    }
-
-    main.tabbed-main > .status-log-section {
-      height: auto;
-      display: grid;
-      grid-template-columns: 360px minmax(0, 1fr);
-      grid-template-rows: none;
-      overflow: hidden;
-    }
-
-    main.tabbed-main > .results-short {
-      grid-column: auto;
-      grid-row: auto;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-
-    .history-panel.active {
-      grid-template-rows: auto auto auto minmax(0, 1fr);
-      overflow: hidden;
-    }
-
-    .history-summary {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .history-toolbar {
-      display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) repeat(5, auto);
-      gap: 4px;
-      align-items: end;
-    }
-
-    .history-toolbar .field { min-width: 0; }
-    .history-toolbar button { white-space: nowrap; }
-
-    .health-result {
-      min-height: 36px;
-      padding: 8px 10px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      color: var(--muted);
-      line-height: 1.35;
-    }
-    .health-result.good { border-color: var(--success); color: var(--success-text); background: var(--success-soft); }
-    .health-result.warn { border-color: var(--warning); color: var(--warning-text); background: var(--warning-soft); }
-    .health-result.bad { border-color: var(--danger); color: var(--danger-text); background: var(--danger-soft); }
-
-    .history-content {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: minmax(380px, .9fr) minmax(0, 1.4fr);
-      gap: 8px;
-      overflow: hidden;
-    }
-
-    .history-section {
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 6px;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 8px;
-      overflow: hidden;
-    }
-
-    .history-section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .history-section-head h3 {
-      margin: 0;
-      font-size: 15px;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-
-    .history-list {
-      min-height: 0;
-      overflow: auto;
-      border: 1px solid var(--line);
-      background: var(--field);
-    }
-
-    .history-row,
-    .reconciliation-row {
-      display: grid;
-      align-items: center;
-      gap: 6px;
-      min-width: 900px;
-      padding: 7px 8px;
-      border-bottom: 1px solid var(--line);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .history-row { grid-template-columns: 1.15fr 1fr .8fr 1fr 2.3fr; }
-    .reconciliation-row { grid-template-columns: 1.1fr 1fr .7fr 2fr 2.2fr; }
-
-    .history-row.head,
-    .reconciliation-row.head {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: var(--panel-strong);
-      color: var(--text);
-      font-weight: 1000;
-      text-transform: uppercase;
-      letter-spacing: .03em;
-    }
-
-    .history-row:last-child,
-    .reconciliation-row:last-child { border-bottom: 0; }
-
-    .history-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px;
-    }
-
-    .history-actions button,
-    .history-row button {
-      padding: 6px 8px;
-      min-height: 30px;
-      font-size: 11px;
-    }
-
-    .history-empty {
-      padding: 18px;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .history-details {
-      grid-column: 1 / -1;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 8px;
-    }
-
-    .history-details summary {
-      cursor: pointer;
-      font-weight: 900;
-      color: var(--text);
-    }
-
-    .manual-entry-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .manual-entry-grid .wide { grid-column: span 2; }
-
-    @media (max-width: 1250px) {
-      .history-toolbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .history-toolbar .field:first-child { grid-column: span 2; }
-      .history-content { grid-template-columns: 1fr; overflow: auto; }
-      .history-section { min-height: 300px; }
-    }
-
-    @media (max-width: 980px) {
-      body { overflow: auto; }
-      main {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto minmax(260px, 1fr);
-        height: auto;
-        overflow: visible;
-      }
-      main > .card:first-child,
-      main > section:nth-child(2),
-      .dashboard-card { height: auto; }
-      .dashboard-card { min-height: 360px; }
-      .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .file-grid, .run-grid { grid-template-columns: 1fr; }
-      #forceStop { grid-column: auto; }
-    }
-
-
-    /* Step-tab layout v11 */
-    main.tabbed-main {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr);
-      gap: 2px;
-      padding: 2px;
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .app-shell {
-      min-height: 0;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      gap: 6px;
-    }
-
-    .setup-head {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 8px;
-      align-items: center;
-    }
-
-    .compact-actions {
-      justify-self: end;
-      width: min(620px, 100%);
-    }
-
-    .login-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 22px;
-      align-items: stretch;
-    }
-
-    .login-field {
-      grid-template-rows: 28px 42px;
-    }
-
-    .login-field label {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding-right: 6px;
-    }
-
-    .login-save-row label { margin-top: 0; }
-
-    .step-tabs {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 2px;
-    }
-
-    .step-tab {
-      min-height: 56px;
-      background: var(--button-secondary);
-      color: var(--button-secondary-text);
-      border-color: var(--line-strong);
-    }
-
-    .step-tab span {
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .step-tab.active {
-      background: var(--accent);
-      color: white;
-      border-color: var(--accent-2);
-    }
-
-    .step-tab.active span { color: white; }
-
-
-    .step-tab {
-      position: relative;
-      overflow: visible;
-    }
-
-    .notification-badge {
-      position: absolute;
-      top: 6px;
-      right: 8px;
-      min-width: 24px;
-      height: 22px;
-      padding: 0 6px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--warning-soft);
-      color: var(--warning-text) !important;
-      border: 1px solid var(--warning);
-      box-shadow: 0 0 0 2px var(--panel-strong), 0 0 8px rgba(224, 175, 104, .35);
-      font-size: 12px !important;
-      line-height: 1;
-      font-weight: 1000;
-      z-index: 5;
-      pointer-events: none;
-    }
-
-    .notification-badge.hidden {
-      display: none;
-    }
-
-    .notification-badge.flash,
-    .step-tab.flash-tab .notification-badge {
-      animation: notificationPulse 1s ease-in-out infinite;
-    }
-
-    .step-tab.has-notifications:not(.active) {
-      border-color: var(--warning);
-      box-shadow: inset 0 0 0 1px var(--warning-soft);
-    }
-
-    .inline-count {
-      opacity: .85;
-    }
-
-    @keyframes notificationPulse {
-      0%, 100% { transform: scale(1); filter: brightness(1); }
-      50% { transform: scale(1.12); filter: brightness(1.35); }
-    }
-
-    .tab-panel {
-      display: none;
-      min-height: 0;
-      overflow: hidden;
-      background: var(--panel-strong);
-      border: 1px solid var(--line-strong);
-      padding: 8px;
-    }
-
-    .tab-panel.active {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 8px;
-    }
-
-    .step-title-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      justify-content: space-between;
-      min-width: 0;
-    }
-
-    .step-title-row h2 { margin: 0; }
-
-    .step-fields {
-      display: grid;
-      gap: 8px;
-      align-content: start;
-    }
-
-    .step1-fields {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .settings-panel.active {
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .settings-grid {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-      align-content: start;
-      overflow: auto;
-      padding-right: 4px;
-    }
-
-    .settings-section {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      padding: 10px;
-      display: grid;
-      gap: 8px;
-      align-content: start;
-    }
-
-    .settings-section.wide { grid-column: 1 / -1; }
-
-    .settings-section h3 {
-      margin: 0 0 2px 0;
-      font-size: 16px;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      color: var(--text);
-    }
-
-    .settings-two-col {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .settings-three-col {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .settings-note {
-      color: var(--muted);
-      line-height: 1.35;
-      font-size: 13px;
-    }
-
-    .settings-footer-actions {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
-      align-items: center;
-      margin-top: 10px;
-    }
-
-    .app-version {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .app-version strong {
-      color: var(--text);
-      font-weight: 900;
-    }
-
-    .step3-fields {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      align-items: end;
-    }
-
-    .checkbox-field {
-      display: flex;
-      align-items: center;
-      min-height: 58px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      padding: 8px;
-    }
-
-    .checkbox-label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-      line-height: 1.25;
-    }
-
-    .checkbox-label input[type="checkbox"] {
-      width: auto;
-      min-width: 16px;
-      height: 16px;
-    }
-
-    .step2-fields {
-      grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr);
-      align-items: stretch;
-    }
-
-    .step-checks {
-      background: var(--field);
-      border: 1px solid var(--line);
-      padding: 8px;
-      min-height: 42px;
-    }
-
-    .step-checks label { margin: 0; }
-
-    .step-copy-box {
-      background: var(--field);
-      border: 1px solid var(--line);
-      color: var(--muted);
-      padding: 8px;
-      line-height: 1.35;
-    }
-
-    .step-actions {
-      display: grid;
-      grid-template-columns: minmax(220px, 360px) minmax(150px, 190px);
-      gap: 2px;
-      justify-content: end;
-    }
-
-    .step-actions-3 {
-      grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px) minmax(150px, 200px);
-    }
-
-    .muted-inline { color: var(--muted); font-weight: 800; font-size: 12px; }
-
-    .warn-tag {
-      display: inline-flex;
-      margin-left: 8px;
-      padding: 2px 6px;
-      border: 1px solid var(--warning);
-      color: var(--warning-text);
-      background: var(--warning-soft);
-      font-size: 12px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .03em;
-      vertical-align: middle;
-    }
-
-    .step-top {
-      display: grid;
-      gap: 8px;
-      min-height: 0;
-    }
-
-    .step-workspace {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: 360px minmax(0, 1fr);
-      gap: 2px;
-      overflow: hidden;
-    }
-
-    .step-status-card,
-    .step-log-card {
-      min-height: 0;
-      overflow: hidden;
-      display: grid;
-      gap: 2px;
-    }
-
-    .step-status-card {
-      grid-template-rows: auto minmax(0, auto) auto auto;
-    }
-
-    .step-log-card {
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .step-log-card .log {
-      min-height: 0;
-      height: 100%;
-    }
-
-    #step3 .step3-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr) auto clamp(112px, 14vh, 140px);
-    }
-
-    #step3:not(.builtin-browser-enabled) .step3-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    #step3:not(.builtin-browser-enabled) .step-browser-card {
-      display: none;
-    }
-
-    #step3 .step-browser-card {
-      min-height: 0;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 6px;
-    }
-
-    #step3 .browser-slot {
-      position: relative;
-      min-height: 0;
-      height: 100%;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      background: rgba(15, 23, 42, .72);
-    }
-
-    #step3 .browser-slot-placeholder {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      padding: 18px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 13px;
-      pointer-events: none;
-    }
-
-    #step3.step-panel.active {
-      grid-template-rows: 134px minmax(0, 1fr);
-    }
-
-    #step3 .step-top {
-      grid-template-rows: 34px 42px 50px;
-    }
-
-    #step3 .step-fields {
-      min-height: 42px;
-    }
-
-    #step3 .step3-log-card {
-      min-width: 0;
-      min-height: 120px;
-      overflow: hidden;
-      gap: 4px;
-    }
-
-    #step3 .step-browser-card {
-      min-width: 0;
-    }
-
-    #step3 .step3-log-card h2,
-    #step3 .step-browser-card h2 {
-      font-size: 15px;
-      line-height: 1.1;
-    }
-
-    #step3 .step3-log-card h2 {
-      font-size: 14px;
-    }
-
-    #step3 .step3-log-card .log {
-      font-size: 12px;
-      line-height: 1.3;
-    }
-
-    #step3 .step3-progress-card {
-      min-height: 0;
-      padding: 8px 10px;
-      display: grid;
-      gap: 4px;
-    }
-
-    #step3 .step3-progress-card .progress-wrap {
-      margin: 0;
-    }
-
-    #step3 .step3-progress-card .progress-label {
-      font-size: 11px;
-      line-height: 1.1;
-      margin-bottom: 4px;
-    }
-
-    #step3 .step3-progress-card progress {
-      height: 12px;
-      border-radius: 999px;
-    }
-
-    .step-status-card .status-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .step-status-card .stat {
-      min-height: 56px;
-      padding: 6px;
-    }
-
-    .step-status-card .stat .num { font-size: 26px; }
-    .step-status-card .stat .label { font-size: 12px; margin-top: 3px; }
-    .step-status-card progress { height: 22px; }
-    .step-status-card .current-action { min-height: 34px; font-size: 14px; }
-
-    .results-panel.active {
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .results-panel .operations-grid,
-    .results-panel .detail-screen {
-      min-height: 0;
-      height: 100%;
-    }
-
-    .results-panel .ops-table {
-      min-height: 0;
-    }
-
-
-
-    /* Step tabs v12 alignment fixes */
-    .compact-actions {
-      grid-template-columns: repeat(4, minmax(130px, 1fr));
-      width: min(820px, 100%);
-    }
-
-    .step-panel.active {
-      grid-template-rows: 206px minmax(0, 1fr);
-    }
-
-    .step-top {
-      grid-template-rows: 38px 82px 58px;
-      align-content: stretch;
-    }
-
-    .step-title-row {
-      min-height: 38px;
-    }
-
-    .step-fields {
-      min-height: 82px;
-      align-items: stretch;
-    }
-
-    .step-actions {
-      height: 58px;
-      grid-template-columns: minmax(0, 1fr) 190px;
-      justify-content: stretch;
-      align-content: stretch;
-    }
-
-    .step-actions button {
-      min-height: 58px;
-    }
-
-    .step-actions-3 {
-      grid-template-columns: minmax(0, 1fr) 220px 190px;
-    }
-
-    .step-workspace {
-      grid-template-columns: 360px minmax(0, 1fr);
-      min-height: 0;
-    }
-
-    #step3 .step3-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr) auto clamp(112px, 14vh, 140px);
-    }
-
-    #step3:not(.builtin-browser-enabled) .step3-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .step-status-card {
-      grid-template-rows: 38px 128px 50px minmax(44px, auto);
-      align-content: stretch;
-    }
-
-    .step-status-card .status-grid {
-      margin-top: 0;
-      height: 128px;
-      grid-template-rows: repeat(2, minmax(0, 1fr));
-    }
-
-    .step-status-card .stat {
-      min-height: 0;
-      height: 100%;
-    }
-
-    .step-status-card .progress-wrap {
-      margin: 0;
-      align-self: center;
-    }
-
-    .step-status-card .current-action {
-      margin-top: 0;
-    }
-
-    .stat-clickable {
-      cursor: pointer;
-      user-select: none;
-      outline: none;
-    }
-
-    .stat-clickable:hover,
-    .stat-clickable:focus {
-      border-color: var(--warning);
-      box-shadow: inset 0 0 0 1px var(--warning);
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      background: rgba(0, 0, 0, .72);
-      display: grid;
-      place-items: center;
-      padding: 24px;
-    }
-
-    .modal-backdrop.hidden { display: none; }
-
-    .modal-card {
-      width: min(940px, 96vw);
-      max-height: min(760px, 90vh);
-      background: var(--panel);
-      border: 1px solid var(--line-strong);
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      gap: 8px;
-      padding: 10px;
-      overflow: hidden;
-      box-shadow: 0 20px 80px rgba(0, 0, 0, .55);
-    }
-
-    .modal-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .modal-head h2 { margin: 0; }
-
-    .modal-summary {
-      color: var(--warning-text);
-      background: var(--warning-soft);
-      border: 1px solid var(--warning);
-      padding: 8px;
-      font-weight: 800;
-    }
-
-    .warning-list {
-      min-height: 0;
-      overflow: auto;
-      display: grid;
-      gap: 6px;
-      align-content: start;
-    }
-
-    .warning-item {
-      background: var(--field);
-      border: 1px solid var(--line);
-      padding: 8px;
-      white-space: pre-wrap;
-      line-height: 1.35;
-    }
-
-    .warning-item-time {
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 3px;
-      text-transform: uppercase;
-      letter-spacing: .03em;
-    }
-
-    @media (max-width: 980px) {
-      body { overflow: auto; }
-      main.tabbed-main {
-        overflow: auto;
-        height: auto;
-      }
-      .setup-head,
-      .login-grid,
-      .step-tabs,
-      .step1-fields,
-      .step2-fields,
-      .step3-fields,
-      .step-workspace,
-      .step-actions,
-      .step-actions-3,
-      .settings-grid,
-      .settings-two-col,
-      .settings-three-col,
-      .history-summary,
-      .manual-entry-grid {
-        grid-template-columns: 1fr;
-      }
-      .history-toolbar { grid-template-columns: 1fr; }
-      .history-toolbar .field:first-child,
-      .manual-entry-grid .wide { grid-column: auto; }
-      #step3 .step3-workspace {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: minmax(360px, 1fr) auto 128px;
-      }
-      #step3:not(.builtin-browser-enabled) .step3-workspace {
-        grid-template-rows: auto minmax(0, 1fr);
-      }
-      .compact-actions { width: 100%; }
-      .tab-panel { overflow: visible; }
-      .step-workspace { min-height: 520px; }
-    }
-
-
-    /* UI refresh v0.3.2 */
-    :root {
-      --ui-gap: 16px;
-      --ui-gap-sm: 10px;
-      --ui-radius: 0px;
-      --ui-shadow: 0 10px 24px rgba(0,0,0,.14);
-      --ui-border: 1px solid var(--line);
-      --ui-max-width: 1600px;
-    }
-
-    body {
-      background:
-        linear-gradient(180deg, rgba(59,130,246,.07), transparent 220px),
-        var(--bg);
-      color: var(--text);
-      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    header {
-      border-bottom: 1px solid var(--line);
-      background: color-mix(in srgb, var(--appbar) 92%, transparent);
-      padding: 18px 24px;
-    }
-
-    .topbar {
-      max-width: var(--ui-max-width);
-      margin: 0 auto;
-      display: flex;
-      align-items: end;
-      justify-content: space-between;
-      gap: 20px;
-    }
-
-    .topbar h1 {
-      margin: 0;
-      font-size: 28px;
-      line-height: 1.1;
-      letter-spacing: -.02em;
-    }
-
-    .subtitle {
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.4;
-      max-width: 720px;
-    }
-
-    .theme-control {
-      display: grid;
-      gap: 6px;
-      min-width: 240px;
-    }
-
-    .theme-control label {
-      margin: 0;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--muted);
-    }
-
-    main.tabbed-main {
-      padding: 18px;
-      height: auto;
-      min-height: calc(100vh - 92px);
-      align-content: start;
-    }
-
-    .app-shell {
-      max-width: var(--ui-max-width);
-      width: 100%;
-      margin: 0 auto;
-      background: transparent;
-      border: 0;
-      box-shadow: none;
-      gap: 14px;
-    }
-
-    .setup-head {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-
-    .compact-actions {
-      justify-self: stretch;
-      width: 100%;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .workflow-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .workflow-chip {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      box-shadow: var(--ui-shadow);
-    }
-
-    .workflow-chip strong {
-      width: 32px;
-      height: 32px;
-      display: inline-grid;
-      place-items: center;
-      background: var(--accent-soft);
-      color: var(--accent);
-      border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-      font-size: 14px;
-    }
-
-    .workflow-chip span {
-      font-weight: 700;
-      line-height: 1.35;
-    }
-
-    .step-tabs {
-      gap: 10px;
-      background: transparent;
-      padding: 0;
-    }
-
-    .step-tab {
-      min-height: 72px;
-      padding: 12px 14px;
-      text-align: left;
-      box-shadow: var(--ui-shadow);
-      background: var(--panel);
-      border: 1px solid var(--line);
-    }
-
-    .step-tab span {
-      display: block;
-      margin-top: 6px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: .01em;
-      line-height: 1.3;
-    }
-
-    .step-tab.active {
-      background: var(--panel-strong);
-      color: var(--text);
-      border-color: var(--accent);
-      box-shadow: inset 3px 0 0 var(--accent), var(--ui-shadow);
-    }
-
-    .step-tab.active span {
-      color: var(--muted);
-    }
-
-    .tab-panel {
-      padding: 20px;
-      gap: 16px;
-      background: var(--panel-strong);
-      border: 1px solid var(--line);
-      box-shadow: var(--ui-shadow);
-      overflow: auto;
-    }
-
-    .tab-panel.active,
-    .step-panel.active,
-    .settings-panel.active,
-    .results-panel.active,
-    .history-panel.active,
-    #step3.step-panel.active {
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .panel-intro {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.5;
-      font-size: 14px;
-      max-width: 980px;
-    }
-
-    .panel-intro code {
-      font-family: var(--font-mono);
-      color: var(--text);
-      background: var(--field);
-      padding: 1px 5px;
-      border: 1px solid var(--line);
-    }
-
-    .step-title-row {
-      align-items: start;
-      gap: 14px;
-      min-height: auto;
-    }
-
-    .step-title-row h2 {
-      font-size: 23px;
-      line-height: 1.2;
-    }
-
-    .settings-grid,
-    .step-fields,
-    .history-summary,
-    .history-toolbar,
-    .history-content,
-    .manual-entry-grid,
-    .step-workspace,
-    .settings-two-col,
-    .settings-three-col,
-    .step-actions,
-    .step-actions-3 {
-      gap: 14px;
-    }
-
-    .settings-grid {
-      grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
-      padding-right: 0;
-    }
-
-    .settings-section,
-    .history-section,
-    .history-details,
-    .step-status-card,
-    .step-log-card,
-    .step-browser-card,
-    .step3-progress-card,
-    .operations-panel,
-    .detail-card,
-    .detail-toolbar,
-    .detail-meta,
-    .stat {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      box-shadow: var(--ui-shadow);
-    }
-
-    .settings-section,
-    .history-section,
-    .history-details,
-    .step-status-card,
-    .step-log-card,
-    .step-browser-card,
-    .step3-progress-card,
-    .operations-panel {
-      padding: 16px;
-    }
-
-    .settings-section h3,
-    .history-section-head h3,
-    .detail-title {
-      font-size: 18px;
-      text-transform: none;
-      letter-spacing: 0;
-    }
-
-    .settings-note {
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .field,
-    .checkbox-field,
-    .step-checks,
-    .step-copy-box,
-    .current-action,
-    .health-result,
-    .log,
-    .history-list,
-    .ops-table,
-    .browser-slot {
-      border: 1px solid var(--line);
-      background: var(--field);
-      box-shadow: none;
-    }
-
-    .field {
-      gap: 6px;
-    }
-
-    .field label,
-    .progress-label,
-    .detail-label,
-    .label,
-    .step-copy-box,
-    .app-version {
-      color: var(--muted);
-    }
-
-    input, select, textarea {
-      min-height: 44px;
-      padding: 10px 12px;
-      font-size: 14px;
-      border: 1px solid var(--line);
-      background: var(--field);
-      color: var(--text);
-    }
-
-    button {
-      min-height: 46px;
-      padding: 10px 14px;
-      font-size: 14px;
-      font-weight: 700;
-      border: 1px solid transparent;
-      transition: filter .15s ease, transform .15s ease;
-    }
-
-    button:hover { filter: brightness(1.05); }
-    button:active { transform: translateY(1px); }
-
-    .step-top,
-    #step3 .step-top {
-      grid-template-rows: auto;
-      gap: 14px;
-      align-content: start;
-    }
-
-    .step-fields,
-    #step3 .step-fields {
-      min-height: auto;
-      align-items: start;
-    }
-
-    .step-actions,
-    .step-actions-3 {
-      height: auto;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    }
-
-    .step-actions button { min-height: 52px; }
-
-    .step-workspace {
-      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
-      align-items: stretch;
-    }
-
-    .step-status-card {
-      grid-template-rows: auto auto auto auto;
-      gap: 12px;
-    }
-
-    .step-status-card .status-grid {
-      gap: 12px;
-      height: auto;
-      margin: 0;
-    }
-
-    .step-status-card .stat,
-    .history-summary .stat {
-      min-height: 88px;
-      padding: 14px;
-    }
-
-    .stat .num {
-      font-size: 30px;
-      line-height: 1;
-      margin-bottom: 8px;
-    }
-
-    .current-action {
-      min-height: 64px;
-      padding: 14px;
-      display: flex;
-      align-items: center;
-      line-height: 1.45;
-    }
-
-    progress {
-      height: 14px;
-    }
-
-    .log {
-      min-height: 0;
-      padding: 14px;
-      font-size: 12px;
-      line-height: 1.45;
-      font-family: var(--font-mono);
-    }
-
-    #step3 .step3-workspace {
-      grid-template-rows: minmax(360px, 1fr) auto minmax(180px, 220px);
-      gap: 14px;
-    }
-
-    #step3 .step3-log-card {
-      min-height: 180px;
-      gap: 12px;
-    }
-
-    #step3 .browser-slot {
-      border-radius: 0;
-      min-height: 360px;
-    }
-
-    .history-summary {
-      gap: 14px;
-    }
-
-    .history-toolbar {
-      grid-template-columns: minmax(240px, 1fr) minmax(180px, 220px) repeat(5, auto);
-      align-items: end;
-    }
-
-    .history-content {
-      grid-template-columns: minmax(360px, .95fr) minmax(0, 1.2fr);
-    }
-
-    .history-row,
-    .reconciliation-row {
-      min-width: 860px;
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-
-    .manual-entry-grid {
-      margin-top: 14px;
-    }
-
-    .results-panel .operations-panel,
-    .detail-card {
-      padding: 16px;
-    }
-
-    .detail-grid {
-      gap: 14px;
-    }
-
-    .detail-section-title {
-      margin-top: 16px;
-      margin-bottom: 8px;
-    }
-
-    @media (max-width: 1250px) {
-      .workflow-strip,
-      .step-tabs,
-      .compact-actions,
-      .history-toolbar,
-      .step2-fields,
-      .step3-fields,
-      .settings-grid,
-      .settings-two-col,
-      .settings-three-col,
-      .manual-entry-grid,
-      .step-workspace,
-      .history-content {
-        grid-template-columns: 1fr;
-      }
-
-      .history-toolbar .field:first-child,
-      .manual-entry-grid .wide {
-        grid-column: auto;
-      }
-
-      #step3 .step3-workspace {
-        grid-template-rows: minmax(320px, 1fr) auto minmax(180px, 220px);
-      }
-    }
-
-    @media (max-width: 800px) {
-      header { padding: 16px; }
-      .topbar { flex-direction: column; align-items: stretch; }
-      .theme-control { min-width: 0; }
-      main.tabbed-main { padding: 12px; }
-      .compact-actions,
-      .step-tabs,
-      .step-actions,
-      .step-actions-3,
-      .history-summary,
-      .history-toolbar,
-      .workflow-strip {
-        grid-template-columns: 1fr;
-      }
-      .tab-panel { padding: 16px; }
-    }
-
-
-
-    /* UI stabilization v0.3.2 */
-    .step-tabs {
-      display: flex !important;
-      flex-wrap: wrap !important;
-      gap: 12px !important;
-      align-items: stretch !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      min-height: auto !important;
-      overflow: visible !important;
-    }
-
-    .step-tab,
-    .step-tab.active {
-      flex: 1 1 calc((100% - 60px) / 6) !important;
-      min-width: 160px !important;
-      max-width: none !important;
-      height: 96px !important;
-      min-height: 96px !important;
-      max-height: 96px !important;
-      box-sizing: border-box !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: flex-start !important;
-      align-items: flex-start !important;
-      align-self: stretch !important;
-      padding: 16px 16px 14px !important;
-      gap: 8px !important;
-      margin: 0 !important;
-      overflow: hidden !important;
-      border: 1px solid var(--line) !important;
-      background: var(--panel) !important;
-      box-shadow: none !important;
-      white-space: normal !important;
-      line-height: 1.2 !important;
-      transform: none !important;
-      outline: none !important;
-    }
-
-    .step-tab.active {
-      border-color: var(--accent) !important;
-      background: color-mix(in srgb, var(--panel-strong) 92%, var(--accent) 8%) !important;
-      box-shadow: inset 0 0 0 1px var(--accent) !important;
-    }
-
-    .step-tab span,
-    .step-tab.active span {
-      display: block !important;
-      margin: 0 !important;
-      max-width: 100% !important;
-      font-size: 12px !important;
-      font-weight: 600 !important;
-      line-height: 1.3 !important;
-      color: var(--muted) !important;
-      white-space: normal !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-      text-wrap: balance;
-    }
-
-    .tab-panel {
-      margin-top: 2px !important;
-      overflow: auto !important;
-    }
-
-    .workflow-strip {
-      display: grid !important;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-      gap: 12px !important;
-      margin-bottom: 2px !important;
-    }
-
-    .workflow-chip {
-      min-height: 50px !important;
-      padding: 12px 14px !important;
-      box-sizing: border-box !important;
-      overflow: hidden !important;
-      box-shadow: none !important;
-      background: color-mix(in srgb, var(--panel) 96%, transparent) !important;
-    }
-
-    .workflow-chip span {
-      white-space: normal !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-    }
-
-    .topbar {
-      align-items: start !important;
-    }
-
-    .topbar h1 {
-      font-size: 24px !important;
-      line-height: 1.1 !important;
-    }
-
-    .subtitle {
-      font-size: 13px !important;
-      line-height: 1.4 !important;
-      max-width: 760px !important;
-    }
-
-    .settings-grid,
-    .history-summary,
-    .history-toolbar,
-    .history-content,
-    .manual-entry-grid,
-    .step-workspace,
-    .settings-two-col,
-    .settings-three-col,
-    .step-actions,
-    .step-actions-3,
-    .step-fields {
-      gap: 12px !important;
-    }
-
-    .settings-section,
-    .history-section,
-    .history-details,
-    .step-status-card,
-    .step-log-card,
-    .step-browser-card,
-    .step3-progress-card,
-    .operations-panel,
-    .detail-card,
-    .detail-toolbar,
-    .detail-meta,
-    .stat {
-      box-shadow: none !important;
-    }
-
-    .step-title-row h2 {
-      font-size: 18px !important;
-      letter-spacing: .02em !important;
-    }
-
-    .settings-section h3,
-    .history-section-head h3,
-    .detail-title {
-      font-size: 15px !important;
-      font-weight: 800 !important;
-    }
-
-    .ops-value,
-    .detail-value,
-    .current-action,
-    .settings-note,
-    .step-copy-box,
-    .health-result,
-    .history-row > div,
-    .reconciliation-row > div,
-    .pill,
-    .warning-item,
-    .detail-copy {
-      white-space: normal !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-    }
-
-    .ops-value {
-      overflow: visible !important;
-      text-overflow: unset !important;
-      font-size: 15px !important;
-      line-height: 1.35 !important;
-    }
-
-    .pill {
-      min-height: auto !important;
-      padding: 6px 10px !important;
-      line-height: 1.2 !important;
-      text-align: center !important;
-    }
-
-    .history-toolbar {
-      grid-template-columns: minmax(220px, 1.25fr) minmax(160px, .8fr) repeat(5, auto) !important;
-    }
-
-    @media (max-width: 1320px) {
-      .step-tab,
-      .step-tab.active {
-        flex-basis: calc((100% - 24px) / 3) !important;
-      }
-      .history-toolbar {
-        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-      }
-    }
-
-    @media (max-width: 900px) {
-      .workflow-strip,
-      .compact-actions,
-      .history-toolbar,
-      .history-summary,
-      .step-workspace,
-      .step2-fields,
-      .step3-fields,
-      .settings-grid,
-      .settings-two-col,
-      .settings-three-col,
-      .manual-entry-grid,
-      .history-content,
-      .step-actions,
-      .step-actions-3 {
-        grid-template-columns: 1fr !important;
-      }
-      .step-tab,
-      .step-tab.active {
-        flex-basis: 100% !important;
-        height: auto !important;
-        min-height: 84px !important;
-        max-height: none !important;
-      }
-    }
-
-
-
-    /* Layout stack repair v0.3.2 */
-    html,
-    body {
-      height: auto !important;
-      min-height: 100% !important;
-      overflow-x: hidden !important;
-      overflow-y: auto !important;
-    }
-
-    body {
-      display: block !important;
-    }
-
-    main.tabbed-main {
-      display: block !important;
-      height: auto !important;
-      min-height: calc(100vh - 92px) !important;
-      overflow: visible !important;
-    }
-
-    main.tabbed-main > .app-shell,
-    .app-shell {
-      display: flex !important;
-      flex-direction: column !important;
-      align-items: stretch !important;
-      grid-template-rows: none !important;
-      height: auto !important;
-      min-height: 0 !important;
-      overflow: visible !important;
-      gap: 12px !important;
-    }
-
-    .setup-head,
-    .workflow-strip,
-    .step-tabs,
-    .tab-panel {
-      flex: 0 0 auto !important;
-      width: 100% !important;
-      min-width: 0 !important;
-      position: relative !important;
-    }
-
-    .step-tabs {
-      z-index: 2 !important;
-      margin-bottom: 0 !important;
-    }
-
-    .tab-panel {
-      display: none !important;
-      z-index: 1 !important;
-      margin: 0 !important;
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-      overflow: visible !important;
-      align-self: stretch !important;
-    }
-
-    .tab-panel.active,
-    .step-panel.active,
-    .settings-panel.active,
-    .history-panel.active,
-    .results-panel.active,
-    #step3.step-panel.active {
-      display: grid !important;
-      grid-template-columns: minmax(0, 1fr) !important;
-      grid-template-rows: auto !important;
-      align-content: start !important;
-      gap: 14px !important;
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-      overflow: visible !important;
-    }
-
-    .step-top,
-    #step3 .step-top {
-      display: grid !important;
-      grid-template-columns: minmax(0, 1fr) !important;
-      grid-template-rows: auto !important;
-      align-content: start !important;
-      height: auto !important;
-      min-height: 0 !important;
-      gap: 12px !important;
-    }
-
-    .step-fields,
-    #step3 .step-fields,
-    .step-actions,
-    .step-actions-3 {
-      height: auto !important;
-      min-height: 0 !important;
-    }
-
-    .step-workspace,
-    #step3 .step3-workspace {
-      min-height: 420px !important;
-      height: auto !important;
-      overflow: visible !important;
-    }
-
-    .settings-grid {
-      overflow: visible !important;
-      height: auto !important;
-      min-height: 0 !important;
-    }
-
-    .history-content {
-      min-height: 520px !important;
-      height: auto !important;
-      overflow: visible !important;
-    }
-
-    .history-section {
-      min-height: 480px !important;
-      height: auto !important;
-      overflow: hidden !important;
-    }
-
-    .history-list {
-      min-height: 400px !important;
-      max-height: 620px !important;
-      overflow: auto !important;
-    }
-
-    .results-panel .operations-grid,
-    .results-panel .detail-screen,
-    .operations-panel {
-      height: auto !important;
-      min-height: 360px !important;
-    }
-
-    .results-panel .ops-table {
-      min-height: 280px !important;
-      height: auto !important;
-    }
-
-    .step-tab,
-    .step-tab.active {
-      position: relative !important;
-      z-index: 3 !important;
-    }
-
-    @media (max-width: 980px) {
-      .step-workspace,
-      #step3 .step3-workspace,
-      .history-content,
-      .history-section,
-      .history-list,
-      .results-panel .operations-grid,
-      .results-panel .detail-screen,
-      .operations-panel,
-      .results-panel .ops-table {
-        min-height: 0 !important;
-        height: auto !important;
-        max-height: none !important;
-      }
-    }
-
-
-
-    /* UI refinement v0.3.2 compact-workspace */
-    .workflow-strip {
-      display: none !important;
-    }
-
-    main.tabbed-main > .app-shell,
-    .app-shell {
-      gap: 10px !important;
-    }
-
-    .step-tabs {
-      margin-bottom: 0 !important;
-    }
-
-    .tab-panel {
-      margin-top: 0 !important;
-    }
-
-    /* Preserve screen height for the actual workflow rather than navigation. */
-    .step-panel.active,
-    .results-panel.active {
-      min-height: calc(100vh - 255px) !important;
-    }
-
-    .step-panel.active {
-      grid-template-rows: auto minmax(520px, 1fr) !important;
-    }
-
-    .results-panel.active {
-      grid-template-rows: auto minmax(520px, 1fr) !important;
-    }
-
-    .step-workspace,
-    #step3 .step3-workspace {
-      min-height: 520px !important;
-    }
-
-    .results-panel .operations-grid,
-    .results-panel .detail-screen,
-    .results-panel .operations-panel,
-    .results-panel .ops-table {
-      min-height: 500px !important;
-    }
-
-    /* Badge styling must override generic tab subtitle span rules. */
-    .step-tab .notification-badge {
-      position: absolute !important;
-      top: 8px !important;
-      right: 8px !important;
-      width: 22px !important;
-      min-width: 22px !important;
-      max-width: 22px !important;
-      height: 22px !important;
-      min-height: 22px !important;
-      max-height: 22px !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      box-sizing: border-box !important;
-      border-radius: 0 !important;
-      font-size: 11px !important;
-      font-weight: 800 !important;
-      line-height: 1 !important;
-      text-align: center !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      word-break: normal !important;
-      overflow-wrap: normal !important;
-    }
-
-    .step-tab .notification-badge.hidden {
-      display: none !important;
-    }
-
-    /* Settings form: labels are plain text; only editable controls are boxed. */
-    .settings-section .field {
-      display: grid !important;
-      grid-template-rows: auto auto !important;
-      gap: 6px !important;
-      min-width: 0 !important;
-      min-height: 0 !important;
-      padding: 0 !important;
-      border: 0 !important;
-      background: transparent !important;
-      box-shadow: none !important;
-      overflow: visible !important;
-    }
-
-    .settings-section .field label {
-      display: block !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 2px !important;
-      line-height: 1.35 !important;
-      white-space: normal !important;
-      overflow: visible !important;
-      text-overflow: clip !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-    }
-
-    .settings-section .field input,
-    .settings-section .field select,
-    .settings-section .field textarea {
-      width: 100% !important;
-      min-width: 0 !important;
-      box-sizing: border-box !important;
-    }
-
-    .settings-section .checkbox-field {
-      padding: 12px !important;
-    }
-
-    .settings-section .checkbox-label {
-      min-width: 0 !important;
-      white-space: normal !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-    }
-
-    @media (max-width: 980px) {
-      .step-panel.active,
-      .results-panel.active {
-        min-height: 0 !important;
-      }
-      .step-workspace,
-      #step3 .step3-workspace,
-      .results-panel .operations-grid,
-      .results-panel .detail-screen,
-      .results-panel .operations-panel,
-      .results-panel .ops-table {
-        min-height: 420px !important;
-      }
-    }
-
-
-
-    /* Step 3 workspace and browser activity v0.3.2 */
-    #step3 .step3-workspace {
-      min-height: clamp(720px, 80vh, 1040px) !important;
-      grid-template-rows: minmax(540px, 1fr) auto minmax(150px, 190px) !important;
-      gap: 12px !important;
-    }
-
-    #step3 .step-browser-card {
-      grid-template-rows: auto 30px minmax(0, 1fr) !important;
-      gap: 8px !important;
-      min-height: 580px !important;
-    }
-
-    #step3 .browser-slot {
-      min-height: 520px !important;
-    }
-
-    #step3 .step3-log-card {
-      min-height: 150px !important;
-      max-height: 190px !important;
-    }
-
-    .browser-activity {
-      min-height: 30px;
-      display: grid;
-      grid-template-columns: auto minmax(120px, 1fr);
-      align-items: center;
-      gap: 12px;
-      padding: 5px 8px;
-      border: 1px solid var(--line);
-      background: var(--field);
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.2;
-      overflow: hidden;
-    }
-
-    .browser-activity-copy {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      min-width: 0;
-      white-space: nowrap;
-    }
-
-    .browser-activity-dot {
-      width: 8px;
-      height: 8px;
-      flex: 0 0 8px;
-      border: 1px solid var(--line-strong);
-      background: var(--muted-2);
-    }
-
-    .browser-activity-track {
-      position: relative;
-      height: 4px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      background: var(--panel-soft);
-    }
-
-    .browser-activity-track span {
-      position: absolute;
-      inset-block: 0;
-      left: -35%;
-      width: 35%;
-      background: var(--accent);
-      opacity: 0;
-    }
-
-    .browser-activity.active {
-      color: var(--text);
-      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-    }
-
-    .browser-activity.active .browser-activity-dot {
-      background: var(--accent);
-      border-color: var(--accent-2);
-      animation: browserActivityPulse 1s ease-in-out infinite;
-    }
-
-    .browser-activity.active .browser-activity-track span {
-      opacity: 1;
-      animation: browserActivitySlide 1.15s linear infinite;
-    }
-
-    .browser-activity.error {
-      color: var(--danger-text);
-      border-color: var(--danger);
-      background: var(--danger-soft);
-    }
-
-    .browser-activity.error .browser-activity-dot {
-      background: var(--danger);
-      border-color: var(--danger);
-    }
-
-    @keyframes browserActivitySlide {
-      from { transform: translateX(0); }
-      to { transform: translateX(390%); }
-    }
-
-    @keyframes browserActivityPulse {
-      0%, 100% { opacity: .45; }
-      50% { opacity: 1; }
-    }
-
-    @media (max-width: 980px) {
-      #step3 .step3-workspace {
-        min-height: 680px !important;
-        grid-template-rows: minmax(460px, 1fr) auto minmax(150px, 190px) !important;
-      }
-      #step3 .step-browser-card {
-        min-height: 500px !important;
-      }
-      #step3 .browser-slot {
-        min-height: 440px !important;
-      }
-      .browser-activity {
-        grid-template-columns: 1fr;
-        gap: 5px;
-      }
-    }
-
-
-
-    .step3-log-header {
-      display: flex;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    .compact-button {
-      min-height: 34px !important;
-      padding: 6px 10px !important;
-      font-size: 12px !important;
-      white-space: normal !important;
-    }
-
-  </style>
+  <title data-i18n="app.title"></title>
+  <link rel="stylesheet" href="renderer/base.css" />
+  <link rel="stylesheet" href="renderer/components.css" />
+  <link rel="stylesheet" href="renderer/setup-assistant.css" />
 </head>
 <body>
   <header>
+    <div id="isolatedTestBanner" class="isolated-test-banner" role="status" aria-live="polite" hidden>
+      <span data-i18n="app.isolatedBanner"></span>
+      <span id="isolatedTestPath" class="isolated-test-path"></span>
+    </div>
     <div class="topbar">
       <div>
-        <h1>Canada Post Claim Runner</h1>
-        <div class="subtitle">Import history, check eligibility, and submit claims in one place.</div>
+        <h1 id="appTitle" data-i18n="app.title"></h1>
+        <div id="appSubtitle" class="subtitle" data-i18n="app.subtitle"></div>
       </div>
       <div class="theme-control">
-        <label for="themeSelect">Theme</label>
+        <label for="localeSelect" data-i18n="settings.language"></label>
+        <select id="localeSelect"><option value="en-CA">English (Canada)</option><option value="fr-CA">Français (Canada)</option></select>
+        <label for="themeSelect" data-i18n="settings.theme"></label>
         <select id="themeSelect">
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="tokyo-night">Tokyo Night</option>
-          <option value="tokyo-storm">Tokyo Night Storm</option>
-          <option value="catppuccin-mocha">Catppuccin Mocha</option>
-          <option value="catppuccin-macchiato">Catppuccin Macchiato</option>
-          <option value="catppuccin-frappe">Catppuccin Frappé</option>
-          <option value="catppuccin-latte">Catppuccin Latte</option>
-          <option value="nord">Nord</option>
-          <option value="gruvbox-dark">Gruvbox Dark</option>
-          <option value="gruvbox-light">Gruvbox Light</option>
-          <option value="dracula">Dracula</option>
-          <option value="solarized-dark">Solarized Dark</option>
-          <option value="solarized-light">Solarized Light</option>
-          <option value="rose-pine">Rosé Pine</option>
-          <option value="rose-pine-moon">Rosé Pine Moon</option>
-          <option value="rose-pine-dawn">Rosé Pine Dawn</option>
-          <option value="kanagawa">Kanagawa</option>
-          <option value="everforest-dark">Everforest Dark</option>
-          <option value="monokai">Monokai</option>
-          <option value="one-dark">One Dark</option>
-          <option value="cyberpunk">Cyberpunk</option>
-          <option value="high-contrast">High Contrast</option>
-          <option value="amoled">AMOLED Black</option>
-          <option value="terminal-green">Terminal Green</option>
-          <option value="terminal-amber">Terminal Amber</option>
-          <option value="github-dark">GitHub Dark</option>
-          <option value="night-owl">Night Owl</option>
-          <option value="deep-ocean">Deep Ocean</option>
-          <option value="paper-light">Paper Light</option>
+          <option value="system" data-i18n="theme.system"></option>
+          <option value="dark" data-i18n="theme.dark"></option>
+          <option value="light" data-i18n="theme.light"></option>
+          <option value="high-contrast" data-i18n="theme.highContrast"></option>
         </select>
       </div>
     </div>
@@ -3778,113 +36,139 @@
 
   <main class="tabbed-main">
     <section class="card app-shell">
-      <div class="setup-head">
-        <div class="file-grid compact-actions">
-          <button id="selectCsv" class="secondary">Import CSV</button>
-          <button id="openData" class="secondary">Data Folder</button>
-          <button id="openLogs" class="secondary">Logs</button>
-          <button id="fullRefresh" class="warning">Reset UI</button>
-        </div>
-      </div>
-
-      <div class="step-tabs" role="tablist" aria-label="Claim runner sections">
-        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0">Settings<br><span>Account, sender info, defaults</span></button>
-        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1">Step 1<br><span>Import EST history</span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1">Step 2<br><span>Check delivery eligibility</span></button>
-        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1">Step 3<br><span>Submit eligible claims</span></button>
-        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1">History<br><span>Claims, recovery, exports</span><span id="reconciliationBadge" class="notification-badge hidden" aria-label="History notifications"></span></button>
-        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1">Results<br><span>Evidence, outcomes, screenshots</span><span id="notificationsBadge" class="notification-badge hidden" aria-label="Result notifications"></span></button>
+      <div class="step-tabs" role="tablist" data-i18n-aria-label="nav.sectionsAria">
+        <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0"><span class="step-tab-title" data-i18n="nav.settings.title"></span><span class="step-tab-detail" data-i18n="nav.settings.detail"></span></button>
+        <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step1.title"></span><span class="step-tab-detail" data-i18n="nav.step1.detail"></span></button>
+        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step2.title"></span><span class="step-tab-detail" data-i18n="nav.step2.detail"></span></button>
+        <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step3.title"></span><span class="step-tab-detail" data-i18n="nav.step3.detail"></span></button>
+        <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.history.title"></span><span class="step-tab-detail" data-i18n="nav.history.detail"></span></button>
+        <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.results.title"></span><span class="step-tab-detail" data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria" aria-hidden="true" hidden></span></button>
       </div>
 
       <section id="settingsTab" class="tab-panel settings-panel active" role="tabpanel" aria-labelledby="tabSettings">
         <div class="step-title-row">
-          <h2>Settings</h2>
-          <span id="settingsStatus" class="pill">Not saved</span>
+          <h2 data-i18n="settings.title"></h2>
+          <div><button id="resumeSetup" class="secondary hidden" type="button" data-i18n="action.resumeSetup"></button> <span id="settingsStatus" class="pill" data-i18n="settings.notSaved"></span></div>
+        </div>
+
+        <div class="guided-setup-launch">
+          <div>
+            <strong data-i18n="setupAssistant.launch.title"></strong>
+            <p data-i18n="setupAssistant.launch.description"></p>
+          </div>
+          <button id="guidedCanadaPostSetup" class="success" type="button" data-i18n="setupAssistant.launch.button"></button>
         </div>
 
         <div class="settings-grid">
           <div class="settings-section">
-            <h3>Canada Post Login</h3>
+            <h3 data-i18n="settings.website.title"></h3>
             <div class="field">
-              <label for="webUsername">Canada Post Web Username</label>
-              <input id="webUsername" type="text" placeholder="Web login username" autocomplete="username" />
+              <label for="webUsername" data-i18n="settings.website.username"></label>
+              <input id="webUsername" type="text" data-i18n-placeholder="settings.website.usernamePlaceholder" autocomplete="username" />
             </div>
             <div class="field">
-              <label for="webPassword">Canada Post Web Password</label>
-              <input id="webPassword" type="password" placeholder="Web login password" autocomplete="current-password" />
+              <label for="webPassword" data-i18n="settings.website.password"></label>
+              <input id="webPassword" type="password" data-i18n-placeholder="settings.website.passwordPlaceholder" autocomplete="current-password" />
             </div>
             <div class="check-row">
-              <label><input id="rememberSettings" type="checkbox" checked /> Remember me / save password securely on this device</label>
+              <label><input id="rememberSettings" type="checkbox" checked /> <span data-i18n="settings.website.remember"></span></label>
             </div>
-            <div class="settings-note">The password is never returned to the interface after saving. OS keyring encryption is preferred; when it is unavailable, the app uses AES-256-GCM device-local encryption protected by your user account file permissions. Other settings are kept in your per-user application data folder.</div>
+            <div class="settings-note" data-i18n="settings.website.securityNote"></div>
           </div>
 
           <div class="settings-section">
-            <h3>EST Export</h3>
+            <h3 data-i18n="settings.api.title"></h3>
             <div class="field">
-              <label for="estCustomerNumber">EST customer number</label>
-              <input id="estCustomerNumber" type="text" placeholder="Example: 0000000000" />
+              <label for="trackingClientId" data-i18n="settings.api.clientId"></label>
+              <input id="trackingClientId" type="text" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="trackingClientSecret" data-i18n="settings.api.clientSecret"></label>
+              <input id="trackingClientSecret" type="password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" autocomplete="new-password" />
+            </div>
+            <details class="settings-note">
+              <summary data-i18n="settings.api.advanced"></summary>
+              <div class="field">
+                <label for="trackingRequestDelayMs" data-i18n="settings.api.requestInterval"></label>
+                <input id="trackingRequestDelayMs" type="number" min="3100" max="60000" step="100" value="3100" inputmode="numeric" />
+              </div>
+              <div class="field">
+                <label for="trackingResourceTimeoutMs" data-i18n="settings.api.timeout"></label>
+                <input id="trackingResourceTimeoutMs" type="number" min="1000" max="120000" step="1000" value="45000" inputmode="numeric" />
+              </div>
+              <div data-i18n="settings.api.defaultsNote"></div>
+            </details>
+            <div id="trackingApiCredentialMetadata" class="settings-note" data-i18n="settings.api.metadataPending"></div>
+            <div class="settings-note" data-i18n="settings.api.accessNote"></div>
+            <button id="clearTrackingApiCredentials" class="warning" type="button" data-i18n="settings.api.clear"></button>
+          </div>
+
+          <div class="settings-section">
+            <h3 data-i18n="settings.est.title"></h3>
+            <div class="field">
+              <label for="estCustomerNumber" data-i18n="settings.est.customerNumber"></label>
+              <input id="estCustomerNumber" type="text" data-i18n-placeholder="placeholder.customerNumber" data-i18n-aria-label="settings.est.customerNumber" autocomplete="off" />
             </div>
           </div>
 
           <div class="settings-section wide">
-            <h3>Claim Sender Address Match</h3>
+            <h3 data-i18n="settings.sender.title"></h3>
             <div class="settings-two-col">
               <div class="field">
-                <label for="claimStreetNumber">Street number *</label>
-                <input id="claimStreetNumber" type="text" placeholder="Example: 123" />
+                <label for="claimStreetNumber" data-i18n="settings.sender.streetNumber"></label>
+                <input id="claimStreetNumber" type="text" data-i18n-placeholder="placeholder.streetNumber" />
               </div>
               <div class="field">
-                <label for="claimStreetName">Street name dropdown option *</label>
-                <input id="claimStreetName" type="text" placeholder="Example: MAIN/STREET/" />
+                <label for="claimStreetName" data-i18n="settings.sender.streetName"></label>
+                <input id="claimStreetName" type="text" data-i18n-placeholder="placeholder.streetName" />
               </div>
             </div>
             <div class="settings-three-col">
               <div class="field">
-                <label for="claimPostalCode">Postal code</label>
-                <input id="claimPostalCode" type="text" placeholder="Optional, e.g. A1A 1A1" />
+                <label for="claimPostalCode" data-i18n="settings.sender.postalCode"></label>
+                <input id="claimPostalCode" type="text" data-i18n-placeholder="placeholder.postalCode" />
               </div>
               <div class="field">
-                <label for="claimCity">City</label>
-                <input id="claimCity" type="text" placeholder="Optional, e.g. Toronto" />
+                <label for="claimCity" data-i18n="settings.sender.city"></label>
+                <input id="claimCity" type="text" data-i18n-placeholder="placeholder.city" />
               </div>
               <div class="field">
-                <label for="claimProvince">Province</label>
-                <input id="claimProvince" type="text" placeholder="Optional, e.g. ON" />
+                <label for="claimProvince" data-i18n="settings.sender.province"></label>
+                <input id="claimProvince" type="text" data-i18n-placeholder="placeholder.province" />
               </div>
             </div>
             <div class="field">
-              <label for="claimAddressLine2">Address line 2 / unit / suite</label>
-              <input id="claimAddressLine2" type="text" placeholder="Optional, e.g. Unit 100" />
+              <label for="claimAddressLine2" data-i18n="settings.sender.addressLine2"></label>
+              <input id="claimAddressLine2" type="text" data-i18n-placeholder="placeholder.addressLine2" />
             </div>
           </div>
 
           <div class="settings-section wide">
-            <h3>Claim Contact Info</h3>
+            <h3 data-i18n="settings.contact.title"></h3>
             <div class="settings-three-col">
               <div class="field">
-                <label for="claimBusinessName">Business / company name</label>
-                <input id="claimBusinessName" type="text" placeholder="Optional, e.g. Example Company Inc." />
+                <label for="claimBusinessName" data-i18n="settings.contact.businessName"></label>
+                <input id="claimBusinessName" type="text" data-i18n-placeholder="placeholder.businessName" />
               </div>
               <div class="field">
-                <label for="claimContactName">Contact name</label>
-                <input id="claimContactName" type="text" placeholder="Optional, e.g. Jane Smith" />
+                <label for="claimContactName" data-i18n="settings.contact.name"></label>
+                <input id="claimContactName" type="text" data-i18n-placeholder="placeholder.contactName" />
               </div>
               <div class="field">
-                <label for="claimContactPhone">Phone</label>
-                <input id="claimContactPhone" type="text" placeholder="Optional, e.g. 555-555-5555" />
+                <label for="claimContactPhone" data-i18n="settings.contact.phone"></label>
+                <input id="claimContactPhone" type="text" data-i18n-placeholder="placeholder.phone" />
               </div>
             </div>
             <div class="field">
-              <label for="claimContactEmail">Email</label>
-              <input id="claimContactEmail" type="email" placeholder="Optional, e.g. user@example.com" />
+              <label for="claimContactEmail" data-i18n="settings.contact.email"></label>
+              <input id="claimContactEmail" type="email" data-i18n-placeholder="placeholder.email" />
             </div>
           </div>
-<div class="settings-section wide">
-            <button id="saveUserSettings" class="success" type="button">Save Settings</button>
+          <div class="settings-section wide">
+            <button id="saveUserSettings" class="success" type="button" data-i18n="settings.save"></button>
             <div class="settings-footer-actions">
-              <button id="checkForUpdates" class="secondary" type="button">Check for Updates</button>
-              <div class="app-version">Version <strong id="appVersion">0.3.6</strong></div>
+              <button id="checkForUpdates" class="secondary" type="button" data-i18n="update.check"></button>
+              <div class="app-version"><span data-i18n="app.version"></span> <strong id="appVersion"></strong></div>
             </div>
           </div>
         </div>
@@ -3893,55 +177,45 @@
       <section id="step1" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep1">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 1 — Import EST history</h2>
-            <span class="pill">Creates data/tracking.csv</span>
+            <h2 data-i18n="step1.title"></h2>
+            <span class="pill" data-i18n="step1.createsTrackingCsv"></span>
           </div>
-          <div class="step-fields step1-fields">
-            <div class="field">
-              <label for="estFrom">EST from date</label>
-              <input id="estFrom" type="date" />
-            </div>
-            <div class="field">
-              <label for="estTo">EST to date</label>
-              <input id="estTo" type="date" />
-            </div>
-          </div>
+          <p class="step-description" data-i18n="step1.rollingWindow"></p>
+          <p class="muted" data-i18n="step1.carryForward"></p>
           <input id="estWorkgroup" type="hidden" value="" />
           <input id="estMobo" type="hidden" value="-2" />
           <input id="estCategoryGroup" type="hidden" value="SHP" />
-          <input id="estFileTypes" type="hidden" value="2" />
-          <input id="historyFrom" type="hidden" />
-          <input id="historyTo" type="hidden" />
+          <input id="estFileTypes" type="hidden" value="1,2" />
           <input id="historyCustomerNumber" type="hidden" />
           <input id="historyMobo" type="hidden" />
           <input id="historyAutoMobo" type="checkbox" checked hidden />
           <input id="historyIncludeNoManifest" type="checkbox" checked hidden />
-          <div class="step-actions">
-            <button id="importEstHistory" class="success">Run Step 1 — Import EST History</button>
-            <button id="forceStopStep1" class="danger" data-force-stop="step1">Force Stop</button>
+          <div class="step-actions step-execution-controls">
+            <button id="importEstHistory" class="success step-execution-control" data-i18n="step1.run"></button>
+            <button id="forceStopStep1" class="danger step-execution-control" data-force-stop="step1" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
           <div class="card step-status-card">
             <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 1 Status</h2>
-              <span id="step1RunStatus" class="pill">Idle</span>
+              <h2 style="margin:0;" data-i18n="step1.statusTitle"></h2>
+              <span id="step1RunStatus" class="pill" data-i18n="runStatus.idle"></span>
             </div>
             <div class="status-grid">
-              <div class="stat"><div id="step1Orders" class="num">0</div><div class="label">Orders found</div></div>
-              <div class="stat"><div id="step1Imported" class="num">0</div><div class="label">Shipments imported</div></div>
-              <div class="stat"><div id="step1Workgroups" class="num">0</div><div class="label">Workgroups</div></div>
-              <div id="step1WarningsCard" class="stat stat-clickable" role="button" tabindex="0" aria-label="Inspect Step 1 warnings"><div id="step1Warnings" class="num">0</div><div class="label">Warnings — click to inspect</div></div>
+              <div class="stat"><div id="step1Orders" class="num">0</div><div class="label" data-i18n="step1.ordersFound"></div></div>
+              <div class="stat"><div id="step1Imported" class="num">0</div><div class="label" data-i18n="step1.shipmentsImported"></div></div>
+              <div class="stat"><div id="step1Workgroups" class="num">0</div><div class="label" data-i18n="step1.workgroups"></div></div>
+              <div id="step1WarningsCard" class="stat stat-clickable" role="button" tabindex="0" data-i18n-aria-label="step1.warningsAria"><div id="step1Warnings" class="num">0</div><div class="label" data-i18n="step1.warningsInspect"></div></div>
             </div>
             <div class="progress-wrap">
-              <div class="progress-label"><span>EST Import</span><span id="step1Pct">0%</span></div>
+              <div class="progress-label"><span data-i18n="step1.progress"></span><span id="step1Pct">0%</span></div>
               <progress id="step1Progress" max="100" value="0"></progress>
             </div>
-            <div class="current-action" id="step1CurrentAction">Waiting.</div>
+            <div class="current-action" id="step1CurrentAction" data-i18n="status.waiting"></div>
           </div>
           <div class="card step-log-card">
-            <h2>Step 1 Live Log</h2>
-            <div id="step1Log" class="log"></div>
+            <div class="live-log-header"><h2 data-i18n="step1.liveLog"></h2><button id="step1JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
+            <div id="step1Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
           </div>
         </div>
       </section>
@@ -3949,43 +223,38 @@
       <section id="step2" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep2">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 2 — Check Tracking / Create Claims</h2>
-            <span class="pill">Reads data/tracking.csv</span>
+            <h2 data-i18n="step2.title"></h2>
+            <span class="pill" data-i18n="step2.readsTrackingCsv"></span>
           </div>
           <div class="step-fields step2-fields">
-            <div class="check-row step-checks">
-              <label><input id="freshTracking" type="checkbox" checked /> Fresh tracking run: clear old claims and processed tracking cache</label>
-            </div>
-            <div class="step-copy-box">
-              This step classifies every shipment. Only delivered-late shipments using a recognized guaranteed service are written to <strong>claims.csv</strong>. Overdue undelivered packages and incomplete eligibility records are exported separately for review.
-            </div>
+            <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
           </div>
-          <div class="step-actions">
-            <button id="runTrackingOnly" class="success">Run Step 2 — Check Tracking</button>
-            <button id="forceStopStep2" class="danger" data-force-stop="step2">Force Stop</button>
+          <div class="step-actions step-execution-controls">
+            <button id="runTrackingOnly" class="success step-execution-control" data-i18n="step2.run"></button>
+            <button id="forceStopStep2" class="danger step-execution-control" data-force-stop="step2" data-i18n="action.forceStop"></button>
           </div>
         </div>
         <div class="step-workspace">
           <div class="card step-status-card">
             <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 2 Status</h2>
-              <span id="step2RunStatus" class="pill">Idle</span>
+              <h2 style="margin:0;" data-i18n="step2.statusTitle"></h2>
+              <span id="step2RunStatus" class="pill" data-i18n="runStatus.idle"></span>
             </div>
             <div class="status-grid">
-              <div class="stat"><div id="checked" class="num">0</div><div class="label">Checked</div></div>
-              <div class="stat"><div id="late" class="num">0</div><div class="label">Late / claims</div></div>
-              <div class="stat"><div id="onTime" class="num">0</div><div class="label">On time</div></div>
-              <div class="stat"><div id="notDelivered" class="num">0</div><div class="label">Not delivered</div></div>
+              <div class="stat"><div id="checked" class="num">0</div><div class="label" data-i18n="step2.checked"></div></div>
+              <div class="stat"><div id="late" class="num">0</div><div class="label" data-i18n="step2.lateClaims"></div></div>
+              <div class="stat"><div id="onTime" class="num">0</div><div class="label" data-i18n="step2.onTime"></div></div>
+              <div class="stat"><div id="notDelivered" class="num">0</div><div class="label" data-i18n="step2.notDelivered"></div></div>
             </div>
             <div class="progress-wrap">
-              <div class="progress-label"><span>Tracking Check</span><span id="trackingPct">0%</span></div>
+              <div class="progress-label"><span data-i18n="step2.progress"></span><span id="trackingPct">0%</span></div>
               <progress id="trackingProgress" max="100" value="0"></progress>
             </div>
-            <div class="current-action" id="step2CurrentAction">Waiting.</div>
+            <div class="current-action" id="step2CurrentAction" data-i18n="status.waiting"></div>
           </div>
           <div class="card step-log-card">
-            <h2>Step 2 Live Log</h2>
-            <div id="step2Log" class="log"></div>
+            <div class="live-log-header"><h2 data-i18n="step2.liveLog"></h2><button id="step2JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
+            <div id="step2Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
           </div>
         </div>
       </section>
@@ -3993,177 +262,155 @@
       <section id="step3" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep3">
         <div class="step-top">
           <div class="step-title-row">
-            <h2>Step 3 — Submit eligible claims</h2>
-            <span class="pill">Reads eligible delivered-late claims only</span>
+            <h2 data-i18n="step3.title"></h2>
+            <span class="pill" data-i18n="step3.readsCandidates"></span>
           </div>
-          <div class="step-fields step3-fields compact-step3-fields">
-            <div class="field checkbox-field builtin-browser-field">
-              <label class="checkbox-label"><input id="builtinBrowser" type="checkbox" checked /> Use built-in browser inside the app <span class="muted-inline">full-width browser, compact log below</span></label>
-            </div>
-            <div class="field checkbox-field">
-              <label class="checkbox-label"><input id="dryRun" type="checkbox" /> Dry run — fill fields only; stop before final review or submission</label>
-            </div>
-          </div>
+          <div id="step3CanadaPostSupport" role="note" data-i18n="step3.supportGuidance" data-i18n-aria-label="step3.supportAriaLabel"></div>
+          <section id="step3ActionAdvisory" class="step3-action-advisory hidden" aria-labelledby="step3ActionAdvisoryTitle" aria-live="assertive">
+            <h3 id="step3ActionAdvisoryTitle" data-i18n="step3.actionIssues.title"></h3>
+            <div id="step3ActionIssues" class="blocking-check-list"></div>
+            <div id="step3ActionWarningCount" class="modal-summary"></div>
+          </section>
           <input id="freshRun" type="checkbox" hidden />
-          <div class="step-actions step-actions-3">
-            <button id="runSubmitOnly" class="success">Run Step 3 — Submit eligible claims</button>
-            <button id="stop" class="warning">Stop After Current Item</button>
-            <button id="forceStopStep3" class="danger" data-force-stop="step3">Force Stop</button>
+          <div class="step-actions step-actions-3 step-execution-controls">
+            <button id="runSubmitOnly" class="success step-execution-control" data-i18n="step3.submitSelected"></button>
+            <button id="stop" class="warning step-execution-control" data-i18n="step3.stopAfterCurrent"></button>
+            <button id="forceStopStep3" class="danger step-execution-control" data-force-stop="step3" data-i18n="action.forceStop"></button>
           </div>
         </div>
-        <div class="step-workspace step3-workspace builtin-browser-enabled">
+        <div class="step3-body">
+        <div class="step3-side-pane">
+        <div class="step3-control-grid">
+          <section class="step3-control-card" aria-labelledby="claimQueueTitle">
+            <div class="step3-control-head">
+              <div>
+                <h3 id="claimQueueTitle" data-i18n="step3.candidateQueue"></h3>
+                <span id="claimQueueCount" class="pill" data-i18n="step3.queue.initialCount"></span>
+              </div>
+              <div class="step3-control-actions">
+                <button id="refreshClaimQueue" class="secondary" type="button" data-i18n="action.refresh"></button>
+                <button id="selectAllClaims" class="secondary" type="button" data-i18n="step3.selectAll"></button>
+                <button id="clearClaimSelection" class="secondary" type="button" data-i18n="step3.clearSelection"></button>
+              </div>
+            </div>
+            <div id="claimQueueList" class="claim-queue-list" aria-live="polite">
+              <div class="history-empty" data-i18n="step3.queue.refreshEmpty"></div>
+            </div>
+          </section>
+        </div>
+          <div class="card step3-progress-card">
+            <div class="progress-wrap">
+              <div class="progress-label"><span data-i18n="step3.progress"></span><span><span id="submitProcessedMini">0/0</span> · <span id="submitPct">0%</span></span></div>
+              <progress id="submitProgress" max="100" value="0"></progress>
+            </div>
+          </div>
+        </div>
+        <div class="step-workspace step3-workspace">
           <div class="card step-browser-card">
             <div class="row step-browser-header" style="justify-content: space-between;">
-              <h2 style="margin:0;">Step 3 Built-in Browser</h2>
-              <span id="builtinBrowserStatus" class="pill">Ready</span>
+              <h2 style="margin:0;" data-i18n="step3.browserTitle"></h2>
+              <span id="builtinBrowserStatus" class="pill" data-i18n="step3.browser.idleStatus"></span>
             </div>
+            <section id="step3AutomationNotice" class="step3-automation-notice" role="note" aria-labelledby="step3AutomationNoticeTitle">
+              <div class="step3-automation-notice-icon" aria-hidden="true"></div>
+              <div>
+                <h3 id="step3AutomationNoticeTitle" data-i18n="step3.automation.title"></h3>
+                <p data-i18n="step3.automation.description"></p>
+                <p data-i18n="step3.automation.exceptions"></p>
+                <strong id="step3AutomationNoticeStatus" data-i18n="step3.automation.idle"></strong>
+              </div>
+            </section>
             <div id="builtinBrowserActivity" class="browser-activity" aria-live="polite" aria-atomic="true">
               <div class="browser-activity-copy">
                 <span class="browser-activity-dot" aria-hidden="true"></span>
-                <span id="builtinBrowserActivityText">Browser idle</span>
+                <span id="builtinBrowserActivityText" data-i18n="step3.browser.idleStatus"></span>
               </div>
               <div class="browser-activity-track" aria-hidden="true"><span></span></div>
             </div>
             <div id="builtinBrowserSlot" class="browser-slot">
-              <div class="browser-slot-placeholder">
-                Built-in browser area. Canada Post appears here when Step 3 starts.
-              </div>
+              <div class="browser-slot-placeholder" data-i18n="step3.browser.idle"></div>
             </div>
           </div>
-          <div class="card step3-progress-card">
-            <div class="progress-wrap">
-              <div class="progress-label"><span>Claim Submission Progress</span><span><span id="submitProcessedMini">0/0</span> · <span id="submitPct">0%</span></span></div>
-              <progress id="submitProgress" max="100" value="0"></progress>
-            </div>
+        </div>
+        <div class="card step-log-card step3-log-card">
+          <div class="row step3-log-header" style="justify-content: space-between; align-items: center;">
+            <h2 style="margin:0;" data-i18n="step3.liveLog"></h2>
+            <div class="live-log-actions"><button id="step3JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button><button id="openStep3Diagnostics" class="secondary compact-button" type="button" data-i18n="diagnostics.openDetailed"></button></div>
           </div>
-          <div class="card step-log-card step3-log-card">
-            <div class="row step3-log-header" style="justify-content: space-between; align-items: center;">
-              <h2 style="margin:0;">Step 3 Live Log</h2>
-              <button id="openStep3Diagnostics" class="secondary compact-button" type="button">Open Detailed Diagnostics</button>
-            </div>
-            <div id="step3Log" class="log"></div>
-          </div>
+          <div id="step3Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+        </div>
         </div>
       </section>
 
       <section id="historyTab" class="tab-panel history-panel" role="tabpanel" aria-labelledby="tabHistory">
         <div class="step-title-row">
-          <h2>History, Recovery & Maintenance</h2>
-          <span id="databaseIntegrity" class="pill">Checking database…</span>
+          <h2 data-i18n="history.title"></h2>
+          <div class="history-actions">
+            <button id="refreshHistory" class="secondary" type="button" data-i18n="action.refresh"></button>
+            <button id="exportHistory" class="secondary" type="button" data-i18n="history.exportCsv"></button>
+          </div>
         </div>
 
         <div class="history-summary">
-          <div class="stat"><div id="historyShipments" class="num">0</div><div class="label">Shipments recorded</div></div>
-          <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label">Submitted</div></div>
-          <div class="stat"><div id="historyReconciliation" class="num">0</div><div class="label">Need reconciliation</div></div>
-          <div class="stat"><div id="historyFailed" class="num">0</div><div class="label">Retryable failures</div></div>
-        </div>
-
-        <div>
-          <div class="history-toolbar">
-            <div class="field">
-              <label for="historySearch">Search tracking, reference or confirmation</label>
-              <input id="historySearch" type="search" placeholder="Search claim history" />
-            </div>
-            <div class="field">
-              <label for="historyStatusFilter">Status</label>
-              <select id="historyStatusFilter">
-                <option value="all">All statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="submitted_manual">Manually confirmed submitted</option>
-                <option value="already_submitted">Already submitted</option>
-                <option value="failed">Failed</option>
-                <option value="unknown">Unknown outcome</option>
-                <option value="not_submitted">Verified not submitted</option>
-                <option value="retry_approved">Retry approved</option>
-                <option value="dry_run_ready">Dry-run ready</option>
-                <option value="dry_run_interrupted">Dry-run interrupted</option>
-              </select>
-            </div>
-            <button id="refreshHistory" class="secondary" type="button">Refresh</button>
-            <button id="exportHistory" class="secondary" type="button">Export CSV</button>
-            <button id="createBackup" class="secondary" type="button">Create Backup</button>
-            <button id="restoreBackup" class="warning" type="button">Restore Backup</button>
-            <button id="createDiagnostics" class="secondary" type="button">Diagnostic ZIP</button>
-          </div>
-          <div class="history-toolbar" style="margin-top:4px;grid-template-columns:auto minmax(0,1fr);">
-            <button id="runSiteHealth" class="success" type="button">Run Canada Post Workflow Health Check</button>
-            <div id="siteHealthResult" class="health-result">Not checked in this session.</div>
-          </div>
-          <details class="history-details">
-            <summary>Manually add or annotate a shipment</summary>
-            <div class="manual-entry-grid">
-              <div class="field"><label for="manualTracking">Tracking number *</label><input id="manualTracking" type="text" /></div>
-              <div class="field"><label for="manualReference">Reference number</label><input id="manualReference" type="text" /></div>
-              <div class="field"><label for="manualService">Service code</label><input id="manualService" type="text" /></div>
-              <div class="field"><label for="manualPostal">Destination postal code</label><input id="manualPostal" type="text" /></div>
-              <div class="field"><label for="manualExpected">Expected date</label><input id="manualExpected" type="date" /></div>
-              <div class="field"><label for="manualDelivery">Delivery date</label><input id="manualDelivery" type="date" /></div>
-              <div class="field wide"><label for="manualNote">Note</label><input id="manualNote" type="text" /></div>
-              <button id="addManualShipment" class="secondary" type="button">Save Shipment</button>
-            </div>
-            <div id="manualShipmentList" class="history-list compact" aria-live="polite"></div>
-          </details>
+          <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label" data-i18n="history.submitted"></div></div>
+          <div class="stat"><div id="historyNeedsAttention" class="num">0</div><div class="label" data-i18n="history.needsAttention"></div></div>
+          <div class="stat"><div id="historyRecordTotal" class="num">0</div><div class="label" data-i18n="history.totalRecords"></div></div>
         </div>
 
         <div class="history-content">
           <div class="history-section">
-            <div class="history-section-head"><h3>Reconciliation Queue</h3><span id="reconciliationCountPill" class="pill">0 unresolved</span></div>
-            <div id="reconciliationList" class="history-list"></div>
-          </div>
-          <div class="history-section">
-            <div class="history-section-head"><h3>Claim Attempts</h3><span class="pill">SQLite audit history</span></div>
-            <div id="historyList" class="history-list"></div>
+            <div class="history-section-head"><h3 data-i18n="history.claimAttempts"></h3><span id="historyResultCount" class="pill" role="status" aria-live="polite" data-i18n="history.zeroRecords"></span></div>
+            <div id="historyList" class="history-list history-record-list"></div>
           </div>
         </div>
       </section>
 
       <section id="resultsTab" class="tab-panel results-panel" role="tabpanel" aria-labelledby="tabResults">
         <div class="step-title-row">
-          <h2>Results & Evidence</h2>
-          <span id="notificationsCountPill" class="pill">0 notifications</span>
+          <h2 data-i18n="results.title"></h2>
+          <span id="notificationsCountPill" class="pill hidden" aria-hidden="true" hidden></span>
         </div>
 
         <div id="opsListScreen" class="operations-grid">
           <div class="operations-panel">
-            <div class="mini-title">Results & Evidence — click any row for details</div>
+            <div class="mini-title" data-i18n="results.clickDetails"></div>
             <div class="ops-table" id="resultsList"></div>
           </div>
         </div>
 
         <div id="detailScreen" class="detail-screen hidden">
           <div class="detail-toolbar">
-            <button id="backToOperations" class="secondary">← Back to Results & Evidence</button>
-            <span id="detailBadge" class="pill">Result Detail</span>
+            <button id="backToOperations" class="secondary" data-i18n="results.back"></button>
+            <span id="detailBadge" class="pill" data-i18n="results.detailBadge"></span>
           </div>
 
           <div class="detail-grid">
             <div class="detail-card">
-              <h3 id="detailTitle" class="detail-title">Result detail</h3>
+              <h3 id="detailTitle" class="detail-title" data-i18n="results.detailTitle"></h3>
 
               <div class="detail-meta-grid">
-                <div class="detail-meta"><div class="detail-label">Status</div><div id="detailStatus" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">Time</div><div id="detailTime" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">CSV Row</div><div id="detailRow" class="detail-value">—</div></div>
-                <div class="detail-meta"><div class="detail-label">Source</div><div id="detailSource" class="detail-value">—</div></div>
-                <div class="detail-meta wide"><div class="detail-label">Tracking Number</div><div id="detailTracking" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.status"></div><div id="detailStatus" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.time"></div><div id="detailTime" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.csvRow"></div><div id="detailRow" class="detail-value">—</div></div>
+                <div class="detail-meta"><div class="detail-label" data-i18n="common.source"></div><div id="detailSource" class="detail-value">—</div></div>
+                <div class="detail-meta wide"><div class="detail-label" data-i18n="common.trackingNumber"></div><div id="detailTracking" class="detail-value">—</div></div>
               </div>
 
-              <div class="detail-section-title">Explanation</div>
+              <div class="detail-section-title" data-i18n="results.explanation"></div>
               <div id="detailExplanation" class="detail-copy">—</div>
 
-              <div class="detail-section-title">Automation Decision</div>
+              <div class="detail-section-title" data-i18n="results.automationDecision"></div>
               <div id="detailDecision" class="detail-copy">—</div>
             </div>
 
             <div class="detail-card evidence-card">
-              <div class="mini-title">Canada Post Evidence</div>
-              <div id="detailEvidenceStatus" class="detail-copy">Loading evidence…</div>
+              <div class="mini-title" data-i18n="results.canadaPostEvidence"></div>
+              <div id="detailEvidenceStatus" class="detail-copy" data-i18n="results.loadingEvidence"></div>
               <div class="detail-evidence-actions">
-                <button id="openScreenshot" class="secondary">Open Screenshot</button>
+                <button id="openScreenshot" class="secondary" data-i18n="results.openScreenshot"></button>
               </div>
               <div id="detailScreenshotWrap" class="detail-screenshot-wrap hidden">
-                <img id="detailScreenshot" class="detail-screenshot" alt="Saved Canada Post evidence screenshot" />
+                <img id="detailScreenshot" class="detail-screenshot" data-i18n-alt="results.screenshotAlt" />
               </div>
             </div>
           </div>
@@ -4175,14 +422,144 @@
   <div id="warningModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="warningModalTitle">
       <div class="modal-head">
-        <h2 id="warningModalTitle">Step 1 Warnings</h2>
-        <button id="closeWarningModal" class="secondary" type="button">Close</button>
+        <h2 id="warningModalTitle" data-i18n="step1.warningsTitle"></h2>
+        <button id="closeWarningModal" class="secondary" type="button" data-i18n="action.close"></button>
       </div>
-      <div id="warningModalSummary" class="modal-summary">No warnings captured for the current Step 1 run.</div>
+      <div id="warningModalSummary" class="modal-summary" data-i18n="step1.noWarnings"></div>
       <div id="warningList" class="warning-list"></div>
     </div>
   </div>
 
+  <div id="setupAssistant" class="setup-assistant hidden" aria-hidden="true" hidden>
+    <div class="setup-assistant-shell" role="dialog" aria-modal="true" aria-labelledby="setupAssistantTitle">
+      <div class="setup-assistant-header">
+        <div>
+          <h2 id="setupAssistantTitle" data-i18n="setupAssistant.title"></h2>
+          <p data-i18n="setupAssistant.subtitle"></p>
+        </div>
+        <div class="setup-assistant-header-actions">
+          <div class="setup-assistant-back-wrap">
+            <button id="setupAssistantBrowserBack" class="secondary" type="button" disabled data-i18n="setupAssistant.browserBack"></button>
+            <span id="setupAssistantBackCallout" class="setup-assistant-header-callout hidden" data-i18n="setupAssistant.callout.goBack"></span>
+          </div>
+          <button id="setupAssistantStartOver" class="secondary" type="button" data-i18n="setupAssistant.startOver"></button>
+          <div class="sound-switch-setting compact">
+            <span data-i18n="settings.guidanceSounds"></span>
+            <button id="setupAssistantGuidanceSounds" class="toggle-switch" type="button" role="switch" aria-checked="true" data-i18n-aria-label="settings.guidanceSounds">
+              <span class="toggle-switch-track" aria-hidden="true"><span class="toggle-switch-thumb"></span></span>
+              <span id="setupAssistantGuidanceSoundsState" class="toggle-switch-state" data-i18n="settings.guidanceSoundsOn"></span>
+            </button>
+          </div>
+          <button id="setupAssistantClose" class="secondary" type="button" data-i18n="setupAssistant.close"></button>
+        </div>
+      </div>
+      <div class="setup-assistant-layout">
+        <nav id="setupAssistantStepsPanel" class="setup-assistant-progress" data-i18n-aria-label="setupAssistant.progressAria" data-native-view-exclusion="true">
+          <ol id="setupAssistantSteps"></ol>
+        </nav>
+        <div class="setup-assistant-browser-area">
+          <div id="setupAssistantBrowserSlot" class="setup-assistant-browser-slot" tabindex="-1" data-native-view-slot="true">
+            <div id="setupAssistantBrowserPlaceholder" class="setup-assistant-browser-placeholder" data-i18n="setupAssistant.browserPreparing"></div>
+          </div>
+          <div id="setupAssistantCompletionSurface" class="setup-assistant-completion-surface hidden" aria-live="polite">
+            <strong data-i18n="setupAssistant.completionSurface.title"></strong>
+            <p data-i18n="setupAssistant.completionSurface.body"></p>
+          </div>
+          <div id="setupAssistantPageStatus" class="setup-assistant-page-status" role="status" aria-live="polite"></div>
+        </div>
+        <aside id="setupAssistantGuidance" class="setup-assistant-guidance" data-native-view-exclusion="true">
+          <p id="setupAssistantStepNumber" class="eyebrow"></p>
+          <h3 id="setupAssistantStepTitle"></h3>
+          <h4 class="setup-assistant-now" data-i18n="setupAssistant.whatToDoNow"></h4>
+          <p id="setupAssistantStepGuidance"></p>
+          <div class="setup-assistant-auto"><strong data-i18n="setupAssistant.whatHappensNext"></strong><span data-i18n="setupAssistant.autoContinue"></span></div>
+          <div id="setupAssistantDetectedState" class="settings-note hidden" role="status" aria-live="polite"></div>
+          <div id="setupAssistantFeedback" class="setup-assistant-feedback hidden" role="status" aria-live="polite"></div>
+          <div id="setupAssistantLocalLoading" class="setup-assistant-local-loading hidden" role="status"><span aria-hidden="true"></span><strong data-i18n="setupAssistant.settling.wait"></strong></div>
+          <div id="setupAssistantVerificationNotice" class="settings-note" data-i18n="setupAssistant.verificationNotice"></div>
+
+          <div id="setupAssistantAccountFields" class="setup-assistant-fields">
+            <div class="field"><label for="setupAssistantWebUsername" data-i18n="settings.website.username"></label><input id="setupAssistantWebUsername" type="text" autocomplete="username" data-i18n-placeholder="settings.website.usernamePlaceholder" /></div>
+            <div class="field"><label for="setupAssistantWebPassword" data-i18n="settings.website.password"></label><input id="setupAssistantWebPassword" type="password" autocomplete="current-password" data-i18n-placeholder="settings.website.passwordPlaceholder" /></div>
+            <div class="settings-note" data-i18n="setupAssistant.passwordPrivacy"></div>
+          </div>
+
+          <div id="setupAssistantCustomerCandidates" class="setup-assistant-candidates hidden" aria-live="polite">
+            <strong id="setupAssistantCustomerCandidateIntro"></strong>
+            <div id="setupAssistantCustomerCandidateList"></div>
+            <button id="setupAssistantCustomerReject" class="secondary" type="button" data-i18n="setupAssistant.customerNumber.reject"></button>
+          </div>
+          <div id="setupAssistantBusinessConfirmed" class="setup-assistant-business-confirmed hidden" aria-live="polite">
+            <strong data-i18n="setupAssistant.businessConfirmed.title"></strong>
+            <span id="setupAssistantConfirmedBusinessName"></span>
+            <span id="setupAssistantConfirmedCustomerNumber"></span>
+          </div>
+          <div id="setupAssistantCustomerFields" class="setup-assistant-fields hidden">
+            <details id="setupAssistantManualCustomer">
+              <summary data-i18n="setupAssistant.customerNumber.manualInstead"></summary>
+              <div class="field"><label for="setupAssistantCustomerNumber" data-i18n="setupAssistant.customerNumber.label"></label><input id="setupAssistantCustomerNumber" type="text" inputmode="numeric" maxlength="10" pattern="[0-9]{1,10}" autocomplete="off" data-i18n-placeholder="placeholder.customerNumber" /></div>
+              <div id="setupAssistantCustomerValidation" class="field-help" role="status"></div>
+            </details>
+          </div>
+
+          <div id="setupAssistantApiFields" class="setup-assistant-fields hidden">
+            <div id="setupAssistantCredentialStatus" class="setup-assistant-feedback hidden" role="status" aria-live="polite"></div>
+            <div id="setupAssistantApiKeyField">
+              <div class="setup-assistant-term-map"><strong data-i18n="setupAssistant.apiKey.term"></strong><span data-i18n="setupAssistant.apiKey.mapping"></span></div>
+              <div id="setupAssistantApiKeyCallout" class="setup-assistant-local-callout hidden" data-i18n="setupAssistant.callout.pasteApiKey"></div>
+              <div class="field"><label for="setupAssistantClientId" data-i18n="setupAssistant.apiKey.label"></label><input id="setupAssistantClientId" type="text" autocomplete="off" data-i18n-placeholder="settings.api.clientIdPlaceholder" /></div>
+            </div>
+            <div id="setupAssistantApiSecretField" class="hidden">
+              <div class="setup-assistant-term-map"><strong data-i18n="setupAssistant.apiSecret.term"></strong><span data-i18n="setupAssistant.apiSecret.mapping"></span></div>
+              <div id="setupAssistantApiSecretCallout" class="setup-assistant-local-callout hidden" data-i18n="setupAssistant.callout.pasteApiSecret"></div>
+              <div class="field"><label for="setupAssistantClientSecret" data-i18n="setupAssistant.apiSecret.label"></label><input id="setupAssistantClientSecret" type="password" autocomplete="new-password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" /></div>
+            </div>
+            <select id="setupAssistantApiEnvironment" class="hidden" aria-hidden="true" tabindex="-1"><option value="production" data-i18n="environment.production"></option></select>
+            <div class="settings-note" data-i18n="setupAssistant.apiSecretPrivacy"></div>
+          </div>
+
+          <div id="setupAssistantFinish" class="setup-assistant-finish hidden">
+            <div id="setupAssistantChecklist" class="setup-assistant-checklist" aria-live="polite"></div>
+            <p data-i18n="setupAssistant.finishPrivacy"></p>
+          </div>
+
+          <div id="setupAssistantFallback" class="setup-assistant-fallback hidden" role="note"></div>
+          <div id="setupAssistantError" class="modal-warning hidden" role="alert"></div>
+          <div id="setupAssistantStartOverConfirm" class="setup-assistant-confirm hidden" role="alertdialog" aria-modal="false" aria-labelledby="setupAssistantStartOverTitle">
+            <strong id="setupAssistantStartOverTitle" data-i18n="setupAssistant.startOverConfirm.title"></strong>
+            <p data-i18n="setupAssistant.startOverConfirm.body"></p>
+            <p data-i18n="setupAssistant.startOverConfirm.remoteNotice"></p>
+            <div><button id="setupAssistantStartOverConfirmButton" class="danger" type="button" data-i18n="setupAssistant.startOver"></button><button id="setupAssistantStartOverCancel" class="secondary" type="button" data-i18n="action.cancel"></button></div>
+          </div>
+          <div class="setup-assistant-actions">
+            <button id="setupAssistantBack" class="secondary" type="button" data-i18n="action.back"></button>
+            <button id="setupAssistantCantFind" class="secondary" type="button" data-i18n="setupAssistant.cantFind"></button>
+            <button id="setupAssistantRetry" class="secondary hidden" type="button" data-i18n="setupAssistant.retry"></button>
+            <button id="setupAssistantNext" class="success" type="button" data-i18n="action.continue"></button>
+            <button id="setupAssistantSaveFinish" class="success hidden" type="button" data-i18n="setupAssistant.saveFinish"></button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="setupWizard" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="setupWizardTitle">
+      <div class="modal-head"><h2 id="setupWizardTitle" data-i18n="setup.title"></h2></div>
+      <p id="setupIntro" data-i18n="setup.intro"></p>
+      <div id="setupReadinessList" class="preflight-list" aria-live="polite"></div>
+      <div id="setupSafetyNotice" class="modal-warning" data-i18n="setup.safety"></div>
+      <label class="checkbox-row"><input id="setupSafetyAcknowledge" type="checkbox" /> <span id="setupSafetyAcknowledgeLabel" data-i18n="setup.safetyAcknowledge"></span></label>
+      <div class="modal-actions"><button id="setupLater" class="secondary" type="button" data-i18n="action.continueLater"></button><button id="setupOpenSettings" class="secondary" type="button" data-i18n="action.settings"></button><button id="setupFinish" class="success" type="button" data-i18n="action.finishSetup"></button></div>
+    </div>
+  </div>
+
+  <script src="renderer/shared-context.js"></script>
+  <script src="renderer/onboarding.js"></script>
+  <script src="renderer/step2-copy.js"></script>
+  <script src="renderer/step3-queue.js"></script>
+  <script src="renderer/update-progress.js"></script>
+  <script src="renderer/setup-assistant.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

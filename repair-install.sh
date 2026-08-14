@@ -7,4 +7,4 @@ npm ci
 npm run install-browsers
 npm test
 
-echo "Canada Post Claim Runner v0.3.2 is installed and validated."
+echo "Canada Post Claim Runner v0.4.0-dev.2 is installed and validated."

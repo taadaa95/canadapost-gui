@@ -4,17 +4,33 @@ This application processes account credentials, shipment identifiers, addresses,
 
 ## Credentials
 
-- Canada Post web and Developer API credentials use Electron `safeStorage` when a secure OS keyring backend is available.
+- Canada Post web credentials, deprecated legacy Developer Program credentials, and current Tracking API client ID/secret use Electron `safeStorage` when a secure OS keyring backend is available.
 - If no secure OS keyring is available, the app uses AES-256-GCM device-local encryption with a random 256-bit key stored separately under the per-user application-data directory.
 - Device-local encryption depends on owner-only filesystem permissions and is weaker than a hardware-backed or OS-managed keyring. It is still substantially safer than plaintext persistence.
 - Credentials are never returned to the renderer.
+- The website/EST password, legacy API username/password, and current Tracking client ID/secret are distinct encrypted fields. The application never copies one credential family into another.
+- OAuth access tokens exist only in Step 2 worker memory. They are refreshed before expiry, invalidated after authentication failure, cleared on worker shutdown, and never written to configuration, logs, SQLite, backups or diagnostic archives.
+- Successful Tracking response bodies are parsed in memory and then dropped. Optional structural exports contain paths, types, array lengths, safe event codes and validation results only; they omit response values for shipment/customer/location/reference/description fields.
 - Credentials and the device key are excluded from SQLite, source archives, backups, diagnostic ZIPs, and CSV exports.
 - The password field is intentionally cleared after saving; the UI reports whether a reusable saved credential exists.
 - Rotate credentials if an older project archive containing plaintext settings was shared.
 
+## Tracking API transport
+
+Current Tracking requests are serialized at concurrency one through a cancellation-aware limiter. The configurable interval has a 3,100 ms hard floor and default plus 0–100 ms positive jitter, honors valid `Retry-After`, and bounds transient gateway retries. Rate/backoff telemetry contains status, delay and retry source only. It never carries the request URL, PIN, client credentials, token or authorization header.
+
+Classification output is run-scoped and fail-closed. CSV promotion has rollback buffers and SQLite promotion is a single transaction linked to its run. Incomplete or discarded runs cannot feed Step 3; immutable completed classification history is retained.
+
+- Current Step 2 sends OAuth client credentials only to the selected Canada Post token endpoint and sends the resulting Bearer token only to the matching Tracking gateway.
+- The HTTP layer uses manual redirect handling. It never follows 301, 302, 303, 307 or 308 responses, so credentials and Bearer tokens cannot be forwarded through redirects.
+- Diagnostics retain only safe status, hostname, query-free pathname, content type, public API version/scope, bounded application error fields and request/correlation identifiers. They exclude authorization headers, tokens, client credentials, response bodies, cookies and complete tracking identifiers.
+- The deprecated Basic/XML client is isolated and disabled. The supported path has no automatic fallback from OAuth/JSON.
+
 ## Application data
 
 Mutable files live under Electron's per-user `userData` directory. The app applies restrictive file and directory permissions where the OS permits it.
+
+The packaged migration-test override is an operator-only environment guard, not renderer IPC or a normal setting. Both `CANADA_POST_CLAIM_RUNNER_USER_DATA_DIR` and the exact confirmation phrase are required. The production bootstrap retains the original default path for comparison, resolves the override before storage imports, rejects ownership, permission, symlink, containment, repository, default-profile, ASAR, AppImage, mount, and resources hazards, and centrally checks every application-owned mutable path. Isolated mode never performs repository legacy-data import or copy-back to the default profile. A prominent banner/title identify the mode; main-process policy disables live submission/browser, update, restore, and external diagnostic/export/publishing actions.
 
 SQLite stores operational history only:
 
@@ -34,15 +50,18 @@ Screenshots and page text remain separate files under the private data directory
 
 ## Backups and diagnostics
 
-Backups can contain customer and shipment information, claim history, and evidence. Store them securely. Passwords, API credentials, device keys, browser profiles, cookies, and sessions are excluded.
+New backups use a versioned scrypt/AES-256-GCM authenticated format and can contain customer and shipment information, claim history, and evidence. Passwords are never persisted. Restore enforces authentication, checksums, archive resource/path limits, database integrity and rollback copies. Legacy plaintext ZIP restore remains available with an explicit warning. Passwords, API credentials, device keys, browser profiles, cookies, and sessions are excluded.
 
-Diagnostic ZIPs redact configured sensitive values, credentials, email addresses, phone numbers, postal codes, and recognized tracking-number formats. Review a diagnostic archive before sharing it because no redaction system can guarantee detection of every free-form personal detail.
+Shareable diagnostic ZIPs exclude free-form log, history-message, and Step 3 trace text. They retain only bounded metadata and masked identifiers for opted-in components. Review every archive before sharing.
 
 ## Browser automation
 
-- The embedded browser only permits Canada Post HTTPS domains.
+- The embedded `WebContentsView` only permits user/top-level navigation to Canada Post HTTPS domains. Scripts, images, styles, fonts, CAPTCHA, authentication-support resources, and subframes are not filtered by that top-level allowlist; Chromium's existing sandbox and web security still apply. An exact loopback mock origin is allowed only when `NODE_ENV=test`.
 - Its CDP endpoint is randomized and bound to loopback.
 - CAPTCHA and verification challenges require manual completion; the app does not bypass them.
+- The main renderer is sandboxed with context isolation and Node integration disabled. Arbitrary renderer window opens are denied.
+
+See `docs/THREAT_MODEL.md`, `docs/PRIVACY_AND_RETENTION.md`, and `docs/INCIDENT_RESPONSE.md`.
 
 ## Step 3 browser isolation (v0.3.2)
 
@@ -65,4 +84,8 @@ The logger does not intentionally record:
 
 Configured secrets and personal fields are added to the redaction set before form automation starts. Tracking numbers are masked, URLs lose query strings and fragments, and common email, phone, postal-code, address, credential, and session patterns are redacted. Page-state control records include only whether a value is present and its length, not the value.
 
-The latest Step 3 run is re-sanitized when included in a Diagnostic ZIP. Automated redaction cannot guarantee removal of every possible free-form personal detail, so users must review an archive before sharing it. Local detailed runs can contain more operational context than the shareable archive and should remain private.
+The latest Step 3 run contributes a metadata-only file inventory when included in a Diagnostic ZIP; filenames and file contents are excluded. Local detailed runs can contain operational context that the shareable archive intentionally omits and should remain private.
+
+## Step 3 submission authorization
+
+The selected-candidate button is the operator's submission action. The main process still validates all submission options, requires a non-empty current `LATE_CANDIDATE` selection, checks promoted Step 2 authority and evidence hashes, blocks unsafe attempt states, snapshots the exact queue into private run-specific files, and enforces the isolated built-in browser. These authoritative checks remain mandatory even though the product does not add a second confirmation dialog.

@@ -1,0 +1,90 @@
+'use strict';
+
+const assert = require('assert');
+const { buildPreflightReport } = require('../lib/preflight');
+const diagnosticGate = require('../lib/tracking-diagnostic-gate');
+const { TRACKING_API_VERSION } = require('../lib/tracking-contract');
+
+const ready = buildPreflightReport({
+  scope: 'step3',
+  storageWritable: true,
+  databaseIntegrity: { ok: true, result: 'ok' },
+  webUsernameAvailable: true,
+  webPasswordAvailable: true,
+  claimAddressAvailable: true,
+  claimCount: 2,
+  builtinBrowserAvailable: true,
+  step3WorkersAvailable: true,
+  reconciliationCount: 0
+});
+assert.strictEqual(ready.ready, true);
+assert.strictEqual(ready.blockingCount, 0);
+
+const liveWithoutHealthCheck = buildPreflightReport({
+  scope: 'step3', storageWritable: true, databaseIntegrity: { ok: true },
+  webUsernameAvailable: true, webPasswordAvailable: true, claimAddressAvailable: true,
+  claimCount: 1, builtinBrowserAvailable: true, step3WorkersAvailable: true,
+  reconciliationCount: 0, liveSubmissionRequested: true
+});
+assert.strictEqual(liveWithoutHealthCheck.ready, true);
+assert.strictEqual(liveWithoutHealthCheck.checks.some(item => /health|compatib/i.test(item.id)), false,
+  'live Step 3 readiness must not include a health or portal compatibility check');
+
+const blocked = buildPreflightReport({
+  scope: 'step3',
+  storageWritable: true,
+  databaseIntegrity: { ok: true, result: 'ok' },
+  webUsernameAvailable: false,
+  webPasswordAvailable: false,
+  claimAddressAvailable: false,
+  claimCount: 0,
+  builtinBrowserAvailable: true,
+  step3WorkersAvailable: true,
+  reconciliationCount: 2
+});
+assert.strictEqual(blocked.ready, false);
+assert.strictEqual(blocked.blockingCount, 4);
+assert.strictEqual(blocked.warningCount, 1);
+
+const missingCurrent = buildPreflightReport({
+  scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },
+  apiCredentialsAvailable: false, legacyApiCredentialsAvailable: true,
+  apiCredentialMetadata: { selectedEnvironment: 'production', credentialEnvironment: 'unknown', apiVersion: TRACKING_API_VERSION },
+  trackingDiagnosticGateSatisfied: false, trackingCsvAvailable: true, nodeRuntimeAvailable: true
+});
+assert.strictEqual(missingCurrent.ready, false);
+assert.match(missingCurrent.checks.find(item => item.id === 'tracking-api-credentials').message, /client ID or client secret is missing/);
+assert.doesNotMatch(missingCurrent.checks.find(item => item.id === 'tracking-api-credentials').message, /legacy/i);
+
+const currentStep2 = buildPreflightReport({
+  scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },
+  apiCredentialsAvailable: true,
+  apiCredentialMetadata: { selectedEnvironment: 'test', credentialEnvironment: 'production', apiVersion: TRACKING_API_VERSION },
+  trackingDiagnosticGateSatisfied: false, trackingCsvAvailable: true, nodeRuntimeAvailable: true
+});
+assert.strictEqual(currentStep2.ready, false);
+assert.strictEqual(currentStep2.checks.find(item => item.id === 'tracking-api-environment').ok, false);
+assert.strictEqual(currentStep2.checks.some(item => item.id === 'tracking-api-diagnostic-gate'), false,
+  'Removed normal-user diagnostics must not block Step 2 preflight');
+
+const currentStep2WithoutDiagnostic = buildPreflightReport({
+  scope: 'step2', storageWritable: true, databaseIntegrity: { ok: true },
+  apiCredentialsAvailable: true,
+  apiCredentialMetadata: { selectedEnvironment: 'test', credentialEnvironment: 'test', apiVersion: TRACKING_API_VERSION },
+  trackingDiagnosticGateSatisfied: false, trackingCsvAvailable: true, nodeRuntimeAvailable: true
+});
+assert.strictEqual(currentStep2WithoutDiagnostic.ready, true,
+  'Normal Step 2 must remain runnable without the removed diagnostic UI');
+
+let gate = diagnosticGate.invalidate({}, { newRevision: true, revisionFactory: () => 'revision-one' });
+assert.strictEqual(diagnosticGate.isSatisfied(gate, 'test'), false);
+gate = diagnosticGate.markSucceeded(gate, 'test', { succeededAt: '2026-07-28T00:00:00.000Z' });
+assert.strictEqual(diagnosticGate.isSatisfied(gate, 'test'), true);
+assert.strictEqual(diagnosticGate.isSatisfied(gate, 'production'), false, 'environment changes invalidate the gate');
+assert.strictEqual(diagnosticGate.isSatisfied(gate, 'test', 'future-version'), false, 'API version changes invalidate the gate');
+assert.strictEqual(diagnosticGate.isSatisfied(gate, 'test', undefined, 'future-parser'), false, 'parser version changes invalidate the gate');
+const changed = diagnosticGate.invalidate(gate, { newRevision: true, revisionFactory: () => 'revision-two' });
+assert.strictEqual(changed.trackingCredentialRevision, 'revision-two');
+assert.strictEqual(diagnosticGate.isSatisfied(changed, 'test'), false, 'credential changes invalidate the gate');
+
+console.log('Preflight readiness tests passed.');

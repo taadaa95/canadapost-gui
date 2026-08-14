@@ -1,0 +1,23 @@
+{
+  "pin": "SYNTHETIC14420001",
+  "activeExists": true,
+  "archiveExists": false,
+  "expectedDeliveryDate": "2026-06-03",
+  "changedExpectedDate": null,
+  "serviceName": "Xpresspost",
+  "serviceName2": "Xpresspost",
+  "deliveryOptions": [],
+  "destinationPostalId": "K1A0B1",
+  "customerRef1": "SYNTHETIC-1442",
+  "signatureImageExists": false,
+  "suppressSignature": false,
+  "significantEvents": [
+    {
+      "eventIdentifier": "1442",
+      "eventDate": "2026-06-04",
+      "eventTime": "09:30:00",
+      "eventTimeZone": "EDT",
+      "eventDescription": "Delivered"
+    }
+  ]
+}

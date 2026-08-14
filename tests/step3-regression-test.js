@@ -17,6 +17,8 @@ function main() {
   assert.strictEqual(isFinalSubmissionLabel('Create Ticket'), true);
   assert.strictEqual(isFinalSubmissionLabel('Submit claim'), true);
   assert.strictEqual(isFinalSubmissionLabel('Send request'), true);
+  assert.strictEqual(isFinalSubmissionLabel('Confirm'), true);
+  assert.strictEqual(isFinalSubmissionLabel('Complete submission'), true);
   assert.strictEqual(isFinalSubmissionLabel('Continue'), false);
   assert.strictEqual(isFinalSubmissionLabel('Open a ticket'), false, 'launcher navigation must not be treated as final submission');
 
@@ -25,6 +27,7 @@ function main() {
   const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
   const rendererSource = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
   const htmlSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const englishLocale = fs.readFileSync(path.join(root, 'locales', 'en-CA.json'), 'utf8');
 
   const fillClaim = functionSource(submitSource, 'fillClaim', 'findCreateTicketControl');
   const dryReturnIndex = fillClaim.indexOf("if (dryRun) {");
@@ -51,12 +54,15 @@ function main() {
   assert.match(submitSource, /waitForClaimFormReady/);
   assert.match(submitSource, /findReceiverCountryControl/);
   assert.doesNotMatch(submitSource, /getByLabel\(\/Receiver'\?s country\/i\)\.first\(\)\.selectOption/);
-  assert.match(submitSource, /BUILTIN_BROWSER_MODE \? 350 : 45000/);
+  assert.match(submitSource, /BUILTIN_BROWSER_REQUIRED/);
+  assert.doesNotMatch(submitSource, /launchPersistentContext|launchClaimContext|browser-profile-temp/);
+  assert.match(submitSource, /require\('playwright-core'\)/);
   assert.match(mainSource, /BETWEEN_CLAIMS_MS: String\(options\.betweenClaimsMs \|\| 750\)/);
-  assert.match(rendererSource, /stopping before final review\/submission/);
-  assert.match(htmlSource, /Dry run — fill fields only; stop before final review or submission/);
+  assert.doesNotMatch(rendererSource, /step3\.dryRunStarting|liveSubmitModal|liveSubmissionConfirmed/);
+  assert.doesNotMatch(htmlSource, /id="dryRun"|id="liveSubmitModal"/);
+  assert.doesNotMatch(englishLocale, /"step3\.dryRun"|dialog\.liveSubmit/);
 
-  console.log('Step 3 dry-run and multi-claim regression tests passed.');
+  console.log('Internal worker dry-run guard and product live-only regression tests passed.');
 }
 
 main();

@@ -1,11 +1,3 @@
-# Apply Canada Post Claim Runner v0.3.6
+# Superseded update instructions
 
-```bash
-cd ~/Documents/canadapost-gui
-unzip -o ~/Downloads/canadapost-gui-v0.3.6-step3-diagnostic-refinement.zip -d .
-npm install
-npm test
-npm start
-```
-
-This is cumulative over v0.3.5. It retains the dry-run safety and launcher-navigation fixes.
+The Dev 1–10 overlay instructions that previously appeared here are historical. Use `OPERATING_GUIDE.md` and `docs/RELEASE_PROCESS.md` for stable version 0.4.0. Never overlay a source archive onto a production profile.

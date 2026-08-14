@@ -1,7 +1,11 @@
 ; Copy this file to the app's per-user data folder as user.ini.
 ; Open that folder with the app's "Open data folder" button.
-; These are Canada Post Developer Program SOAP API credentials, not the web login.
-username=YOUR_API_USERNAME
-password=YOUR_API_PASSWORD
-customerNumber=YOUR_CUSTOMER_NUMBER
+; Deprecated legacy Developer Program credentials retained only for migration and
+; legacy shipping-history compatibility. Step 2 never uses these values.
+apiUsername=YOUR_DEVELOPER_PROGRAM_API_USERNAME
+apiPassword=YOUR_DEVELOPER_PROGRAM_API_PASSWORD
+apiEnvironment=production
+; Save the current Tracking API client ID / API Key and client secret / API Secret
+; in the app Settings screen so they use encrypted secret storage. They are not
+; accepted from this plaintext file. Claim Runner always uses the production Tracking API environment.
 ; mobo=OPTIONAL_MAILED_ON_BEHALF_OF_NUMBER

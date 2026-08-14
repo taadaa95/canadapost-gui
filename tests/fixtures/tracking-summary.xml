@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:t="http://www.canadapost.ca/ws/soap/track">
+  <soap:Body><t:get-tracking-summary-response><t:tracking-summary><t:pin-summary>
+    <t:pin>SYNTHETIC000001</t:pin><t:destination-postal-id>K1A0B1</t:destination-postal-id>
+    <t:expected-delivery-date>2026-06-03</t:expected-delivery-date><t:actual-delivery-date>2026-06-05</t:actual-delivery-date>
+    <t:event-description>Delivered</t:event-description><t:service-name>Xpresspost</t:service-name><t:customer-ref-1>ORDER-SYNTHETIC</t:customer-ref-1>
+  </t:pin-summary></t:tracking-summary></t:get-tracking-summary-response></soap:Body>
+</soap:Envelope>

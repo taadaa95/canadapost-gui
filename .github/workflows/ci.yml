@@ -1,36 +1,393 @@
-name: Test
+name: Validate and package
 
 on:
   push:
-    branches: [main]
+    branches:
+      [
+        main,
+        v0.4.0-productization,
+        feature/github-release-updater,
+        feature/dev9-ui-debloat,
+        feature/dev10-step3-executable-queue,
+        feature/dev11-beta-release-hardening,
+      ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      task:
+        description: Validation/package run or pinned Windows v0.4.0 transfer rebuild
+        required: true
+        default: validate
+        type: choice
+        options:
+          - validate
+          - windows-v0.4.0-transfer
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    name: Test (${{ matrix.os }})
+    if: github.event_name != 'workflow_dispatch' || inputs.task == 'validate'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [24]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node }}
           cache: npm
-      - name: Install PHP
-        run: sudo apt-get update && sudo apt-get install -y php-cli
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-      - name: Test
-        run: npm test
-      - name: Reject private runtime files
+      - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - if: runner.os == 'Windows'
+        run: npx playwright install chromium
+      - if: runner.os == 'macOS'
+        run: npx playwright install chromium
+      - run: npm test
+      - run: npm run test:dev10
+      - run: npm run test:updates
+      - run: npm run test:localization
+      - name: Mock portal tests (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: xvfb-run -a npm run test:mock-portal
+      - name: Mock portal tests (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        run: npm run test:mock-portal
+      - name: Mock portal tests (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: npm run test:mock-portal
+      - name: Step 3 mock visibility E2E (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 8
+        run: xvfb-run -a npm run test:step3-mock-visibility
+      - name: Step 3 mock visibility E2E (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        run: npm run test:step3-mock-visibility
+      - name: Step 3 mock visibility E2E (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 8
+        run: npm run test:step3-mock-visibility
+      - run: npm run test:accessibility
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:electron
+      - if: runner.os == 'Windows'
+        run: npm run test:electron
+      - if: runner.os == 'macOS'
+        run: npm run test:electron
+      - run: npm run lint
+      - run: npm run lint:dev10
+      - if: runner.os == 'Linux'
+        run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run coverage
+      - run: npm run secret-scan
+      - run: npm run release:audit
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run sbom
+  gitleaks:
+    name: External secret scan
+    if: github.event_name != 'workflow_dispatch' || inputs.task == 'validate'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  package-linux:
+    name: Linux package and content audit
+    if: (github.event_name != 'workflow_dispatch' || inputs.task == 'validate') && ((github.event_name == 'pull_request' && github.head_ref == 'feature/dev11-beta-release-hardening') || (github.event_name != 'pull_request' && github.ref_name == 'feature/dev11-beta-release-hardening'))
+    needs: [test, gitleaks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_PLATFORM: linux
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SOURCE_COMMIT }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:guard
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - run: npm run package:linux
+      - run: npm run package:audit -- dist/packages/linux-unpacked
+      - run: npm run package:size -- dist/packages
+      - run: npm run test:packaged-step1
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - run: npm run release:validate
+      - run: npm run release:provenance
+      - name: Create temporary Linux transfer branch
+        if: github.event_name == 'workflow_dispatch'
         run: |
-          test ! -e config.local.json
-          test ! -e user.ini
-          test ! -e credentials.json
-          test ! -d data
-          test ! -d logs
-          test ! -d node_modules/.cache/browser-profile
+          tag="ci-transfer-linux-${{ github.run_id }}"
+          node scripts/ci-transfer.js pack .ci-transfer \
+            dist/packages/Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage \
+            dist/release-metadata/SHA256SUMS.txt \
+            dist/release-metadata/releases/v0.4.2.json \
+            dist/release-metadata/package-size-linux.json \
+            dist/release-metadata/release-provenance-linux.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          export GIT_INDEX_FILE="$RUNNER_TEMP/ci-transfer.index"
+          git read-tree --empty
+          git add -f .ci-transfer
+          tree="$(git write-tree)"
+          commit="$(git commit-tree -m 'ci: temporary Linux artifact transfer' "$tree")"
+          git push origin "$commit:refs/heads/$tag"
+
+  package-windows:
+    name: Windows package
+    if: (github.event_name != 'workflow_dispatch' || inputs.task == 'validate') && ((github.event_name == 'pull_request' && github.head_ref == 'feature/dev11-beta-release-hardening') || (github.event_name != 'pull_request' && github.ref_name == 'feature/dev11-beta-release-hardening'))
+    needs: [test, gitleaks]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_PLATFORM: windows
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SOURCE_COMMIT }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:guard
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - run: npm run package:windows
+      - run: npm run package:audit -- dist/packages/win-unpacked
+      - run: npm run package:size -- dist/packages
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - run: npm run release:validate
+      - run: npm run release:provenance
+      - name: Create temporary Windows transfer branch
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $tag = "ci-transfer-windows-${{ github.run_id }}"
+          node scripts/ci-transfer.js pack .ci-transfer `
+            "dist/packages/Canada.Post.Claim.Runner-0.4.2-win-x64.exe" `
+            "dist/release-metadata/SHA256SUMS.txt" `
+            "dist/release-metadata/releases/v0.4.2.json" `
+            "dist/release-metadata/package-size-windows.json" `
+            "dist/release-metadata/release-provenance-windows.json"
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP "ci-transfer.index"
+          git read-tree --empty
+          git add -f .ci-transfer
+          $tree = git write-tree
+          $commit = git commit-tree -m "ci: temporary Windows artifact transfer" $tree
+          git push origin "$commit`:refs/heads/$tag"
+
+  package-macos:
+    name: macOS universal package and content audit
+    if: (github.event_name != 'workflow_dispatch' || inputs.task == 'validate') && ((github.event_name == 'pull_request' && github.head_ref == 'feature/dev11-beta-release-hardening') || (github.event_name != 'pull_request' && github.ref_name == 'feature/dev11-beta-release-hardening'))
+    needs: [test, gitleaks]
+    runs-on: macos-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      RELEASE_PLATFORM: macos
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SOURCE_COMMIT }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:guard
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - name: Detect complete macOS release credentials
+        id: mac_credentials
+        shell: bash
+        run: |
+          values=("$CSC_LINK" "$CSC_KEY_PASSWORD" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID")
+          present=0
+          for value in "${values[@]}"; do
+            if [[ -n "$value" ]]; then present=$((present + 1)); fi
+          done
+          if [[ "$present" -eq 0 ]]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$present" -eq 5 ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "A complete certificate and Apple notarization credential set is required." >&2
+            exit 1
+          fi
+      - name: Build signed and notarized universal DMG
+        if: steps.mac_credentials.outputs.signed == 'true'
+        run: npm run package:mac
+      - name: Build explicitly unsigned universal TEST DMG
+        if: steps.mac_credentials.outputs.signed != 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run package:mac -- -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.notarize=false
+      - run: npm run package:audit -- "dist/packages/mac-universal/Canada Post Claim Runner.app"
+      - run: npm run package:size -- dist/packages
+      - name: Verify universal runtime architecture
+        shell: bash
+        run: |
+          executable="dist/packages/mac-universal/Canada Post Claim Runner.app/Contents/MacOS/Canada Post Claim Runner"
+          architectures="$(lipo -archs "$executable")"
+          [[ " $architectures " == *" x86_64 "* ]]
+          [[ " $architectures " == *" arm64 "* ]]
+      - run: npm run test:packaged-mac-worker
+      - run: npm run test:packaged-mac-database
+      - run: npm run test:packaged-mac-startup
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - run: npm run release:validate
+      - run: npm run release:provenance
+      - run: npm run secret-scan
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Verify Developer ID application signature
+        if: steps.mac_credentials.outputs.signed == 'true'
+        run: |
+          codesign --verify --deep --strict --verbose=2 "dist/packages/mac-universal/Canada Post Claim Runner.app"
+          spctl --assess --type execute --verbose=2 "dist/packages/mac-universal/Canada Post Claim Runner.app"
+      - name: Notarize, staple, and verify DMG
+        if: steps.mac_credentials.outputs.signed == 'true'
+        run: |
+          dmg="dist/packages/Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg"
+          xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+      - name: Create temporary macOS transfer branch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SIGNED_BUILD: ${{ steps.mac_credentials.outputs.signed }}
+        run: |
+          tag="ci-transfer-macos-${{ github.run_id }}"
+          node scripts/ci-transfer.js pack .ci-transfer \
+            dist/packages/Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg \
+            dist/release-metadata/SHA256SUMS.txt \
+            dist/release-metadata/releases/v0.4.2.json \
+            dist/release-metadata/package-size-macos.json \
+            dist/release-metadata/release-provenance-macos.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          export GIT_INDEX_FILE="$RUNNER_TEMP/ci-transfer.index"
+          git read-tree --empty
+          git add -f .ci-transfer
+          tree="$(git write-tree)"
+          commit="$(git commit-tree -m "ci: temporary macOS artifact transfer ($SIGNED_BUILD)" "$tree")"
+          git push origin "$commit:refs/heads/$tag"
+
+  rebuild-windows-v0-4-0:
+    name: Windows v0.4.0 pinned rebuild and transfer
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'windows-v0.4.0-transfer'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    env:
+      RELEASE_PLATFORM: windows
+      RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+      RELEASE_SOURCE_COMMIT: 908e1c86a1b1710fc03b7ed21ee7ad5291d6f199
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 908e1c86a1b1710fc03b7ed21ee7ad5291d6f199
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - run: npx playwright install chromium
+      - run: npm test
+      - run: npm run test:dev10
+      - run: npm run test:updates
+      - run: npm run test:localization
+      - run: npm run test:accessibility
+      - run: npm run package:windows
+      - run: npm run package:audit -- dist/packages/win-unpacked
+      - run: npm run package:size -- dist/packages
+      - run: npm run sbom
+      - run: npm run release:finalize
+      - run: npm run release:validate
+      - run: npm run release:provenance
+      - run: npm run secret-scan
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Record exact installer identity
+        shell: pwsh
+        run: |
+          $installer = "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe"
+          $record = [ordered]@{
+            sourceSha = $env:RELEASE_SOURCE_COMMIT
+            file = [System.IO.Path]::GetFileName($installer)
+            bytes = (Get-Item $installer).Length
+            sha256 = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $record | ConvertTo-Json | Set-Content -Encoding utf8NoBOM windows-v0.4.0-build.json
+          Get-Content windows-v0.4.0-build.json
+      - name: Create temporary transfer branch
+        shell: pwsh
+        run: |
+          $tag = "ci-transfer-windows-v0.4.0-${{ github.run_id }}"
+          git show "$env:GITHUB_SHA`:scripts/ci-transfer.js" | node - pack .ci-transfer "dist/packages/Canada.Post.Claim.Runner-0.4.0-win-x64.exe" windows-v0.4.0-build.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP "ci-transfer.index"
+          git read-tree --empty
+          git add -f .ci-transfer
+          $tree = git write-tree
+          $commit = git commit-tree -m "ci: temporary pinned Windows artifact transfer" $tree
+          git push origin "$commit`:refs/heads/$tag"

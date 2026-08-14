@@ -1,0 +1,9 @@
+extends: ./electron-builder.yml
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  signAndEditExecutable: true
+  verifyUpdateCodeSignature: true
+  publisherName: ${env.WINDOWS_PUBLISHER_NAME}
+forceCodeSigning: true

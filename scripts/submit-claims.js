@@ -1,21 +1,27 @@
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const claimDb = require('../lib/claim-database');
-const { findClaimNavigationStage, maybeOpenNavigationMenu, classifyAuthenticatedSnapshot, claimNavigationUrlContext, firstVisibleLocator } = require('../lib/canadapost-navigation');
+const claimQueue = require('../lib/claim-queue');
+const { verifyQueueSnapshot, revalidateQueueItem } = require('../lib/eligibility-revalidation');
+const { findClaimNavigationStage, maybeOpenNavigationMenu, classifyAuthenticatedSnapshot, claimNavigationUrlContext } = require('../lib/step3/navigation');
 const { findLoginControls } = require('../lib/canadapost-login');
 const { readRuntimeSecrets } = require('../lib/runtime-secrets');
-const { Step3Diagnostics, sanitizeUrl } = require('../lib/step3-diagnostics');
+const { Step3Diagnostics, sanitizeUrl } = require('../lib/step3/diagnostics');
+const { isAllowedCanadaPostUrl, portalUrl } = require('../lib/origin-policy');
+const { faultPoint } = require('../lib/fault-injection');
+const { assertBuiltInBrowserMode, waitForExactPageTarget } = require('../lib/step3/browser-handshake');
+const { extractConfirmationNumber, classifyAutomationFailure, classifyClaimOutcome, summarizeClaimResults } = require('../lib/step3/outcome');
+const { isFinalSubmissionLabel } = require('../lib/step3/form');
+const { automationError } = require('../lib/step3/safety');
 
 const DUPLICATE_CLAIM_FIX_VERSION = 'hardening-v35-navigation-stability';
 let diagnostics = null;
-const LATE_PACKAGE_SUPPORT_URL = 'https://www.canadapost-postescanada.ca/cpc/en/support/kb/claims/late-packages.page';
-
-function automationError(code, message) {
-  const error = new Error(message);
-  error.code = code;
-  return error;
-}
+const LATE_PACKAGE_SUPPORT_URL = portalUrl(
+  'https://www.canadapost-postescanada.ca/cpc/en/support/kb/claims/late-packages.page',
+  '/cpc/en/support/kb/claims/late-packages.page'
+);
 
 function diag(level, category, action, details = {}, options = {}) {
   return diagnostics?.record(level, category, action, details, options) || null;
@@ -102,15 +108,7 @@ function writeJsonAtomic(filePath, value) {
 }
 
 
-function isCanadaPostUrl(value) {
-  try {
-    const parsed = new URL(String(value));
-    const host = parsed.hostname.toLowerCase();
-    return parsed.protocol === 'https:' && (host === 'canadapost-postescanada.ca' || host.endsWith('.canadapost-postescanada.ca'));
-  } catch (_) {
-    return false;
-  }
-}
+const isCanadaPostUrl = isAllowedCanadaPostUrl;
 
 function assertCanadaPostPage(page, label = 'Canada Post page') {
   const url = page?.url?.() || '';
@@ -120,87 +118,63 @@ function assertCanadaPostPage(page, label = 'Canada Post page') {
 
 const BUILTIN_BROWSER_MODE = String(process.env.BROWSER_MODE || '').toLowerCase() === 'builtin';
 const DRY_RUN_MODE = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
-const BACKGROUND_BROWSER_MODE = false;
-const IS_LINUX = process.platform === 'linux';
 const ELECTRON_CDP_URL = String(process.env.ELECTRON_CDP_URL || '');
-const ELECTRON_TARGET_TOKEN = String(process.env.ELECTRON_TARGET_TOKEN || '');
-const CANADAPOST_LOGIN_URL = 'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en';
+const ELECTRON_TARGET_ID = String(process.env.ELECTRON_TARGET_ID || '');
+const ELECTRON_TARGET_NONCE = String(process.env.ELECTRON_TARGET_NONCE || '');
+const ELECTRON_TARGET_WEB_CONTENTS_HASH = String(process.env.ELECTRON_TARGET_WEB_CONTENTS_HASH || '');
+const BROWSER_VISIBILITY_ACK_FILE = String(process.env.BROWSER_VISIBILITY_ACK_FILE || '');
+const CANADAPOST_LOGIN_URL = portalUrl(
+  'https://www.canadapost-postescanada.ca/lfe-cap/en/login?stepupId=smb_mode1,consumer,commercial_link,smb_link&sourceUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&targetUrl=https:%2F%2Fwww.canadapost-postescanada.ca%2Fdash%2Fen&authlvl=&language=en',
+  '/login'
+);
 
-function backgroundBrowserArgs() {
-  const args = [
-    '--window-size=1280,900',
-    '--window-position=-32000,-32000',
-    '--disable-features=CalculateNativeWinOcclusion'
-  ];
-
-  // Do not force XWayland by default. Canada Post's login risk checks can be
-  // sensitive to browser/fingerprint changes, and forcing a different platform
-  // backend may trigger extra text verification. Keep the browser as normal as
-  // possible and use a persistent profile instead.
-  if (IS_LINUX && String(process.env.FORCE_XWAYLAND || '').toLowerCase() === 'true') {
-    args.push('--ozone-platform=x11');
+async function requireBuiltinBrowserVisibility(kind, message) {
+  if (!BUILTIN_BROWSER_MODE) return { visible: true, requestId: '' };
+  if (!BROWSER_VISIBILITY_ACK_FILE) throw automationError('BROWSER_VISIBILITY_REQUIRED', 'The browser visibility acknowledgement path was not provided by Electron.');
+  const requestId = crypto.randomUUID();
+  emit('manual_verification_required', {
+    requestId,
+    kind: String(kind || 'verification'),
+    message: String(message || 'Manual verification is required in the visible built-in browser.')
+  });
+  diag('info', 'browser', 'manual-verification-display-requested', {
+    requestId,
+    kind: String(kind || 'verification'),
+    webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+  }, { critical: true });
+  const deadline = Date.now() + 12000;
+  while (Date.now() < deadline) {
+    if (stopRequested()) throw automationError('STOP_REQUESTED', 'Stop requested while preparing the browser for manual verification.');
+    try {
+      const acknowledgement = JSON.parse(fs.readFileSync(BROWSER_VISIBILITY_ACK_FILE, 'utf8'));
+      if (acknowledgement.requestId === requestId) {
+        if (acknowledgement.visible && acknowledgement.webContentsIdentityHash === ELECTRON_TARGET_WEB_CONTENTS_HASH) {
+          diag('info', 'browser', 'manual-verification-display-ready', {
+            requestId,
+            kind: String(kind || 'verification'),
+            webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+          }, { critical: true });
+          return acknowledgement;
+        }
+        throw automationError(
+          acknowledgement.errorCode || 'BROWSER_VISIBILITY_REQUIRED',
+          'Manual verification is required, but the built-in browser could not be displayed safely.'
+        );
+      }
+    } catch (error) {
+      if (error?.code && !['ENOENT', 'EACCES'].includes(error.code) && error.name !== 'SyntaxError') throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
-
-  return args;
-}
-
-async function launchClaimContext(dataDir) {
-  const userDataDir = path.resolve(dataDir, 'browser-profile');
-  fs.mkdirSync(userDataDir, { recursive: true });
-
-  const launchOptions = {
-    headless: false,
-    args: BACKGROUND_BROWSER_MODE ? backgroundBrowserArgs() : ['--window-size=1280,900'],
-  };
-
-  try {
-    return await chromium.launchPersistentContext(userDataDir, launchOptions);
-  } catch (error) {
-    emit('log', { message: `Persistent browser profile failed, using temporary profile: ${error.message}` });
-    const fallbackUserDataDir = path.resolve(dataDir, `browser-profile-temp-${Date.now()}`);
-    fs.mkdirSync(fallbackUserDataDir, { recursive: true });
-    return chromium.launchPersistentContext(fallbackUserDataDir, launchOptions);
-  }
-}
-
-async function setBrowserWindowBounds(page, bounds) {
-  if (!page || !page.context) return false;
-  let client = null;
-  try {
-    client = await page.context().newCDPSession(page);
-    const targetWindow = await client.send('Browser.getWindowForTarget').catch(() => null);
-    if (!targetWindow || targetWindow.windowId === undefined) return false;
-    await client.send('Browser.setWindowBounds', { windowId: targetWindow.windowId, bounds });
-    return true;
-  } catch (_) {
-    return false;
-  } finally {
-    if (client) await client.detach().catch(() => {});
-  }
-}
-
-async function hideBrowserWindow(page) {
-  if (!BACKGROUND_BROWSER_MODE || !page) return;
-
-  // Try several non-destructive hiding strategies. Different desktop/window
-  // managers honor different Chrome DevTools window commands.
-  await page.waitForTimeout(150).catch(() => {});
-  const minimized = await setBrowserWindowBounds(page, { windowState: 'minimized' }).catch(() => false);
-  const offscreen = await setBrowserWindowBounds(page, { left: -32000, top: -32000, width: 1280, height: 900 }).catch(() => false);
-
-  if (!minimized && !offscreen) {
-    emit('log', { message: 'Background browser mode could not hide the browser on this desktop environment. It will still restore normally for CAPTCHA handling.' });
-  }
+  throw automationError('BROWSER_VISIBILITY_REQUIRED', 'Manual verification is required, but browser display readiness was not confirmed.');
 }
 
 async function revealBrowserWindow(page) {
   if (!page) return;
-  if (BACKGROUND_BROWSER_MODE) {
-    await setBrowserWindowBounds(page, { windowState: 'normal' }).catch(() => {});
-    await setBrowserWindowBounds(page, { left: 80, top: 80, width: 1280, height: 900 }).catch(() => {});
-  }
   await page.bringToFront().catch(() => {});
 }
+
+async function hideBrowserWindow() {}
 
 const guardedPages = new WeakSet();
 const dryRunGuardPages = new WeakSet();
@@ -209,23 +183,6 @@ async function installCanadaPostNavigationGuard(page) {
   if (!page || guardedPages.has(page)) return;
   guardedPages.add(page);
   diagnostics?.attachPage(page, 'canada-post');
-
-  // Electron's built-in BrowserView is guarded by the main process. External
-  // Playwright pages need their own main-frame navigation interception.
-  if (!BUILTIN_BROWSER_MODE) {
-    await page.route('**/*', async route => {
-      const request = route.request();
-      const url = request.url();
-      const isMainFrameNavigation = request.isNavigationRequest() && request.frame() === page.mainFrame();
-      if (isMainFrameNavigation && url !== 'about:blank' && !isCanadaPostUrl(url)) {
-        emit('log', { message: `Blocked main-frame navigation outside Canada Post: ${url}` });
-        diag('warn', 'security', 'navigation-blocked', { url: sanitizeUrl(url), source: 'playwright-route' }, { critical: true });
-        await route.abort('blockedbyclient').catch(() => {});
-        return;
-      }
-      await route.continue().catch(() => {});
-    });
-  }
 
   page.on('framenavigated', frame => {
     if (frame !== page.mainFrame()) return;
@@ -244,36 +201,62 @@ async function installCanadaPostNavigationGuard(page) {
   });
 }
 
-async function findBuiltinBrowserPage(browser, timeoutMs = 15000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const pages = browser.contexts().flatMap(context => context.pages()).filter(page => !page.isClosed());
-
-    if (ELECTRON_TARGET_TOKEN) {
-      for (const page of pages) {
-        const token = await page.evaluate(() => window.name).catch(() => '');
-        if (token === ELECTRON_TARGET_TOKEN) return page;
-      }
-    }
-
-    const canadaPostPages = pages.filter(page => isCanadaPostUrl(page.url()));
-    if (canadaPostPages.length === 1) return canadaPostPages[0];
-
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  return null;
-}
-
 async function openClaimBrowser(dataDir) {
+  void dataDir;
+  assertBuiltInBrowserMode(process.env.BROWSER_MODE);
   if (BUILTIN_BROWSER_MODE) {
-    if (!ELECTRON_CDP_URL) throw new Error('Built-in browser connection endpoint was not provided by the Electron main process.');
+    if (!ELECTRON_CDP_URL) throw automationError('CDP_ENDPOINT_UNAVAILABLE', 'The current Electron debugging endpoint was not provided by the main process.');
+    if (!ELECTRON_TARGET_ID || !ELECTRON_TARGET_NONCE) throw automationError('TARGET_NOT_PUBLISHED', 'The main process did not publish the exact Step 3 browser target identity.');
     emit('log', { message: 'Built-in browser panel requested. Canada Post should appear inside the Step 3 browser pane.' });
-    emit('log', { message: 'Connecting the claim runner to the isolated built-in Canada Post browser target.' });
+    emit('log', { message: 'Connecting to the exact built-in Step 3 browser target published by Electron.' });
+    diag('info', 'browser', 'worker-handshake-started', {
+      endpointProvided: true,
+      targetIdentityProvided: true,
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true });
 
-    const browser = await chromium.connectOverCDP(ELECTRON_CDP_URL);
-    const page = await findBuiltinBrowserPage(browser);
-    if (!page) {
-      throw new Error('The isolated built-in browser target could not be identified. Open Step 3, keep “Use built-in browser inside the app” checked, then run Step 3 again.');
+    let browser;
+    try { browser = await chromium.connectOverCDP(ELECTRON_CDP_URL); }
+    catch (error) {
+      throw automationError('CDP_CONNECTION_FAILURE', `The worker could not connect to the current Electron debugging endpoint: ${error.message}`);
+    }
+    let lastInventoryFingerprint = '';
+    const selected = await waitForExactPageTarget(browser, {
+      targetId: ELECTRON_TARGET_ID,
+      targetNonce: ELECTRON_TARGET_NONCE,
+      timeoutMs: 15000,
+      onInventory: inventory => {
+        const safeInventory = {
+          attempt: inventory.attempt,
+          targetCount: inventory.targetCount,
+          pageTargetCount: inventory.pageTargetCount,
+          typeCounts: inventory.typeCounts,
+          publishedMatchCount: inventory.publishedMatchCount,
+          exactMatchCount: inventory.exactMatchCount,
+          candidates: inventory.candidates
+        };
+        const fingerprint = JSON.stringify({ ...safeInventory, attempt: 0 });
+        if (fingerprint !== lastInventoryFingerprint) {
+          lastInventoryFingerprint = fingerprint;
+          diag('debug', 'browser', 'cdp-target-inventory', safeInventory);
+        }
+      }
+    });
+    const page = selected.page;
+    if (page.isClosed()) throw automationError('TARGET_CLOSED_DURING_CONNECTION', 'The Step 3 browser target closed during connection.');
+    diag('info', 'browser', 'target-attached', {
+      attempts: selected.attempt,
+      targetCount: selected.inventory.targetCount,
+      pageTargetCount: selected.inventory.pageTargetCount,
+      exactMatchCount: selected.inventory.exactMatchCount,
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true });
+    page.once('close', () => diag('error', 'browser', 'target-closed', {
+      webContentsIdentityHash: ELECTRON_TARGET_WEB_CONTENTS_HASH
+    }, { critical: true }));
+
+    if (page.url() === 'about:blank' || page.url().startsWith('about:blank#')) {
+      await page.goto(CANADAPOST_LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     }
 
     await installCanadaPostNavigationGuard(page);
@@ -284,11 +267,7 @@ async function openClaimBrowser(dataDir) {
     return { page, close: async () => {} };
   }
 
-  const context = await launchClaimContext(dataDir);
-  context.on('page', page => installCanadaPostNavigationGuard(page).catch(() => {}));
-  const page = await context.newPage();
-  await installCanadaPostNavigationGuard(page);
-  return { page, close: async () => context.close().catch(() => {}) };
+  throw automationError('BUILTIN_BROWSER_REQUIRED', 'Step 3 requires Electron\'s built-in browser.');
 }
 
 function envValue(name, fallback = '') {
@@ -308,6 +287,21 @@ const CLAIM_USER_SETTINGS = {
   contactEmail: envValue('CLAIM_CONTACT_EMAIL'),
   businessName: envValue('CLAIM_BUSINESS_NAME')
 };
+
+function policySettings() {
+  return {
+    claimStreetNumber: CLAIM_USER_SETTINGS.streetNumber,
+    claimStreetName: CLAIM_USER_SETTINGS.streetName,
+    claimAddressLine2: CLAIM_USER_SETTINGS.addressLine2,
+    claimCity: CLAIM_USER_SETTINGS.city,
+    claimProvince: CLAIM_USER_SETTINGS.province,
+    claimPostalCode: CLAIM_USER_SETTINGS.postalCode,
+    claimContactName: CLAIM_USER_SETTINGS.contactName,
+    claimContactPhone: CLAIM_USER_SETTINGS.contactPhone,
+    claimContactEmail: CLAIM_USER_SETTINGS.contactEmail,
+    claimBusinessName: CLAIM_USER_SETTINGS.businessName
+  };
+}
 
 function requiredSetting(value, label) {
   const clean = String(value || '').trim();
@@ -330,14 +324,13 @@ function getClaimsToRun(allClaims, dataDir, dbPath = process.env.DATABASE_PATH) 
   for (const claim of allClaims) {
     const tracking = String(claim['Tracking PIN'] || '').trim();
     const status = String(claim.Status || '').trim().toUpperCase();
-    const deliveryDate = String(claim['Actual Delivery Date'] || '').trim();
     if (!tracking || seen.has(tracking)) {
       emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking || '—', reason: tracking ? 'Duplicate row in claims.csv.' : 'Missing tracking PIN.' });
       continue;
     }
     seen.add(tracking);
-    if (status !== 'ELIGIBLE - DELIVERED LATE' || !deliveryDate) {
-      emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking, reason: 'Row is not an eligible delivered-late claim.' });
+    if (!status.startsWith('LATE CANDIDATE')) {
+      emit('claim_skipped', { row: claim._csvRowNumber, trackingNumber: tracking, reason: 'Row is not a LATE_CANDIDATE classification.' });
       continue;
     }
     if (!dryRun && dbPath) {
@@ -363,105 +356,6 @@ function getClaimsToRun(allClaims, dataDir, dbPath = process.env.DATABASE_PATH) 
 function oneLine(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
-
-function hasAnyPattern(text, patterns) {
-  return patterns.some(pattern => pattern.test(text));
-}
-
-const DUPLICATE_PATTERNS = [
-  /inquiry of this type already exists/i,
-  /already received a refund request/i,
-  /refund request for this package/i,
-  /refund request.*already.*(?:received|submitted|exists)/i,
-  /(?:claim|inquiry|request).*already.*(?:exists|submitted|received)/i,
-  /already.*(?:claim|inquiry|refund request).*tracking number/i
-];
-
-const SUCCESS_PATTERNS = [
-  /(?:service\s*)?ticket\s*(?:number|#)\s*[:#]?\s*[a-z0-9-]{4,}/i,
-  /confirmation\s*(?:number|#)\s*[:#]?\s*[a-z0-9-]{4,}/i,
-  /your\s+(?:service\s*)?ticket\s+(?:has been|was)\s+(?:created|submitted|received)/i,
-  /thank you[^.]{0,160}(?:request|ticket|inquiry)[^.]{0,120}(?:submitted|received|created)/i,
-  /(?:request|inquiry)[^.]{0,120}(?:has been|was)\s+(?:submitted|received|created)/i
-];
-
-const FAILURE_PATTERNS = [
-  /there (?:is|are) (?:an? )?(?:error|errors) on (?:the|this) page/i,
-  /(?:unable|not able) to (?:create|submit|process)/i,
-  /(?:cannot|can not|can't) (?:create|submit|process)/i,
-  /not eligible/i,
-  /something went wrong/i,
-  /please give us a call/i,
-  /try again later/i,
-  /technical (?:error|problem|issue)/i
-];
-
-function extractConfirmationNumber(text) {
-  const source = String(text || '');
-  const patterns = [
-    /(?:service\s*)?ticket\s*(?:number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9-]{3,})/i,
-    /confirmation\s*(?:number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9-]{3,})/i
-  ];
-  for (const pattern of patterns) {
-    const match = source.match(pattern);
-    if (match?.[1] && !/^(?:has|been|created|submitted|received)$/i.test(match[1])) return match[1];
-  }
-  return '';
-}
-
-function classifyAutomationFailure(error, text = '', url = '') {
-  const explicitCode = String(error?.code || '');
-  const message = String(error?.message || error || 'Unknown automation failure');
-  const combined = `${message} ${text}`;
-
-  const explicit = {
-    STOP_REQUESTED: { errorCode: 'STOP_REQUESTED', status: 'unknown' },
-    INCORRECT_CREDENTIALS: { errorCode: 'INCORRECT_CREDENTIALS', status: 'failed' },
-    AUTHENTICATION_NOT_COMPLETED: { errorCode: 'AUTHENTICATION_NOT_COMPLETED', status: 'unknown' },
-    AUTHENTICATION_EXPIRED: { errorCode: 'AUTHENTICATION_EXPIRED', status: 'unknown' },
-    AUTHENTICATION_VERIFICATION_TIMEOUT: { errorCode: 'AUTHENTICATION_VERIFICATION_TIMEOUT', status: 'unknown' },
-    CAPTCHA_TIMEOUT: { errorCode: 'CAPTCHA_TIMEOUT', status: 'unknown' },
-    UNEXPECTED_LAYOUT: { errorCode: 'UNEXPECTED_LAYOUT', status: 'unknown' },
-    CLAIM_FORM_NOT_READY: { errorCode: 'CLAIM_FORM_NOT_READY', status: 'failed' },
-    COUNTRY_SELECTION_FAILED: { errorCode: 'COUNTRY_SELECTION_FAILED', status: 'failed' },
-    DRY_RUN_SAFETY_BLOCK: { errorCode: 'DRY_RUN_SAFETY_BLOCK', status: 'unknown' },
-    FINAL_ACTION_GUARD: { errorCode: 'FINAL_ACTION_GUARD', status: 'unknown' },
-    CLAIM_NAVIGATION_CHANGED: { errorCode: 'CLAIM_NAVIGATION_CHANGED', status: 'failed' },
-    CLAIM_NAVIGATION_STALLED: { errorCode: 'CLAIM_NAVIGATION_STALLED', status: 'failed' },
-    CLAIM_TICKET_LAUNCHER_NOT_FOUND: { errorCode: 'CLAIM_TICKET_LAUNCHER_NOT_FOUND', status: 'failed' }
-  };
-  if (explicit[explicitCode]) return explicit[explicitCode];
-
-  if (/incorrect|invalid|unable to sign in|authentication failed/i.test(combined) && /username|password|sign in/i.test(combined)) {
-    return { errorCode: 'INCORRECT_CREDENTIALS', status: 'failed' };
-  }
-  if (/temporarily unavailable|service unavailable|maintenance|technical difficulties|try again later|ECONNRESET|ENOTFOUND|ETIMEDOUT/i.test(combined)) {
-    return { errorCode: 'TEMPORARY_OUTAGE', status: 'failed' };
-  }
-  if (/claim navigation|ticket launcher|late package ticket|late-delivery support page/i.test(message)) {
-    return { errorCode: 'CLAIM_NAVIGATION_CHANGED', status: 'failed' };
-  }
-  if (/captcha|verify you are human|i'?m not a robot/i.test(combined)) {
-    return { errorCode: 'CAPTCHA_PENDING', status: 'unknown' };
-  }
-  if (/verification code|text verification|security code/i.test(combined)) {
-    return { errorCode: 'AUTHENTICATION_VERIFICATION_REQUIRED', status: 'unknown' };
-  }
-  if (/not eligible|validation|already exists|already received a refund request/i.test(combined)) {
-    return { errorCode: 'KNOWN_VALIDATION_REJECTION', status: 'failed' };
-  }
-  if (/locator|selector|strict mode|waiting for|getByRole|getByLabel|not found|could not click/i.test(combined)) {
-    return { errorCode: 'SELECTOR_MISSING', status: 'failed' };
-  }
-  if (/login|sign in|session|authentication/i.test(combined) || /\/login/i.test(String(url || ''))) {
-    return { errorCode: 'AUTHENTICATION_EXPIRED', status: 'unknown' };
-  }
-  if (/outside the allowed Canada Post domain|unexpected page|layout/i.test(combined)) {
-    return { errorCode: 'UNEXPECTED_LAYOUT', status: 'unknown' };
-  }
-  return { errorCode: 'AUTOMATION_FAILURE', status: 'failed' };
-}
-
 
 async function authenticationSnapshot(page, timeout = 1200) {
   const text = await collectVisibleText(page).catch(() => '');
@@ -887,7 +781,7 @@ async function openTicketPopup(page) {
   }
 
   const beforeUrl = page.url();
-  const popupPromise = page.waitForEvent('popup', { timeout: BUILTIN_BROWSER_MODE ? 350 : 45000 }).catch(() => null);
+  const popupPromise = page.waitForEvent('popup', { timeout: 350 }).catch(() => null);
   await activateClaimNavigationControl(page, navigation.locator, 'Open a ticket control');
   const claimPage = await popupPromise;
   if (claimPage) {
@@ -1030,6 +924,10 @@ async function isTextVerificationPresent(page) {
 
 async function waitForTextVerificationToClear(page) {
   await revealBrowserWindow(page);
+  await requireBuiltinBrowserVisibility(
+    'text-verification',
+    'Manual verification required. Complete the Canada Post verification in the visible built-in browser; Step 3 is paused.'
+  );
   emit('log', { message: 'TEXT VERIFICATION detected. Complete the Canada Post verification in the visible browser. The app is paused and will resume after verification clears.' });
 
   const startedAt = Date.now();
@@ -1139,6 +1037,11 @@ async function waitForCaptchaToClear(page, trackingNumber, rowNumber, dataDir) {
   }
 
   await revealBrowserWindow(page);
+
+  await requireBuiltinBrowserVisibility(
+    'captcha',
+    `Manual CAPTCHA verification required for ${trackingNumber}. Complete it in the visible built-in browser; Step 3 is paused.`
+  );
 
   emit('captcha_detected', {
     trackingNumber,
@@ -1275,41 +1178,6 @@ async function maybeFillByRoleTextbox(page, namePattern, value) {
 }
 
 
-function scoreStreetOrProvinceOption(optionText, wantedText) {
-  function normalizeText(input) {
-    return String(input || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/&amp;#39;|&#39;|’|`/g, "'")
-      .toLowerCase()
-      .replace(/\b(rue|street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|court|ct|crescent|cres|lane|ln|way|place|pl)\b/g, ' ')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-  }
-
-  function compact(input) {
-    return normalizeText(input).replace(/\s+/g, '');
-  }
-
-  const optionNorm = normalizeText(optionText);
-  const wantedNorm = normalizeText(wantedText);
-  const optionCompact = compact(optionText);
-  const wantedCompact = compact(wantedText);
-  const wantedTokens = wantedNorm.split(/\s+/).filter(token => token.length >= 2);
-
-  if (!wantedNorm || !optionNorm) return -1;
-  if (optionNorm === wantedNorm || optionCompact === wantedCompact) return 1000;
-  if (optionNorm.includes(wantedNorm) || optionCompact.includes(wantedCompact)) return 900;
-  if (wantedNorm.includes(optionNorm) || wantedCompact.includes(optionCompact)) return 800;
-
-  const hits = wantedTokens.filter(token => optionNorm.includes(token)).length;
-  if (wantedTokens.length && hits === wantedTokens.length) return 700 + hits;
-  if (wantedTokens.length >= 2 && hits >= Math.ceil(wantedTokens.length * 0.75)) return 500 + hits;
-  if (wantedTokens.length === 1 && hits === 1 && wantedTokens[0].length >= 4) return 400;
-
-  return -1;
-}
-
 async function maybeSelectByLabel(page, labelPattern, value) {
   const clean = String(value || '').trim();
   const diagnosticName = `select-${String(labelPattern)}`;
@@ -1433,11 +1301,6 @@ async function maybeSelectByLabel(page, labelPattern, value) {
 }
 
 
-function isFinalSubmissionLabel(value) {
-  return /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i
-    .test(String(value || '').replace(/\s+/g, ' ').trim());
-}
-
 async function installDryRunFinalActionGuard(page) {
   if (!DRY_RUN_MODE || !page) return;
 
@@ -1446,7 +1309,7 @@ async function installDryRunFinalActionGuard(page) {
     window.__cpDryRunGuardInstalled = true;
     window.__cpDryRunBlockedActions = [];
 
-    const finalPattern = /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i;
+    const finalPattern = /(?:create\s+(?:service\s+)?ticket|submit\s+(?:claim|ticket|request|inquiry)|send\s+(?:claim|request|inquiry)|confirm(?:\s+(?:claim|ticket|request|submission|inquiry))?|complete(?:\s+(?:claim|ticket|request|submission|inquiry))?|finish(?:\s+(?:claim|ticket|request|submission|inquiry))?|open\s+(?:service\s+)?ticket|cr[ée]er\s+(?:un\s+)?(?:billet|demande)|soumettre\s+(?:la\s+)?(?:demande|r[ée]clamation))/i;
     const labelFor = element => {
       if (!element) return '';
       return [
@@ -1537,6 +1400,42 @@ async function readDryRunBlockedActions(page) {
     actions.push(...frameActions);
   }
   return actions;
+}
+
+async function assertDryRunSafetyBarrier(page, senderMarker) {
+  if (!DRY_RUN_MODE) return;
+  const senderVisible = await senderMarker?.isVisible?.().catch(() => false);
+  const visibleLabels = [];
+  for (const frame of page.frames()) {
+    const labels = await frame.locator('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"]').evaluateAll(elements => {
+      const visible = element => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 8 && rect.height > 8;
+      };
+      return elements.filter(visible).map(element => [
+        element.innerText,
+        element.textContent,
+        element.value,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title')
+      ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 50);
+    }).catch(() => []);
+    visibleLabels.push(...labels);
+  }
+  const finalActions = visibleLabels.filter(isFinalSubmissionLabel).slice(0, 10);
+  if (!senderVisible || finalActions.length) {
+    const error = new Error('Dry-run safety barrier could not prove that automation remained on the sender/contact page before final review.');
+    error.code = 'DRY_RUN_SAFETY_BARRIER_FAILED';
+    error.details = { senderVisible, finalActionCount: finalActions.length };
+    throw error;
+  }
+  diagnostics?.state('dry-run-safety-barrier-reached', { checkpoint: 'sender-contact-fields-filled' });
+  diag('info', 'dry-run', 'safety-barrier-reached', {
+    checkpoint: 'sender-contact-fields-filled',
+    senderMarkerVisible: true,
+    finalActionCount: 0
+  }, { critical: true });
 }
 
 async function visibleLocatorInFrames(page, factory, timeout = 8000, diagnosticName = 'unnamed-control', options = {}) {
@@ -1813,6 +1712,7 @@ async function fillClaim(claimPage, claim, options = {}) {
     selectors: ['input[id="CreateTicket:ZZ_KEYDOC"]', 'input[name="CreateTicket:ZZ_KEYDOC"]'],
     diagnosticName: 'tracking-number'
   });
+  faultPoint('after_tracking_entry');
   diagnostics?.state('receiver-tracking-filled');
   await diagnostics?.capturePageState(claimPage, 'receiver-tracking-filled').catch(() => {});
 
@@ -1866,6 +1766,7 @@ async function fillClaim(claimPage, claim, options = {}) {
   // conservative: it fills every visible claim field but does not activate any
   // later Continue/review control whose semantics Canada Post could change.
   if (dryRun) {
+    await assertDryRunSafetyBarrier(claimPage, streetNumberInput);
     diag('info', 'dry-run', 'safe-checkpoint-reached', { checkpoint: 'sender-contact-fields-filled' }, { critical: true });
     return { stoppedBeforeFinalReviewTransition: true, safeCheckpoint: 'sender-contact-fields-filled' };
   }
@@ -1978,48 +1879,6 @@ async function collectVisibleText(page) {
   return oneLine(chunks.filter(Boolean).join(' '));
 }
 
-function classifyClaimOutcome(text) {
-  const source = String(text || '');
-  if (hasAnyPattern(source, DUPLICATE_PATTERNS)) {
-    return {
-      status: 'already_submitted',
-      ok: false,
-      message: 'Claim already submitted: Canada Post says an inquiry/refund request already exists for this tracking number.',
-      errorCode: 'DUPLICATE_CLAIM'
-    };
-  }
-
-  if (hasAnyPattern(source, FAILURE_PATTERNS)) {
-    return {
-      status: 'failed',
-      ok: false,
-      message: 'Canada Post displayed an error/rejection after Create Ticket.',
-      errorCode: 'KNOWN_VALIDATION_REJECTION'
-    };
-  }
-
-  const confirmationNumber = extractConfirmationNumber(source);
-  if (confirmationNumber) {
-    return {
-      status: 'submitted',
-      ok: true,
-      message: 'Canada Post accepted the claim and displayed a confirmation/ticket number.',
-      confirmationNumber
-    };
-  }
-
-  if (hasAnyPattern(source, SUCCESS_PATTERNS)) {
-    return {
-      status: 'unknown',
-      ok: false,
-      message: 'Canada Post displayed success-like text but no confirmation/ticket number was captured. Manual reconciliation is required.',
-      errorCode: 'CONFIRMATION_NUMBER_MISSING'
-    };
-  }
-
-  return null;
-}
-
 async function waitForClaimOutcome(claimPage, timeoutMs, trackingNumber, rowNumber, dataDir) {
   let startedAt = Date.now();
   let lastText = '';
@@ -2090,6 +1949,7 @@ async function waitForClaimOutcome(claimPage, timeoutMs, trackingNumber, rowNumb
 }
 
 async function saveClaimArtifacts(claimPage, dataDir, prefix, rowNumber, pageText = '', screenshotDelayMs = 0) {
+  faultPoint('during_evidence_write');
   const startedAt = Date.now();
   const artifactId = `${rowNumber}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   const screenshotPath = path.resolve(dataDir, `${prefix}-row-${artifactId}.png`);
@@ -2169,6 +2029,7 @@ async function processClaim(page, claim, index, total, options = {}) {
     const fillResult = diagnostics
       ? await diagnostics.operation('claim-form.fill', { dryRun }, () => fillClaim(claimPage, claim, { dryRun }))
       : await fillClaim(claimPage, claim, { dryRun });
+    faultPoint('after_form_completion');
 
     if (dryRun) {
       const blockedActions = await readDryRunBlockedActions(claimPage);
@@ -2212,12 +2073,15 @@ async function processClaim(page, claim, index, total, options = {}) {
 
     emit('log', { message: `Clicking Create Ticket for ${trackingNumber}.` });
     diagnostics?.state('final-submission-action');
+    faultPoint('before_final_submission');
     await clickCreateTicket(claimPage);
+    faultPoint('immediately_after_submission');
     diagnostics?.state('waiting-for-outcome');
 
     const resultTimeoutMs = Math.max(afterSubmitMs, 45000);
     emit('claim_wait', { trackingNumber, ms: resultTimeoutMs, mode: 'wait_for_canada_post_confirmation_or_duplicate_error' });
 
+    faultPoint('before_confirmation_capture');
     const outcome = await waitForClaimOutcome(claimPage, resultTimeoutMs, trackingNumber, claim._csvRowNumber, dataDir);
 
     if (outcome.status === 'submitted') {
@@ -2266,12 +2130,15 @@ async function processClaim(page, claim, index, total, options = {}) {
       };
     }
 
-    const artifacts = await saveClaimArtifacts(claimPage, dataDir, 'claim-error', claim._csvRowNumber, outcome.pageText, 2600);
-    const errorMessage = outcome.pageText ? `${outcome.message} Page text saved to ${artifacts.textPath}` : outcome.message;
-    emit('claim_error', {
+    const rejected = outcome.status === 'rejected';
+    const artifacts = await saveClaimArtifacts(claimPage, dataDir, rejected ? 'claim-rejected' : 'claim-error', claim._csvRowNumber, outcome.pageText, 2600);
+    const returnedReason = outcome.reason || '';
+    const errorMessage = [outcome.message, returnedReason ? `Returned reason: ${returnedReason}` : '', outcome.pageText ? `Page text saved to ${artifacts.textPath}` : ''].filter(Boolean).join(' ');
+    emit(rejected ? 'claim_rejected' : 'claim_error', {
       row: claim._csvRowNumber,
       trackingNumber,
       message: errorMessage,
+      reason: returnedReason,
       screenshotPath: artifacts.screenshotPath,
       textPath: artifacts.textPath
     });
@@ -2281,6 +2148,7 @@ async function processClaim(page, claim, index, total, options = {}) {
       row: claim._csvRowNumber,
       trackingNumber,
       error: errorMessage,
+      reason: returnedReason,
       errorCode: outcome.errorCode || 'UNKNOWN_RESULT',
       screenshotPath: artifacts.screenshotPath,
       textPath: artifacts.textPath,
@@ -2314,10 +2182,6 @@ async function processClaim(page, claim, index, total, options = {}) {
       lastUrl,
       pageTitle: await claimPage.title().catch(() => '')
     };
-  } finally {
-    if (!BUILTIN_BROWSER_MODE && claimPage !== page) {
-      await claimPage.close().catch(() => {});
-    }
   }
 }
 
@@ -2358,11 +2222,12 @@ async function main() {
   const dryRun = DRY_RUN_MODE;
   const runId = Number.parseInt(process.env.RUN_ID || '0', 10) || null;
   const csvPath = process.env.CLAIMS_CSV || path.resolve(dataDir, 'claims.csv');
+  assertBuiltInBrowserMode(process.env.BROWSER_MODE);
   diagnostics = initializeDiagnostics({
     dataDir,
     runId,
     dryRun,
-    browserMode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external'
+    browserMode: 'builtin'
   });
   if (diagnostics) {
     process.stdout.write(JSON.stringify({
@@ -2374,7 +2239,7 @@ async function main() {
     diagnostics.state('loading-claims');
     diagnostics.record('info', 'run', 'configuration', {
       dryRun,
-      browserMode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external',
+      browserMode: 'builtin',
       claimsCsv: csvPath,
       databaseConfigured: Boolean(dbPath),
       stopFileConfigured: Boolean(process.env.STOP_FILE),
@@ -2393,6 +2258,13 @@ async function main() {
     : readClaims(csvPath));
   const selection = getClaimsToRun(allClaims, dataDir, dbPath);
   const claimsToRun = selection.claims;
+  const snapshotPath = process.env.QUEUE_SNAPSHOT_PATH || '';
+  if (!snapshotPath || !fs.existsSync(snapshotPath)) throw new Error('Reviewed queue snapshot is missing. Refresh and review the claim queue.');
+  let queueSnapshot;
+  try { queueSnapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')); } catch (_) { throw new Error('Reviewed queue snapshot is invalid.'); }
+  const policyClaims = allClaims.map(claim => claimQueue.claimInputFromRow(claim, policySettings()));
+  const snapshotIntegrity = verifyQueueSnapshot(queueSnapshot, policyClaims);
+  if (!snapshotIntegrity.ok) throw new Error(`Reviewed queue snapshot failed integrity validation (${snapshotIntegrity.reason}). Refresh the queue.`);
   diagnostics?.record('info', 'claims', 'selection-complete', {
     totalRows: allClaims.length,
     selectedClaims: claimsToRun.length,
@@ -2435,17 +2307,12 @@ async function main() {
   emit('submit_start', { total: claimsToRun.length, claimsCsv: csvPath, version: DUPLICATE_CLAIM_FIX_VERSION, dryRun });
   emit('log', { message: `Duplicate-claim detector active: ${DUPLICATE_CLAIM_FIX_VERSION}` });
   if (dryRun) emit('log', { message: 'DRY RUN ENABLED: the runner will stop on the sender/contact page before final review or submission controls.' });
-  if (BUILTIN_BROWSER_MODE) {
-    emit('log', { message: 'Using built-in Electron browser panel for Step 3.' });
-    emit('log', { message: 'Using the app browser session for Canada Post login, verification, and claim submission.' });
-  } else {
-    emit('log', { message: 'Using external visible Chromium browser for Step 3.' });
-    emit('log', { message: 'Using saved Playwright browser profile. This reduces repeated Canada Post text verification prompts.' });
-  }
+  emit('log', { message: 'Using built-in Electron browser panel for Step 3.' });
+  emit('log', { message: 'Using the app browser session for Canada Post login, verification, and claim submission.' });
 
   diagnostics?.state('opening-browser');
   const browserSession = diagnostics
-    ? await diagnostics.operation('browser.open', { mode: BUILTIN_BROWSER_MODE ? 'builtin' : 'external' }, () => openClaimBrowser(dataDir))
+    ? await diagnostics.operation('browser.open', { mode: 'builtin' }, () => openClaimBrowser(dataDir))
     : await openClaimBrowser(dataDir);
   const page = browserSession.page;
   diagnostics?.attachPage(page, 'claim-runner');
@@ -2462,8 +2329,10 @@ async function main() {
     await diagnostics?.capturePageState(page, 'authenticated').catch(() => {});
     await hideBrowserWindow(page);
     diagnostics?.state('navigating-to-ticket-launcher');
+    faultPoint('before_navigation');
     if (diagnostics) await diagnostics.operation('navigation.ticket-launcher', {}, () => navigateToLatePackageTicketLauncher(page));
     else await navigateToLatePackageTicketLauncher(page);
+    faultPoint('after_navigation');
     let ticketLauncherUrl = page.url();
     diagnostics?.state('ticket-launcher-ready', { url: sanitizeUrl(ticketLauncherUrl) });
     await diagnostics?.capturePageState(page, 'ticket-launcher-ready').catch(() => {});
@@ -2477,6 +2346,29 @@ async function main() {
 
       const claim = claimsToRun[i];
       const trackingNumber = required(claim, 'Tracking PIN');
+      const policyClaim = claimQueue.claimInputFromRow(claim, policySettings());
+      const revalidation = revalidateQueueItem({
+        snapshot: queueSnapshot,
+        claims: policyClaims,
+        claim: policyClaim,
+        currentEvidence: policyClaim,
+        options: { asOf: new Date().toISOString(), classificationTimestamp: new Date().toISOString() }
+      });
+      const currentClassification = revalidation.current || null;
+      if (currentClassification) claimDb.recordClassification(dbPath, trackingNumber, currentClassification, policyClaim);
+      claimDb.recordWorkerRevalidation(dbPath, {
+        snapshotId: Number(process.env.QUEUE_SNAPSHOT_ID || 0) || null,
+        trackingNumber,
+        allowed: revalidation.allowed,
+        reason: revalidation.reason,
+        snapshotHash: queueSnapshot.snapshotHash,
+        result: revalidation
+      });
+      if (!revalidation.allowed) {
+        emit('claim_revalidation_blocked', { row: claim._csvRowNumber, trackingNumber, reason: revalidation.reason, classification: currentClassification?.classification || '' });
+        diagnostics?.record('warn', 'policy', 'claim-revalidation-blocked', { reason: revalidation.reason, classification: currentClassification?.classification || '' }, { critical: true });
+        break;
+      }
       diagnostics?.setClaim({
         index: i + 1,
         total: claimsToRun.length,
@@ -2495,9 +2387,10 @@ async function main() {
         serviceCode: claim['Service Code'],
         destinationPostalCode: claim['Destination Postal Code'],
         expectedDate: claim['Expected Delivery Date'],
+        firstAttemptDate: claim['First Attempt Date'],
         deliveryDate: claim['Actual Delivery Date'],
-        classification: 'DELIVERED_LATE_ELIGIBLE',
-        eligibilityReason: claim.Reason || 'Eligible delivered-late claim.',
+        classification: 'LATE_CANDIDATE',
+        eligibilityReason: claim['Eligibility Reason'] || claim.Reason || 'Tracking shows the first delivery attempt occurred after the expected-delivery date.',
         message: dryRun ? 'Dry-run attempt started.' : 'Claim attempt started.'
       });
 
@@ -2507,10 +2400,11 @@ async function main() {
         : await processClaim(page, claim, i, claimsToRun.length, { dryRun });
       results.push(result);
       diagnostics?.record(result.ok ? 'info' : 'warn', 'claim', 'result', result, { critical: !result.ok });
+      faultPoint('during_database_write');
       claimDb.completeClaimAttempt(dbPath, activeAttemptId, {
         status: result.status === 'dry_run_ready'
           ? 'dry_run_ready'
-          : (result.status === 'submitted' || result.status === 'already_submitted' || result.status === 'failed' || result.status === 'unknown'
+          : (result.status === 'submitted' || result.status === 'already_submitted' || result.status === 'rejected' || result.status === 'failed' || result.status === 'unknown'
               ? result.status
               : (result.ok ? 'submitted' : 'unknown')),
         confirmationNumber: result.confirmationNumber || '',
@@ -2588,6 +2482,7 @@ async function main() {
     diagnostics?.state('closing-browser');
     if (diagnostics) await diagnostics.operation('browser.close', {}, () => browserSession.close().catch(() => {}));
     else await browserSession.close().catch(() => {});
+    faultPoint('during_process_termination');
   }
 
   const summaryPath = path.resolve(dataDir, 'claim-run-summary.json');
@@ -2595,26 +2490,24 @@ async function main() {
   writeJsonAtomic(summaryPath, results);
   writeJsonAtomic(archivedSummaryPath, results);
 
-  const succeeded = results.filter(result => result.status === 'submitted').length;
-  const dryRunReady = results.filter(result => result.status === 'dry_run_ready').length;
-  const alreadySubmitted = results.filter(result => result.status === 'already_submitted').length;
-  const failed = results.filter(result => !['submitted', 'dry_run_ready', 'already_submitted'].includes(result.status)).length;
+  const { succeeded, dryRunReady, alreadySubmitted, rejected, failed } = summarizeClaimResults(results);
   diagnostics?.state(failed > 0 ? 'complete-with-errors' : 'complete', {
     total: results.length,
     succeeded,
     dryRunReady,
     alreadySubmitted,
+    rejected,
     failed
   });
-  emit('submit_complete', { total: results.length, succeeded, dryRunReady, alreadySubmitted, failed, summaryPath, dryRun });
+  emit('submit_complete', { total: results.length, succeeded, dryRunReady, alreadySubmitted, rejected, failed, summaryPath, dryRun });
   await finalizeDiagnostics({
     outcome: failed > 0 ? 'complete-with-errors' : 'complete',
-    counts: { total: results.length, succeeded, dryRunReady, alreadySubmitted, failed },
+    counts: { total: results.length, succeeded, dryRunReady, alreadySubmitted, rejected, failed },
     claimSummaryPath: summaryPath
   });
 
-  // Already-submitted and dry-run-ready are valid outcomes. Unknown/failed states
-  // remain non-zero so the main app can surface recovery work.
+  // Approved, duplicate, rejected and dry-run-ready are ordinary business
+  // outcomes. Only submission/automation errors make the worker fail.
   if (failed > 0) process.exitCode = 1;
 }
 
@@ -2651,9 +2544,12 @@ module.exports = {
   getClaimsToRun,
   isCanadaPostUrl,
   classifyClaimOutcome,
+  summarizeClaimResults,
   classifyAutomationFailure,
   extractConfirmationNumber,
   isFinalSubmissionLabel,
   waitForClaimNavigationProgress,
-  finishCli
+  finishCli,
+  openClaimBrowser,
+  requireBuiltinBrowserVisibility
 };

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:t="http://www.canadapost.ca/ws/soap/track">
+  <soap:Body><t:get-tracking-detail-response><t:tracking-detail>
+    <t:pin>SYNTHETIC000001</t:pin><t:expected-delivery-date>2026-06-03</t:expected-delivery-date><t:service-name>Xpresspost</t:service-name>
+    <t:significant-events>
+      <t:occurrence><t:event-identifier>ATTEMPT</t:event-identifier><t:event-date>2026-06-04</t:event-date><t:event-time>16:00:00-04:00</t:event-time><t:event-description>Notice card left indicating where and when to pick up item</t:event-description></t:occurrence>
+      <t:occurrence><t:event-identifier>DELIVERED</t:event-identifier><t:event-date>2026-06-05</t:event-date><t:event-time>10:00:00-04:00</t:event-time><t:event-description>Delivered</t:event-description></t:occurrence>
+    </t:significant-events>
+  </t:tracking-detail></t:get-tracking-detail-response></soap:Body>
+</soap:Envelope>

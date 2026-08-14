@@ -1,0 +1,17 @@
+# Privacy and retention policy draft
+
+**Draft for legal and privacy review; not legal advice.** Canada Post Claim Runner is an independent product and is not affiliated with, endorsed by, or operated by Canada Post Corporation.
+
+The application processes shipment identifiers, sender/receiver and contact information, tracking events, classification evidence, claim outcomes, financial recovery entries, screenshots/page text selected by the workflow, local credentials, and an authenticated browser session. Operational data remains on the user's device unless the user explicitly exports or shares it. Crash reporting is disabled by default and has no upload endpoint.
+
+Credentials, tokens, cookies, browser sessions, browser profiles, raw Tracking API bodies, screenshots, filenames, free-form log/history/trace text, and device encryption keys are excluded from support bundles and release artifacts. Credentials and device keys are also excluded from application backups. Encrypted backups may contain customer and shipment data, evidence and non-secret settings. Opt-in support components contain bounded metadata and masked identifiers; the user must still review files before sharing.
+
+Default evidence retention is 90 days and is configurable. Application logs and detailed Step 3 diagnostic runs are pruned locally. Clearing the browser profile preserves claim history.
+
+The in-application **Data Management / Privacy** area previews records by one or more tracking numbers, an optional date range, or all application records. It reports separate shipment, tracking-check, classification, claim-attempt, reconciliation, financial, evidence, screenshot and owned-export counts. Deletion is refused while a protected workflow is active and requires an explicit destructive-action acknowledgement plus a localized typed phrase; all-record deletion requires a second confirmation.
+
+An approved deletion removes selected shipment/contact fields, claim details, tracking/classification evidence, financial entries, screenshots, page text and record-owned generated exports. The application preserves only a non-reversible tracking hash, terminal or unresolved claim outcome, relevant timestamps and version identifiers when needed to prevent accidental duplicate submission. It does not retain tracking numbers, names, addresses, email addresses, telephone numbers, free-form descriptions, claim-form values or evidence paths in that tombstone. SQLite integrity and foreign-key checks, referenced-file absence and unrelated-record stability are verified before a non-sensitive completion receipt is written. Transaction staging is removed after commit and restored on rollback. If the process is interrupted, startup uses the non-sensitive operation ID in SQLite to finalize a committed deletion or restore files from an uncommitted transaction, then removes the staging directory; staging is not a permanent hidden copy.
+
+External exports and backups are separate copies. The operator remains responsible for deleting them under the applicable policy; encrypted backups may contain previously exported personal data. Deletion from this application does not delete Canada Post's records.
+
+Before commercial use, legal counsel must approve lawful basis, retention periods, controller/processor roles, customer notices, access/correction/deletion handling, cross-border support transfers, breach notification, warranty/liability language and the end-user licence. These technical controls are not a claim of legal compliance or legal review.

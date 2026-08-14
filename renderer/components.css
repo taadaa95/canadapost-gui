@@ -1,0 +1,25 @@
+#updateProgressOverlay[hidden] { display: none !important; }
+#updateProgressOverlay { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; background: rgba(3, 8, 18, 0.72); padding: 24px; }
+.update-progress-card { width: min(560px, calc(100vw - 48px)); border: 1px solid var(--line-strong); background: var(--panel); color: var(--text); padding: 24px; box-shadow: 0 20px 70px rgba(0, 0, 0, 0.55); }
+.update-progress-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.update-progress-stage { font-size: 14px; margin-bottom: 16px; color: var(--muted); }
+.update-progress-track { height: 18px; border: 1px solid var(--line-strong); background: var(--panel-soft); overflow: hidden; }
+.update-progress-fill { height: 100%; width: 0; background: var(--success); transition: width 120ms linear; }
+.update-progress-track.indeterminate .update-progress-fill { width: 35%; animation: update-progress-slide 1.1s linear infinite; }
+@keyframes update-progress-slide { from { transform: translateX(-120%); } to { transform: translateX(310%); } }
+.update-progress-percent { margin-top: 10px; font-weight: 700; min-height: 20px; }
+.update-progress-detail { margin-top: 4px; color: var(--muted); min-height: 20px; }
+#updateProgressCancel { margin-top: 18px; width: 100%; min-height: 40px; }
+#step3CanadaPostSupport { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid var(--line-strong); border-left: 4px solid var(--accent-2); background: var(--panel-soft); color: var(--text); line-height: 1.45; }
+.privacy-modal-card { width: min(760px, calc(100vw - 48px)); display: block; overflow: auto; padding: 16px; }
+.privacy-modal-card > * + * { margin-top: 12px; }
+.blocking-check-list { display: grid; gap: 8px; }
+.blocking-check-item { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--danger); background: var(--danger-soft); }
+.blocking-check-item span { color: var(--muted); }
+.claim-queue-row.blocked { background: var(--danger-soft); }
+.claim-queue-row.blocked > * { opacity: 0.88; }
+.claim-queue-row.blocked input[type="checkbox"] { cursor: not-allowed; opacity: 0.45; }
+.claim-queue-status { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.claim-queue-status .pill { justify-self: start; }
+.claim-queue-block-reason { color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.claim-queue-status .compact-button { justify-self: start; min-height: 30px; padding: 4px 8px; }

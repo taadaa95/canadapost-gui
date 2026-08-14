@@ -6,6 +6,7 @@ const path = require('path');
 const { Readable } = require('stream');
 const {
   classifyClaimOutcome,
+  summarizeClaimResults,
   classifyAutomationFailure,
   extractConfirmationNumber,
   isCanadaPostUrl
@@ -36,6 +37,15 @@ async function main() {
   const failure = classifyClaimOutcome('Something went wrong. Please try again later.');
   assert.strictEqual(failure.status, 'failed');
 
+  const rejected = classifyClaimOutcome('This shipment is not eligible for an on-time delivery refund.');
+  assert.strictEqual(rejected.status, 'rejected');
+  assert.strictEqual(rejected.errorCode, 'CLAIM_REJECTED');
+  assert.strictEqual(rejected.businessOutcome, true);
+  assert.match(rejected.reason, /not eligible/i);
+  assert.deepStrictEqual(summarizeClaimResults([submitted, duplicate, rejected]), {
+    total: 3, succeeded: 1, dryRunReady: 0, alreadySubmitted: 1, rejected: 1, failed: 0
+  }, 'Canada Post rejection must not be counted as an application/submission failure');
+
   const stopped = classifyAutomationFailure(Object.assign(new Error('Stopped'), { code: 'STOP_REQUESTED' }));
   assert.deepStrictEqual(stopped, { errorCode: 'STOP_REQUESTED', status: 'unknown' });
 
@@ -54,22 +64,28 @@ async function main() {
   const root = path.resolve(__dirname, '..');
   const mainSource = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
   const submitSource = fs.readFileSync(path.join(root, 'scripts', 'submit-claims.js'), 'utf8');
-  const healthSource = fs.readFileSync(path.join(root, 'scripts', 'site-health-check.js'), 'utf8');
 
   assert.match(mainSource, /setPermissionRequestHandler/);
   assert.match(mainSource, /setPermissionCheckHandler/);
   assert.match(mainSource, /will-download/);
-  assert.match(mainSource, /BUILTIN_BROWSER_TARGET_TOKEN/);
+  assert.match(mainSource, /prepareBuiltinBrowserForWorker/);
+  assert.match(mainSource, /ELECTRON_TARGET_ID: browserHandshake\.targetId/);
   assert.match(mainSource, /stdinJson/);
   assert.match(mainSource, /process\.kill\(-child\.pid/);
   assert.match(mainSource, /render-process-gone/);
+  assert.match(mainSource, /new WebContentsView/);
+  assert.doesNotMatch(mainSource, /new BrowserView/);
+  assert.match(mainSource, /contentView\.addChildView/);
+  assert.match(mainSource, /contextIsolation:\s*true[\s\S]*nodeIntegration:\s*false[\s\S]*sandbox:\s*true/);
+  assert.match(mainSource, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/);
   assert.match(submitSource, /CANADAPOST_SECRETS_STDIN|readRuntimeSecrets/);
-  assert.match(submitSource, /ELECTRON_TARGET_TOKEN/);
+  assert.match(submitSource, /ELECTRON_TARGET_ID/);
+  assert.match(submitSource, /waitForExactPageTarget/);
+  assert.doesNotMatch(submitSource, /launchPersistentContext|external visible Chromium|saved Playwright browser profile/);
   assert.match(submitSource, /Raw HTML can/);
   assert.doesNotMatch(submitSource.match(/async function collectVisibleText[\s\S]*?\n}/)?.[0] || '', /page\.content\(/);
   assert.match(submitSource, /Never retry the financially significant action/);
-  assert.match(healthSource, /readRuntimeSecrets/);
-  assert.match(healthSource, /TARGET_TOKEN/);
+  assert.strictEqual(fs.existsSync(path.join(root, 'scripts', 'site-health-check.js')), false);
 
   console.log('Step 3 browser hardening tests passed.');
 }

@@ -1,0 +1,32 @@
+{
+  "pin": "SYNTHETIC900001",
+  "activeExists": true,
+  "archiveExists": false,
+  "signatureImageExists": false,
+  "suppressSignature": false,
+  "expectedDeliveryDate": "2026-06-03T00:00:00",
+  "changedExpectedDate": "2026-06-04T00:00:00",
+  "changedExpectedDeliveryReason": null,
+  "serviceName": "Xpresspost",
+  "serviceName2": "Xpresspost",
+  "deliveryOptions": [],
+  "significantEvents": [
+    {
+      "eventIdentifier": "SYN-ATTEMPT",
+      "eventDate": "2026-06-05T00:00:00",
+      "eventTime": "14:15:00",
+      "eventTimeZone": "EDT",
+      "eventDescription": "Notice card left indicating where and when to pick up item",
+      "eventSite": "SYNTHETIC SITE",
+      "eventProvince": "ON"
+    },
+    {
+      "eventIdentifier": "1496",
+      "eventDate": "2026-06-06T00:00:00",
+      "eventTime": "09:30:00",
+      "eventTimeZone": "EDT",
+      "eventDescription": "Delivered"
+    }
+  ],
+  "futureContractField": { "synthetic": true }
+}

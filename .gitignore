@@ -2,6 +2,8 @@
 node_modules/
 dist/
 release/
+coverage/
+.cache/
 *.AppImage
 *.exe
 *.dmg
@@ -27,6 +29,12 @@ tracking.csv
 claims.csv
 overdue-undelivered.csv
 eligibility-review.csv
+evidence/
+browser-profile*/
+backups/
+*.cpcrbackup
+*.bak
+*.backup
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -39,5 +47,6 @@ Thumbs.db
 
 # Local release and update artifacts
 canadapost-gui-v*/
+manual-recordings/
 *.zip
 SHA256SUMS.txt
