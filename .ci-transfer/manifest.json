@@ -1,0 +1,71 @@
+{
+  "format": "canadapost-claim-runner-ci-transfer",
+  "version": 1,
+  "files": [
+    {
+      "file": "Canada.Post.Claim.Runner-0.4.2-win-x64.exe",
+      "bytes": 95295797,
+      "sha256": "3851743b8c06b351317768eca72b6c35b2d1fbef13383c6c105a36891fcad91f",
+      "chunks": [
+        {
+          "file": "Canada.Post.Claim.Runner-0.4.2-win-x64.exe.part000",
+          "bytes": 49000000,
+          "sha256": "dc969431a3f612bb6a21f815938e6d4999af628b61e05802250d80c6c056c584"
+        },
+        {
+          "file": "Canada.Post.Claim.Runner-0.4.2-win-x64.exe.part001",
+          "bytes": 46295797,
+          "sha256": "9b02a0e61450889cde8235d3d0cb7fb3a7adb1f5033aa6a86976b905ae413a6b"
+        }
+      ]
+    },
+    {
+      "file": "SHA256SUMS.txt",
+      "bytes": 109,
+      "sha256": "f12175a6e849f1cc314e607bda3099382d394cd03ef4565faf293b46a07eb3dc",
+      "chunks": [
+        {
+          "file": "SHA256SUMS.txt.part000",
+          "bytes": 109,
+          "sha256": "f12175a6e849f1cc314e607bda3099382d394cd03ef4565faf293b46a07eb3dc"
+        }
+      ]
+    },
+    {
+      "file": "v0.4.2.json",
+      "bytes": 687,
+      "sha256": "d93367624d624591e911a45c5f3ef61a7c1d186483a035dc5072fc967e365384",
+      "chunks": [
+        {
+          "file": "v0.4.2.json.part000",
+          "bytes": 687,
+          "sha256": "d93367624d624591e911a45c5f3ef61a7c1d186483a035dc5072fc967e365384"
+        }
+      ]
+    },
+    {
+      "file": "package-size-windows.json",
+      "bytes": 1228,
+      "sha256": "94ca0932981886daa0c4d713e9c2b9ac4cebbcb3d5e19802820d226d6f6b3b39",
+      "chunks": [
+        {
+          "file": "package-size-windows.json.part000",
+          "bytes": 1228,
+          "sha256": "94ca0932981886daa0c4d713e9c2b9ac4cebbcb3d5e19802820d226d6f6b3b39"
+        }
+      ]
+    },
+    {
+      "file": "release-provenance-windows.json",
+      "bytes": 1022,
+      "sha256": "0b7404b1a21158d2b7cab475e1549f8a19d1bc55a6f0dc9ea987880848879bd4",
+      "chunks": [
+        {
+          "file": "release-provenance-windows.json.part000",
+          "bytes": 1022,
+          "sha256": "0b7404b1a21158d2b7cab475e1549f8a19d1bc55a6f0dc9ea987880848879bd4"
+        }
+      ]
+    }
+  ]
+}

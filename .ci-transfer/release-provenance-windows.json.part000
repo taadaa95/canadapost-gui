@@ -1,0 +1,33 @@
+{
+  "format": "canadapost-claim-runner-release-provenance",
+  "version": 1,
+  "generatedAt": "2026-08-14T04:29:01.473Z",
+  "applicationVersion": "0.4.2",
+  "platform": "windows",
+  "architecture": "x64",
+  "sourceBranch": "feature/dev11-beta-release-hardening",
+  "sourceCommit": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "buildOrigin": "github-actions:31769630452",
+  "materials": [
+    {
+      "name": "SHA256SUMS-windows.txt",
+      "bytes": 109,
+      "sha256": "f12175a6e849f1cc314e607bda3099382d394cd03ef4565faf293b46a07eb3dc"
+    },
+    {
+      "name": "package-size-windows.json",
+      "bytes": 1228,
+      "sha256": "94ca0932981886daa0c4d713e9c2b9ac4cebbcb3d5e19802820d226d6f6b3b39"
+    },
+    {
+      "name": "sbom.cyclonedx.json",
+      "bytes": 4696,
+      "sha256": "01e27f198dab36cb198b3482cc85f0499b4697e90d14320f73e1dc2b353721e2"
+    },
+    {
+      "name": "dependency-licenses.json",
+      "bytes": 1045,
+      "sha256": "6e08391e08d14f1e01c030a3aecadf03a1806c04de07f600240b64ac20ff6a0f"
+    }
+  ]
+}

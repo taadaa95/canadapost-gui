@@ -1,0 +1,60 @@
+{
+  "format": "canadapost-claim-runner-package-size-report",
+  "version": 1,
+  "generatedAt": "2026-08-14T04:28:58.331Z",
+  "commit": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "platform": "windows-x64-nsis",
+  "budgetBytes": 220000000,
+  "baselineBytes": null,
+  "artifacts": [
+    {
+      "name": "Canada.Post.Claim.Runner-0.4.2-win-x64.exe",
+      "bytes": 95295797,
+      "withinBudget": true,
+      "reductionFromDev10Bytes": null,
+      "reductionFromDev10Percent": null
+    }
+  ],
+  "majorUnpackedContributors": [
+    {
+      "name": "Canada Post Claim Runner.exe",
+      "bytes": 235706368
+    },
+    {
+      "name": "locales",
+      "bytes": 48895643
+    },
+    {
+      "name": "dxcompiler.dll",
+      "bytes": 25609728
+    },
+    {
+      "name": "LICENSES.chromium.html",
+      "bytes": 20313277
+    },
+    {
+      "name": "resources",
+      "bytes": 14908099
+    },
+    {
+      "name": "icudtl.dat",
+      "bytes": 10876560
+    },
+    {
+      "name": "libGLESv2.dll",
+      "bytes": 8021504
+    },
+    {
+      "name": "resources.pak",
+      "bytes": 7147269
+    },
+    {
+      "name": "vk_swiftshader.dll",
+      "bytes": 5494784
+    },
+    {
+      "name": "d3dcompiler_47.dll",
+      "bytes": 4741488
+    }
+  ]
+}
