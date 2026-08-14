@@ -1,0 +1,60 @@
+{
+  "format": "canadapost-claim-runner-package-size-report",
+  "version": 1,
+  "generatedAt": "2026-08-14T04:25:47.486Z",
+  "commit": "c7ea421b9d1252311a1659318fc6a1f7050b9a4d",
+  "platform": "linux-x64-appimage",
+  "budgetBytes": 200000000,
+  "baselineBytes": 387230260,
+  "artifacts": [
+    {
+      "name": "Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage",
+      "bytes": 131582081,
+      "withinBudget": true,
+      "reductionFromDev10Bytes": 255648179,
+      "reductionFromDev10Percent": 66.02
+    }
+  ],
+  "majorUnpackedContributors": [
+    {
+      "name": "canadapost-gui",
+      "bytes": 221687032
+    },
+    {
+      "name": "locales",
+      "bytes": 48106060
+    },
+    {
+      "name": "LICENSES.chromium.html",
+      "bytes": 19955339
+    },
+    {
+      "name": "resources",
+      "bytes": 14764443
+    },
+    {
+      "name": "icudtl.dat",
+      "bytes": 10876560
+    },
+    {
+      "name": "resources.pak",
+      "bytes": 7332345
+    },
+    {
+      "name": "libGLESv2.so",
+      "bytes": 6445664
+    },
+    {
+      "name": "libvk_swiftshader.so",
+      "bytes": 4650616
+    },
+    {
+      "name": "libffmpeg.so",
+      "bytes": 2731736
+    },
+    {
+      "name": "libvulkan.so.1",
+      "bytes": 2485728
+    }
+  ]
+}

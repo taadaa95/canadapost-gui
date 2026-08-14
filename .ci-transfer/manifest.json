@@ -1,0 +1,76 @@
+{
+  "format": "canadapost-claim-runner-ci-transfer",
+  "version": 1,
+  "files": [
+    {
+      "file": "Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage",
+      "bytes": 131582081,
+      "sha256": "41fafa78ec1767ae30cad9f89149db1cf48c88721c2a5f8609e50b853769387f",
+      "chunks": [
+        {
+          "file": "Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage.part000",
+          "bytes": 49000000,
+          "sha256": "853320db3ff20f999f39f7b29f80c81ff6da8c800d9b5c9a083e9b2e29428b0f"
+        },
+        {
+          "file": "Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage.part001",
+          "bytes": 49000000,
+          "sha256": "2505531947ed1192957a5eaf3fa038ae6aafb0e05d6aeb68d48c293f7fd3c7b7"
+        },
+        {
+          "file": "Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage.part002",
+          "bytes": 33582081,
+          "sha256": "31b4dfcf2004c235833458971e61715ff57afe6d11c0be7cb78a0a691806bf37"
+        }
+      ]
+    },
+    {
+      "file": "SHA256SUMS.txt",
+      "bytes": 119,
+      "sha256": "a32eae6b64d886b1999139bba799bf3f482472de936788444887bbaeef64bf11",
+      "chunks": [
+        {
+          "file": "SHA256SUMS.txt.part000",
+          "bytes": 119,
+          "sha256": "a32eae6b64d886b1999139bba799bf3f482472de936788444887bbaeef64bf11"
+        }
+      ]
+    },
+    {
+      "file": "v0.4.2.json",
+      "bytes": 696,
+      "sha256": "a873e00673ce02a8e25838a160c4780ad54029ff272cb37a68e9ca7738d1c5d0",
+      "chunks": [
+        {
+          "file": "v0.4.2.json.part000",
+          "bytes": 696,
+          "sha256": "a873e00673ce02a8e25838a160c4780ad54029ff272cb37a68e9ca7738d1c5d0"
+        }
+      ]
+    },
+    {
+      "file": "package-size-linux.json",
+      "bytes": 1232,
+      "sha256": "dea76ad90587ea28aa799944641340c918c0c3b98cb6c58c4d0694c1b9648ad4",
+      "chunks": [
+        {
+          "file": "package-size-linux.json.part000",
+          "bytes": 1232,
+          "sha256": "dea76ad90587ea28aa799944641340c918c0c3b98cb6c58c4d0694c1b9648ad4"
+        }
+      ]
+    },
+    {
+      "file": "release-provenance-linux.json",
+      "bytes": 1016,
+      "sha256": "7b68c593a5cb96d47ea76740885c017a2b10ef6e181d7bd1f61b86e2f482ff13",
+      "chunks": [
+        {
+          "file": "release-provenance-linux.json.part000",
+          "bytes": 1016,
+          "sha256": "7b68c593a5cb96d47ea76740885c017a2b10ef6e181d7bd1f61b86e2f482ff13"
+        }
+      ]
+    }
+  ]
+}
