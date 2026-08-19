@@ -282,18 +282,32 @@ assert.throws(() => updater.validateLatestRelease({
     }), error => error.code === 'UPDATE_DOWNGRADE_BLOCKED');
     assert.strictEqual(quitCalled, false);
 
-    await updater.installUpdate({
-      app: { quit: () => { quitCalled = true; } },
-      shell: {},
-      downloadedPath: downloadedAppImage,
-      update: candidate,
-      currentVersion: '0.4.0',
-      platform: 'win32',
-      launchDetached: (command, args) => launches.push({ command, args })
-    });
-    assert.strictEqual(launches.length, 1);
-    assert.strictEqual(launches[0].command, 'powershell.exe');
-    assert.strictEqual(quitCalled, true);
+    const windowsOpened = [];
+  let windowsBeforeExit = 0;
+  await updater.installUpdate({
+    app: { quit: () => { quitCalled = true; } },
+    shell: { openPath: async file => { windowsOpened.push(file); return ''; } },
+    downloadedPath: downloadedAppImage,
+    update: candidate,
+    currentVersion: '0.4.0',
+    platform: 'win32',
+    beforeExit: () => { windowsBeforeExit += 1; },
+    launchDetached: (command, args) => launches.push({ command, args })
+  });
+  assert.deepStrictEqual(windowsOpened, [downloadedAppImage]);
+  assert.strictEqual(windowsBeforeExit, 1);
+  assert.strictEqual(launches.length, 0);
+  assert.strictEqual(quitCalled, true);
+  quitCalled = false;
+  await assert.rejects(() => updater.installUpdate({
+    app: { quit: () => { quitCalled = true; } },
+    shell: { openPath: async () => 'synthetic installer launch failure', showItemInFolder: () => {} },
+    downloadedPath: downloadedAppImage,
+    update: candidate,
+    currentVersion: '0.4.0',
+    platform: 'win32'
+  }), error => error.code === 'UPDATE_WINDOWS_INSTALLER_OPEN_FAILED');
+  assert.strictEqual(quitCalled, false);
 
     const downloadedDmg = path.join(root, macCandidate.artifact.file);
     fs.writeFileSync(downloadedDmg, artifactBytes);

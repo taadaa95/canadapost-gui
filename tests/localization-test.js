@@ -87,7 +87,7 @@ for (const key of [
 }
 
 const observedEnglish = [
-  'Run Step 1 — Import Shipment History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
+  'Run Step 1 — Import Shipment History', 'Force Stop', 'Identify Late Candidates',
   'Stop After Current Item', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {

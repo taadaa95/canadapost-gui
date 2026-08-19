@@ -39,7 +39,6 @@
       <div class="step-tabs" role="tablist" data-i18n-aria-label="nav.sectionsAria">
         <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0"><span class="step-tab-title" data-i18n="nav.settings.title"></span><span class="step-tab-detail" data-i18n="nav.settings.detail"></span></button>
         <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step1.title"></span><span class="step-tab-detail" data-i18n="nav.step1.detail"></span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step2.title"></span><span class="step-tab-detail" data-i18n="nav.step2.detail"></span></button>
         <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step3.title"></span><span class="step-tab-detail" data-i18n="nav.step3.detail"></span></button>
         <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.history.title"></span><span class="step-tab-detail" data-i18n="nav.history.detail"></span></button>
         <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.results.title"></span><span class="step-tab-detail" data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria" aria-hidden="true" hidden></span></button>
@@ -73,33 +72,18 @@
             <div class="check-row">
               <label><input id="rememberSettings" type="checkbox" checked /> <span data-i18n="settings.website.remember"></span></label>
             </div>
-            <div class="settings-note" data-i18n="settings.website.securityNote"></div>
           </div>
 
           <div class="settings-section">
             <h3 data-i18n="settings.api.title"></h3>
             <div class="field">
               <label for="trackingClientId" data-i18n="settings.api.clientId"></label>
-              <input id="trackingClientId" type="text" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
+              <input id="trackingClientId" type="password" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
             </div>
             <div class="field">
               <label for="trackingClientSecret" data-i18n="settings.api.clientSecret"></label>
               <input id="trackingClientSecret" type="password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" autocomplete="new-password" />
             </div>
-            <details class="settings-note">
-              <summary data-i18n="settings.api.advanced"></summary>
-              <div class="field">
-                <label for="trackingRequestDelayMs" data-i18n="settings.api.requestInterval"></label>
-                <input id="trackingRequestDelayMs" type="number" min="3100" max="60000" step="100" value="3100" inputmode="numeric" />
-              </div>
-              <div class="field">
-                <label for="trackingResourceTimeoutMs" data-i18n="settings.api.timeout"></label>
-                <input id="trackingResourceTimeoutMs" type="number" min="1000" max="120000" step="1000" value="45000" inputmode="numeric" />
-              </div>
-              <div data-i18n="settings.api.defaultsNote"></div>
-            </details>
-            <div id="trackingApiCredentialMetadata" class="settings-note" data-i18n="settings.api.metadataPending"></div>
-            <div class="settings-note" data-i18n="settings.api.accessNote"></div>
             <button id="clearTrackingApiCredentials" class="warning" type="button" data-i18n="settings.api.clear"></button>
           </div>
 
@@ -230,7 +214,6 @@
             <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
           </div>
           <div class="step-actions step-execution-controls">
-            <button id="runTrackingOnly" class="success step-execution-control" data-i18n="step2.run"></button>
             <button id="forceStopStep2" class="danger step-execution-control" data-force-stop="step2" data-i18n="action.forceStop"></button>
           </div>
         </div>

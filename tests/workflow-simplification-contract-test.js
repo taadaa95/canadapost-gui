@@ -16,11 +16,17 @@ const worker = source('scripts/submit-claims.js');
 const english = require('../locales/en-CA.json');
 const french = require('../locales/fr-CA.json');
 
-assert.strictEqual(english['step1.title'], 'Step 1 — Import Shipment History');
-assert.strictEqual(english['nav.step1.detail'], 'Import Shipment History');
-assert.strictEqual(french['step1.title'], 'Étape 1 — Importer l’historique des envois');
-assert.strictEqual(french['nav.step1.detail'], 'Importer l’historique des envois');
+assert.strictEqual(english['step1.title'], 'Step 1 — Import & Identify Late Candidates');
+assert.strictEqual(english['nav.step1.detail'], 'Import & identify late candidates');
+assert.strictEqual(french['step1.title'], 'Étape 1 — Importer et repérer les envois en retard');
+assert.strictEqual(french['nav.step1.detail'], 'Importer et repérer les retards');
 assert.doesNotMatch(JSON.stringify({ english, french }), /Import EST history|Importer l.historique EST/i);
+assert.strictEqual(english['nav.step3.title'], 'Step 2');
+assert.strictEqual(english['step3.title'], 'Step 2 — Submit Late Candidates');
+assert.doesNotMatch(html, /id="tabStep2"/);
+assert.doesNotMatch(html, /id="runTrackingOnly"/);
+assert.match(renderer, /function mergeTrackingIntoStep1/);
+assert.match(renderer, /autoTrackingAfterImport/);
 
 assert.match(css, /input\[type="date"\][\s\S]*?height:\s*42px/);
 assert.match(css, /\.step1-fields\s*\{[\s\S]*?repeat\(2, minmax\(0, 184px\)\)[\s\S]*?justify-content:\s*start/);

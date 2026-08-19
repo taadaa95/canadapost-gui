@@ -14,13 +14,14 @@ const submitWorker = source('scripts/submit-claims.js');
 const english = require('../locales/en-CA.json');
 const french = require('../locales/fr-CA.json');
 
-const tabs = [...html.matchAll(/<button id="tab(Settings|Step1|Step2|Step3|History|Results)"([^>]*)>/g)];
-assert.strictEqual(tabs.length, 6, 'all primary workflow tabs must be present');
+const tabs = [...html.matchAll(/<button id="tab(Settings|Step1|Step3|History|Results)"([^>]*)>/g)];
+assert.strictEqual(tabs.length, 5, 'Settings, two workflow steps, History, and Results must be present');
+assert.doesNotMatch(html, /id="tabStep2"/, 'tracking is part of Step 1 and must not have a standalone tab');
 for (const [, name, attributes] of tabs) {
   assert.doesNotMatch(attributes, /\bdisabled\b|aria-disabled="true"/, `${name} must never be disabled by readiness state`);
 }
 
-const activateTab = renderer.match(/function activateTab\(tabId\)[\s\S]*?function stepForStage/)?.[0] || '';
+const activateTab = renderer.match(/function activateTab\(tabId\)[\s\S]*?function mergeTrackingIntoStep1/)?.[0] || '';
 assert.doesNotMatch(activateTab, /readiness|prerequi|credential|setupCompleted|activateTab\('settingsTab'\)/i,
   'tab activation must not contain readiness gates or Settings redirects');
 assert.doesNotMatch(activateTab, /if\s*\([^)]*compatib|show.*modal|return\s*;/i,

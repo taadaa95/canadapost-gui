@@ -6,6 +6,7 @@ const LOG_BOTTOM_THRESHOLD_PX = 56;
 
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
 const DEFAULT_THEME = 'system';
+const SAVED_SECRET_MASK = '••••••••';
 let activeMessages = {};
 let preferredLocale = '';
 let localeRequestVersion = 0;
@@ -103,6 +104,7 @@ function initThemePicker() {
 
 let activeTabId = 'settingsTab';
 let currentProcessStep = 'step1';
+let autoTrackingAfterImport = false;
 const liveLogState = new Map();
 
 function activateTab(tabId) {
@@ -133,6 +135,18 @@ function activateTab(tabId) {
   updateNotificationIndicator();
   requestBuiltinBrowserLayout(target === 'step3' ? 'step3-tab-activation' : 'app-tab-change');
   rendererEvents.emit('tab:changed', { tabId: target });
+}
+
+function mergeTrackingIntoStep1() {
+  const importStep = $('step1');
+  const trackingStep = $('step2');
+  if (!importStep || !trackingStep) return;
+  trackingStep.classList.remove('tab-panel');
+  trackingStep.classList.add('step1-tracking-phase');
+  trackingStep.removeAttribute('role');
+  trackingStep.removeAttribute('aria-labelledby');
+  trackingStep.hidden = false;
+  importStep.appendChild(trackingStep);
 }
 
 function stepForStage(stage) {
@@ -1924,13 +1938,45 @@ function getFieldValue(id) {
   return el ? String(el.value || '').trim() : '';
 }
 
+function getSecretFieldValue(id) {
+  const value = $(id)?.value || '';
+  return value === SAVED_SECRET_MASK ? '' : value;
+}
+
+function applyStoredCredentialMasks() {
+  const password = $('webPassword');
+  if (password) {
+    password.value = state.passwordStored ? SAVED_SECRET_MASK : '';
+    password.placeholder = tr('settings.website.passwordPlaceholder');
+  }
+  const clientId = $('trackingClientId');
+  if (clientId) {
+    clientId.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+    clientId.placeholder = tr('settings.api.clientIdPlaceholder');
+  }
+  const clientSecret = $('trackingClientSecret');
+  if (clientSecret) {
+    clientSecret.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+    clientSecret.placeholder = tr('settings.api.clientSecretPlaceholder');
+  }
+}
+
+function initSavedSecretInputs() {
+  for (const id of ['webPassword', 'trackingClientId', 'trackingClientSecret']) {
+    const input = $(id);
+    input?.addEventListener('focus', () => {
+      if (input.value === SAVED_SECRET_MASK) input.select();
+    });
+  }
+}
+
 function collectUserSettingsOptions() {
   const rememberSettings = $('rememberSettings') ? $('rememberSettings').checked : false;
   return {
     webUsername: getFieldValue('webUsername'),
-    webPassword: $('webPassword')?.value || '',
-    trackingClientId: getFieldValue('trackingClientId'),
-    trackingClientSecret: $('trackingClientSecret')?.value || '',
+    webPassword: getSecretFieldValue('webPassword'),
+    trackingClientId: getSecretFieldValue('trackingClientId'),
+    trackingClientSecret: getSecretFieldValue('trackingClientSecret'),
     trackingApiEnvironment: 'production',
     trackingRequestDelayMs: Number.parseInt(getFieldValue('trackingRequestDelayMs') || '3100', 10),
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
@@ -1962,6 +2008,7 @@ function validateSettingsForStep(stepId) {
     if (!settings.webPassword && !state.passwordStored) missing.push(tr('settings.website.password', 'Canada Post Web Password'));
   }
   if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'Customer Number'));
+  if (stepId === 'step1' && !state.trackingApiCredentialsStored) missing.push(tr('settings.api.credentialsRequired', 'Tracking API credentials'));
   if (stepId === 'step3') {
     if (!settings.claimStreetNumber) missing.push(tr('settings.sender.streetNumberShort', 'Claim sender street number'));
     if (!settings.claimStreetName) missing.push(tr('settings.sender.streetNameShort', 'Claim sender street name dropdown option'));
@@ -1988,9 +2035,7 @@ async function saveUserSettings(showLog = true) {
       setLocalizedText(status, 'settings.savedStatus', {}, 'Settings saved');
       status.className = 'pill good';
     }
-    if ($('webPassword')) $('webPassword').value = '';
-    if ($('trackingClientId')) $('trackingClientId').value = '';
-    if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
+    applyStoredCredentialMasks();
     if ($('trackingApiCredentialMetadata') && res.trackingApiCredentialMetadata) renderTrackingApiCredentialMetadata(res.trackingApiCredentialMetadata);
     if (showLog) log(res.warning || tr('settings.saved', 'User settings saved.'), res.warning ? 'log-warning' : '', 'step1');
   }
@@ -2240,6 +2285,7 @@ function buildSubmitOnlyOptions() {
 
 async function startTrackingOnly() {
   currentProcessStep = 'step2';
+  state.claimQueueLoaded = false;
   resetRunUi('step2');
   setStatus('Running', 'warn', 'step2');
   setActionLocalized('step2.comparingAction', {}, 'Comparing successful-delivery dates with original Delivery Standards and recording late-delivery candidates.', 'step2');
@@ -2404,12 +2450,7 @@ async function refreshConfig() {
   await applyLocale(preferredLocale || cfg.locale || 'en-CA');
   if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
   if ($('webUsername')) $('webUsername').value = cfg.webUsername || '';
-  if ($('webPassword')) {
-    $('webPassword').value = '';
-    $('webPassword').placeholder = tr(state.passwordStored ? 'settings.website.passwordSavedPlaceholder' : 'settings.website.passwordPlaceholder');
-  }
-  if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientIdSavedPlaceholder' : 'settings.api.clientIdPlaceholder'); }
-  if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
+  applyStoredCredentialMasks();
   renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
   if ($('rememberSettings')) $('rememberSettings').checked = Object.prototype.hasOwnProperty.call(cfg, 'rememberSettings') ? !!cfg.rememberSettings : true;
 
@@ -2592,7 +2633,9 @@ document.addEventListener('keydown', (event) => {
 
 $('importEstHistory')?.addEventListener('click', async () => {
   currentProcessStep = 'step1';
+  autoTrackingAfterImport = false;
   resetRunUi('step1');
+  resetRunUi('step2');
   const missing = validateSettingsForStep('step1');
   if (missing.length) {
     setStatus('Failed', 'bad', 'step1');
@@ -2712,6 +2755,9 @@ window.cpApp.onBuiltinBrowserVisibilityRequest?.((payload) => {
 });
 
 window.cpApp.onEvent(({ stage, event }) => {
+  if (stage === 'est-history' && event?.type === 'est_complete') {
+    autoTrackingAfterImport = event.outcome !== 'EMPTY' && Number(event.imported || 0) > 0;
+  }
   const message = describeEvent(stage, event);
   const classByType = {
     pin_late: 'log-late', pin_on_time: 'log-on-time', pin_overdue: 'log-not-delivered', pin_overdue_in_transit: 'log-not-delivered',
@@ -2791,9 +2837,14 @@ window.cpApp.onRun((payload) => {
     deactivateBuiltinBrowser(`run-${payload.status}`).catch(() => {});
   }
   updateCounters();
-  if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
-    refreshHistory().catch(() => {});
-  }
+if (step === 'step1' && ['failed', 'blocked', 'stopped'].includes(payload.status)) autoTrackingAfterImport = false;
+if (step === 'step1' && autoTrackingAfterImport && ['complete', 'complete_with_warnings'].includes(payload.status)) {
+  autoTrackingAfterImport = false;
+  window.setTimeout(() => startTrackingOnly(), 0);
+}
+if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
+  refreshHistory().catch(() => {});
+}
 });
 
 window.cpApp.onStage(({ stage, status, code }) => {
@@ -2834,6 +2885,8 @@ guidedSetupController.bind();
 rendererEvents.on('locale:changed', () => guidedSetupController.localize());
 
 initThemePicker();
+mergeTrackingIntoStep1();
+initSavedSecretInputs();
 initStepTabs();
 initLiveLogs();
 initBuiltinBrowserPositionTracking();
