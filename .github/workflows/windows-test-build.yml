@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/kiss-two-step-workflow
+  pull_request:
 
 permissions:
   contents: read
