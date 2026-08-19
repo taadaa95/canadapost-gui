@@ -138,27 +138,19 @@ function activateTab(tabId) {
 }
 
 function mergeTrackingIntoStep1() {
-  const importStep = $('step1');
-  const trackingStep = $('step2');
-  if (!importStep || !trackingStep) return;
-  trackingStep.classList.remove('tab-panel');
-  trackingStep.classList.add('step1-tracking-phase');
-  trackingStep.removeAttribute('role');
-  trackingStep.removeAttribute('aria-labelledby');
-  trackingStep.hidden = false;
-  importStep.appendChild(trackingStep);
+  // Tracking is an internal phase of Step 1. No second panel is mounted.
 }
 
 function stepForStage(stage) {
   if (stage === 'est-history' || stage === 'history') return 'step1';
-  if (stage === 'tracking') return 'step2';
+  if (stage === 'tracking') return 'step1';
   if (stage === 'submit') return 'step3';
   return currentProcessStep || activeTabId || 'step1';
 }
 
 function logIdForStep(stepId) {
   if (stepId === 'step1') return 'step1Log';
-  if (stepId === 'step2') return 'step2Log';
+  if (stepId === 'step2') return 'step1Log';
   if (stepId === 'step3') return 'step3Log';
   return 'step1Log';
 }
@@ -211,14 +203,14 @@ function initLiveLogs() {
 
 function statusIdForStep(stepId) {
   if (stepId === 'step1') return 'step1RunStatus';
-  if (stepId === 'step2') return 'step2RunStatus';
+  if (stepId === 'step2') return 'step1RunStatus';
   if (stepId === 'step3') return 'step3RunStatus';
   return 'step1RunStatus';
 }
 
 function actionIdForStep(stepId) {
   if (stepId === 'step1') return 'step1CurrentAction';
-  if (stepId === 'step2') return 'step2CurrentAction';
+  if (stepId === 'step2') return 'step1CurrentAction';
   if (stepId === 'step3') return 'step3CurrentAction';
   return 'step1CurrentAction';
 }
@@ -962,6 +954,8 @@ function updateCounters() {
   const step1Pct = state.step1TotalRows > 0 ? Math.round((state.step1Imported / state.step1TotalRows) * 100) : 0;
   if ($('step1Progress')) $('step1Progress').value = Math.max(0, Math.min(100, step1Pct));
   setText('step1Pct', `${Math.max(0, Math.min(100, step1Pct))}%`);
+  const importProgressTotal = state.step1TotalRows || state.step1Imported || 0;
+  setText('step1ImportProgressCount', `${state.step1Imported} / ${importProgressTotal}`);
 
   setText('checked', state.checked);
   setText('late', state.late);
@@ -976,6 +970,8 @@ function updateCounters() {
   const trackingPct = state.trackingTotal > 0 ? Math.round((state.checked / state.trackingTotal) * 100) : 0;
   if ($('trackingProgress')) $('trackingProgress').value = trackingPct;
   setText('trackingPct', `${trackingPct}%`);
+  const trackingProgressTotal = state.trackingTotal || state.step1Imported || 0;
+  setText('step1TrackingProgressCount', `${state.checked} / ${trackingProgressTotal}`);
 
   const submitPct = state.submitTotal > 0 ? Math.round((processedClaims() / state.submitTotal) * 100) : 0;
   if ($('submitProgress')) $('submitProgress').value = submitPct;
@@ -1046,7 +1042,7 @@ function resetStepUi(stepId) {
   };
 
   const logEl = $(logIdForStep(step));
-  if (logEl) logEl.textContent = '';
+  if (logEl && step !== 'step2') logEl.textContent = '';
   setStatus('Idle', '', step);
   setLocalizedText($(actionIdForStep(step)), 'status.waiting', {}, 'Waiting.');
   updateCounters();
@@ -2284,7 +2280,7 @@ function buildSubmitOnlyOptions() {
 }
 
 async function startTrackingOnly() {
-  currentProcessStep = 'step2';
+  currentProcessStep = 'step1';
   state.claimQueueLoaded = false;
   resetRunUi('step2');
   setStatus('Running', 'warn', 'step2');

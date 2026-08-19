@@ -1111,5 +1111,11 @@
   "setupAssistant.callout.goBack": "RETOUR À LA CONFIGURATION",
   "setupAssistant.error.backUnavailable": "Aucune page précédente sûre de configuration Postes Canada n’est disponible.",
   "setupAssistant.error.startOver": "La configuration guidée n’a pas pu recommencer. Les renseignements saisis sont toujours disponibles.",
-  "settings.api.credentialsRequired": "Identifiants de l’API de suivi"
+  "settings.api.credentialsRequired": "Identifiants de l’API de suivi",
+  "step1.start": "Démarrer",
+  "step1.stop": "Arrêter",
+  "step1.simpleDescription": "Importer l’historique des envois, puis identifier automatiquement les candidats livrés en retard.",
+  "step1.checkedImported": "Vérifiés / importés",
+  "step1.importProgress": "Progression de l’importation",
+  "step1.identifyProgress": "Progression des candidats en retard"
 }

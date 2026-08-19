@@ -1111,5 +1111,11 @@
   "setupAssistant.callout.goBack": "GO BACK TO SETUP",
   "setupAssistant.error.backUnavailable": "A safe previous Canada Post setup page is not available.",
   "setupAssistant.error.startOver": "Guided Setup could not start over. Your entered information is still available.",
-  "settings.api.credentialsRequired": "Tracking API credentials"
+  "settings.api.credentialsRequired": "Tracking API credentials",
+  "step1.start": "Start",
+  "step1.stop": "Stop",
+  "step1.simpleDescription": "Import shipping history, then automatically identify late-delivery candidates.",
+  "step1.checkedImported": "Checked / imported",
+  "step1.importProgress": "Import progress",
+  "step1.identifyProgress": "Late-candidate progress"
 }

@@ -3769,3 +3769,112 @@ body.page-scroll-layout .history-panel.active {
   min-height: 48px !important;
   padding: 9px 14px !important;
 }
+
+
+/* Step 1 KISS two-phase layout */
+#step1.step-panel.active {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 16px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#step1 .step1-simple-top {
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#step1 .step1-title-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 18px !important;
+  align-items: center !important;
+  min-height: 0 !important;
+}
+#step1 .step1-heading-copy { min-width: 0; }
+#step1 .step1-heading-copy h2 { margin: 0 0 6px !important; }
+#step1 .step-description {
+  margin: 0 !important;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 760px;
+}
+#step1 .step1-primary-actions {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-wrap: nowrap !important;
+  gap: 10px !important;
+  width: auto !important;
+  height: auto !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  overflow: visible !important;
+}
+#step1 .step1-primary-actions .step-execution-control {
+  flex: 0 0 auto !important;
+  width: 132px !important;
+  min-width: 132px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  position: relative !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+}
+#step1 .step1-workspace {
+  display: grid !important;
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr) !important;
+  gap: 14px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#step1 .step1-status-card {
+  display: grid !important;
+  grid-template-rows: auto auto auto minmax(56px, auto) !important;
+  gap: 12px !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+}
+#step1 .step1-status-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+#step1 .step1-status-heading h2 { margin: 0 !important; }
+#step1 .step1-status-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-rows: auto !important;
+  gap: 10px !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+#step1 .step1-status-grid .stat {
+  min-height: 82px !important;
+  height: auto !important;
+}
+#step1 .step1-ratio {
+  font-size: 24px !important;
+  white-space: nowrap;
+}
+#step1 .step1-progress-stack {
+  display: grid;
+  gap: 10px;
+}
+#step1 .step1-progress-stack .progress-wrap { margin: 0 !important; }
+#step1 .step-log-card {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#step1 .step-log-card .log { min-height: 220px !important; }
+@media (max-width: 1050px) {
+  #step1.step-panel.active { overflow: auto !important; }
+  #step1 .step1-title-row,
+  #step1 .step1-workspace { grid-template-columns: minmax(0, 1fr) !important; }
+  #step1 .step1-primary-actions { justify-content: flex-start !important; }
+  #step1 .step1-workspace { overflow: visible !important; }
+}
