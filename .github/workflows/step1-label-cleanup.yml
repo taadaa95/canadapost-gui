@@ -1,0 +1,45 @@
+name: Simplify Step 1 late-candidate label
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  update-label:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/kiss-two-step-workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/kiss-two-step-workflow
+          fetch-depth: 0
+      - name: Simplify visible label
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          for filename, value in [
+            ('locales/en-CA.json', 'Late candidates'),
+            ('locales/fr-CA.json', 'Candidats en retard'),
+          ]:
+            path = Path(filename)
+            data = json.loads(path.read_text(encoding='utf-8'))
+            data['step2.lateClaims'] = value
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git diff --check
+      - name: Commit label cleanup
+        shell: bash
+        run: |
+          if git diff --quiet -- locales/en-CA.json locales/fr-CA.json; then exit 0; fi
+          git config user.name "ChatGPT 5.6 Sol"
+          git config user.email "noreply@openai.com"
+          git add locales/en-CA.json locales/fr-CA.json
+          git commit -m "Simplify Step 1 late-candidate label"
+          git push origin HEAD:agent/kiss-two-step-workflow
