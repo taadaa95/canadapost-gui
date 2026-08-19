@@ -400,7 +400,7 @@
 
     function renderSettingsStatusSegments() {
       const status = byId('settingsStatus');
-      if (!status || status.dataset.cpcrSegmenting === 'true') return;
+      if (!status || status.dataset.cpcrSegmenting === 'true' || status.querySelector?.('[data-settings-status-tone]')) return;
       const text = String(status.textContent || '');
       const tokens = [
         [tr('settings.status.webOsEncrypted'), 'good', 'var(--success-text)'],
