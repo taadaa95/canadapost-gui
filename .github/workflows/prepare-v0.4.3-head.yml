@@ -1,0 +1,85 @@
+name: Normalize v0.4.3 release source
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/release-0.4.3'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/release-0.4.3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Normalize package identity
+        run: npm version 0.4.3 --no-git-tag-version --ignore-scripts --allow-same-version
+      - name: Normalize release references
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          replace_files = [
+              'package.json',
+              '.github/workflows/ci.yml',
+              'tests/github-release-updater-test.js',
+              'tests/release-metadata-contract-test.js',
+              'OPERATING_GUIDE.md',
+              'MANUAL_RELEASE_GATES.md',
+              'docs/GITHUB_UPDATES.md',
+              'docs/LIFECYCLE_AND_PLATFORMS.md',
+              'docs/MACOS_DISTRIBUTION.md',
+          ]
+          for name in replace_files:
+              path = Path(name)
+              text = path.read_text(encoding='utf-8')
+              path.write_text(text.replace('0.4.2', '0.4.3'), encoding='utf-8')
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          text = re.sub(
+              r'Current public stable version: \*\*0\.4\.1\*\* for Linux x64 and Windows x64\. Version \*\*0\.4\.2\*\* is the next release candidate and remains unpublished until Kris validates the exact canonical packages\.',
+              'Current public stable version: **0.4.2** for Linux x64 and Windows x64. Version **0.4.3** is the next release candidate and remains unpublished until the exact canonical packages are validated.',
+              text,
+              count=1,
+          )
+          if '**0.4.3**' not in text.split('\n', 5)[2]:
+              text = text.replace('Version **0.4.2**', 'Version **0.4.3**', 1)
+          readme.write_text(text, encoding='utf-8')
+
+          notes = Path('RELEASE_NOTES.md')
+          text = notes.read_text(encoding='utf-8')
+          text = text.replace('## Canada Post Claim Runner 0.4.2 — pending physical package validation', '## Canada Post Claim Runner 0.4.2 — stable', 1)
+          section = '''\n## Canada Post Claim Runner 0.4.3 — Windows Guided Setup fixes\n\n- Corrects the Settings credential-status banner so saved website credentials remain green while missing Tracking API credentials are shown independently as an error.\n- Prevents Guided Canada Post Setup from returning to the business-selection step after the business was already confirmed and the user has progressed to Create App.\n- Hardens **Save & Finish** so pasted Tracking API Key/Secret values are normalized, mirrored into Settings, written to encrypted storage, and verified by a sanitized config re-read before setup can report success.\n- Adds Windows-focused regression coverage for the business-step transition, credential persistence verification, and mixed credential-status rendering.\n- Retains database schema version 8 and the existing Canada Post workflow behavior outside these fixes.\n'''
+          if '## Canada Post Claim Runner 0.4.3' not in text:
+              text = text.replace('# Release notes\n', '# Release notes\n' + section, 1)
+          text = text.replace('See `OPERATING_GUIDE.md` for the current 0.4.2 candidate.', 'See `OPERATING_GUIDE.md` for the current 0.4.3 candidate.')
+          notes.write_text(text, encoding='utf-8')
+
+          Path('docs/RELEASE_V0.4.3.md').write_text('''# Canada Post Claim Runner 0.4.3\n\nVersion 0.4.3 is a focused Windows Guided Setup reliability release.\n\n- Settings colors saved website credentials and missing Tracking API credentials independently.\n- Confirmed business progress remains sticky while entering Create App.\n- Save & Finish verifies the Tracking API credential pair is actually persisted before reporting success.\n- Windows regression coverage protects these fixes.\n- Database schema remains version 8.\n\nCanonical release candidates:\n\n- Linux x64: `Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage`\n- Windows x64: `Canada.Post.Claim.Runner-0.4.3-win-x64.exe`\n\nThe exact public binaries must come from the reviewed 0.4.3 canonical release source commit and pass the existing automated release checks.\n''', encoding='utf-8')
+          PY
+      - name: Remove one-shot release-prep workflows
+        run: |
+          git rm -f .github/workflows/prepare-v0.4.3.yml
+          git rm -f .github/workflows/prepare-v0.4.3-head.yml
+      - name: Commit normalized release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "ChatGPT 5.6 Sol"
+          git config user.email "noreply@openai.com"
+          git add -A
+          git commit -m "release: prepare Canada Post Claim Runner 0.4.3"
+          git push origin HEAD:agent/release-0.4.3
