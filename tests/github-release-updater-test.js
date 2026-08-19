@@ -86,7 +86,7 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
   return { fileSystem, hashFile, files, calls, counts };
 }
 
-assert.strictEqual(require('../package.json').version, '0.4.2');
+assert.strictEqual(require('../package.json').version, '0.4.3');
 const updaterUiText = [
   fs.readFileSync(path.join(__dirname, '..', 'lib', 'github-release-updater.js'), 'utf8'),
   fs.readFileSync(path.join(__dirname, '..', 'locales', 'en-CA.json'), 'utf8'),
@@ -123,10 +123,10 @@ assert.strictEqual(candidate.artifact.sha256, digest(artifactBytes));
 const macCandidate = updater.validateLatestRelease(stableRelease, '0.4.0', 'darwin', 'arm64');
 assert.strictEqual(macCandidate.artifact.file, 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
 assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.1', 'linux', 'x64').available, false);
-assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.2', 'linux', 'x64').available, false);
+assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.3', 'linux', 'x64').available, false);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, draft: true }, '0.4.0', 'linux', 'x64'), /normal stable release/i);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, prerelease: true }, '0.4.0-beta.1', 'linux', 'x64'), /normal stable release/i);
-assert.throws(() => updater.validateLatestRelease(release('v0.4.2-rc.1', artifactBytes), '0.4.1', 'linux', 'x64'), /stable semantic version/i);
+assert.throws(() => updater.validateLatestRelease(release('v0.4.3-rc.1', artifactBytes), '0.4.1', 'linux', 'x64'), /stable semantic version/i);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, assets: [] }, '0.4.0', 'linux', 'x64'), /missing Canada\.Post/i);
 assert.throws(() => updater.validateLatestRelease({
   ...stableRelease,
@@ -188,9 +188,9 @@ assert.throws(() => updater.validateLatestRelease({
     assert.strictEqual(fs.readFileSync(downloaded, 'utf8'), artifactBytes.toString('utf8'));
     assert.strictEqual(security.verifyArtifact(downloaded, candidate.artifact), true);
 
-    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.2', artifact: {
+    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.3', artifact: {
       ...candidate.artifact,
-      file: 'Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage'
+      file: 'Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage'
     } }, {
       app: { getPath: () => downloadRoot },
       userAgent: 'synthetic-test',

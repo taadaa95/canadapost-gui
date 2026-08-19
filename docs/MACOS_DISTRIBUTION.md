@@ -3,7 +3,7 @@
 `npm run package:mac` runs only on macOS and creates one universal DMG for Intel x64 and Apple Silicon arm64:
 
 ```text
-Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg
+Canada.Post.Claim.Runner-0.4.3-mac-universal.dmg
 ```
 
 The validation workflow reads signing material only from these GitHub Actions secrets:
