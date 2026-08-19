@@ -1,0 +1,40 @@
+name: Windows test build
+
+on:
+  push:
+    branches:
+      - agent/kiss-two-step-workflow
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-test:
+    name: Build Windows test installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - name: Build unsigned Windows test installer
+        run: npm run package:windows
+      - name: Audit packaged application
+        run: npm run package:audit -- dist/packages/win-unpacked
+      - name: Report package size
+        run: npm run package:size -- dist/packages
+      - name: Upload Windows test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Canada-Post-Claim-Runner-0.4.3-Windows-test
+          path: dist/packages/*.exe
+          if-no-files-found: error
+          retention-days: 7
