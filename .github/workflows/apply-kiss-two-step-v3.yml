@@ -1,0 +1,93 @@
+name: Apply KISS two-step workflow changes v3
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/kiss-two-step-workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/kiss-two-step-workflow
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply v2 transformation and preserve hidden locale strings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/apply-kiss-two-step-v2.yml').read_text(encoding='utf-8')
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "\n          PY\n      - name: Install dependencies"
+          start = workflow.index(start_marker) + len(start_marker)
+          end = workflow.index(end_marker, start)
+          script = textwrap.dedent(workflow[start:end])
+          Path('/tmp/apply-kiss-v2.py').write_text(script, encoding='utf-8')
+          PY
+          python /tmp/apply-kiss-v2.py
+
+          python - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+
+          source_sha = '1032a3d190f58c6fb7d22de451f417977cb62a61'
+          hidden_keys = [
+              'settings.website.securityNote',
+              'settings.api.advanced',
+              'settings.api.defaultsNote',
+              'settings.api.metadataPending',
+              'settings.api.metadata',
+              'settings.api.accessNote',
+          ]
+          for path in ['locales/en-CA.json', 'locales/fr-CA.json']:
+              current = json.loads(Path(path).read_text(encoding='utf-8'))
+              original_text = subprocess.check_output(['git', 'show', f'{source_sha}:{path}'], text=True)
+              original = json.loads(original_text)
+              for key in hidden_keys:
+                  if key in original:
+                      current[key] = original[key]
+              Path(path).write_text(json.dumps(current, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          test = Path('tests/ui-contract-test.js')
+          text = test.read_text(encoding='utf-8')
+          text = text.replace("assert.strictEqual(englishLocale['settings.website.securityNote'], '');\n", '')
+          test.write_text(text, encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate non-visual behavior
+        run: |
+          npm test
+          npm run test:dev10
+          npm run test:updates
+          npm run test:localization
+          npm run lint
+          npm run lint:dev10
+          npm run typecheck
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet; then
+            echo "No product changes to commit."
+            exit 0
+          fi
+          git config user.name "ChatGPT 5.6 Sol"
+          git config user.email "noreply@openai.com"
+          git add index.html renderer.js lib/github-release-updater.js locales/en-CA.json locales/fr-CA.json tests/github-release-updater-test.js tests/ui-contract-test.js tests/workflow-simplification-contract-test.js
+          git commit -m "Simplify settings and combine workflow into two steps"
+          git push origin HEAD:agent/kiss-two-step-workflow
