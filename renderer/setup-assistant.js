@@ -23,6 +23,11 @@
     'WRONG_API_PRODUCT', 'TRACKING_REQUIRED_AFTER_WRONG_PRODUCT', 'TRACKING_ENABLED', 'OFF_FLOW_PAGE'
   ]);
 
+  const BUSINESS_CONTEXT_STATES = new Set([
+    'DEV_PORTAL_AUTHENTICATED', 'BUSINESS_TARGET_RESOLVING', 'BUSINESS_MENU_REQUIRED',
+    'BUSINESS_SELECTION', 'BUSINESS_ACCOUNT_FOUND', 'BUSINESS_CONFIRMED'
+  ]);
+
   const STATE_GUIDANCE = Object.freeze({
     DEV_PORTAL_SIGNED_OUT: 'portalSignIn',
     LOGIN_PAGE: 'login',
@@ -150,6 +155,12 @@
     });
   }
 
+  function shouldPreserveConfirmedBusinessProgress(currentStepId, pageState, confirmed) {
+    return confirmed === true
+      && currentStepId === 'create-app'
+      && BUSINESS_CONTEXT_STATES.has(String(pageState || ''));
+  }
+
   function rectanglesOverlap(left, right) {
     return left.x < right.x + right.width && left.x + left.width > right.x
       && left.y < right.y + right.height && left.y + left.height > right.y;
@@ -212,6 +223,7 @@
     let stepIndex = 0;
     let open = false;
     let resizeObserver = null;
+    let settingsStatusObserver = null;
     let rejectedCustomerCandidateSignature = '';
     let adaptivePageState = '';
     let setupDraft = null;
@@ -384,6 +396,51 @@
       element.classList.toggle('hidden', hidden);
       element.hidden = hidden;
       element.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    }
+
+    function renderSettingsStatusSegments() {
+      const status = byId('settingsStatus');
+      if (!status || status.dataset.cpcrSegmenting === 'true' || status.querySelector?.('[data-settings-status-tone]')) return;
+      const text = String(status.textContent || '');
+      const tokens = [
+        [tr('settings.status.webOsEncrypted'), 'good', 'var(--success-text)'],
+        [tr('settings.status.webLocalEncrypted'), 'warn', 'var(--warning-text)'],
+        [tr('settings.status.webNotSaved'), 'bad', 'var(--danger-text)'],
+        [tr('settings.status.apiReady'), 'good', 'var(--success-text)'],
+        [tr('settings.status.apiMissing'), 'bad', 'var(--danger-text)']
+      ].filter(([token]) => token && text.includes(token));
+      if (!tokens.length) return;
+      const matches = tokens
+        .map(([token, tone, color]) => ({ token, tone, color, index: text.indexOf(token) }))
+        .filter(match => match.index >= 0)
+        .sort((left, right) => left.index - right.index);
+      if (!matches.length) return;
+      status.dataset.cpcrSegmenting = 'true';
+      const children = [];
+      let offset = 0;
+      for (const match of matches) {
+        if (match.index < offset) continue;
+        if (match.index > offset) children.push(doc.createTextNode(text.slice(offset, match.index)));
+        const span = doc.createElement('span');
+        span.dataset.settingsStatusTone = match.tone;
+        span.style.color = match.color;
+        span.textContent = match.token;
+        children.push(span);
+        offset = match.index + match.token.length;
+      }
+      if (offset < text.length) children.push(doc.createTextNode(text.slice(offset)));
+      status.replaceChildren(...children);
+      if (text.includes(tr('settings.status.apiMissing'))) status.classList.remove('good', 'warn', 'bad');
+      delete status.dataset.cpcrSegmenting;
+    }
+
+    function observeSettingsStatus() {
+      renderSettingsStatusSegments();
+      const status = byId('settingsStatus');
+      const Observer = deps.MutationObserver || globalThis.MutationObserver;
+      if (!status || typeof Observer !== 'function' || settingsStatusObserver) return;
+      settingsStatusObserver = new Observer(() => renderSettingsStatusSegments());
+      settingsStatusObserver.observe(status, { childList: true, characterData: true, subtree: true });
     }
 
     function showError(messageKey = '') {
@@ -745,12 +802,14 @@
         feedbackEvent('error', 'save-validation-failed', 'setupAssistant.feedback.saveFailed');
         return;
       }
-      updateDraft({
+      const normalized = updateDraft({
         webUsername: String(current.webUsername).trim(),
         estCustomerNumber: customerNumberState(current.estCustomerNumber).normalized,
-        trackingApiClientId: String(current.trackingApiClientId).trim()
+        trackingApiClientId: String(current.trackingApiClientId).trim(),
+        trackingApiClientSecret: String(current.trackingApiClientSecret).trim()
       });
-      if (byId('trackingApiEnvironment')) byId('trackingApiEnvironment').value = current.trackingApiEnvironment;
+      mirrorDraftToSettings();
+      if (byId('trackingApiEnvironment')) byId('trackingApiEnvironment').value = normalized.trackingApiEnvironment;
       if (byId('rememberSettings')) byId('rememberSettings').checked = true;
       const result = await saveSettings();
       if (!result?.ok) {
@@ -758,12 +817,21 @@
         feedbackEvent('error', 'save-failed', 'setupAssistant.feedback.saveFailed');
         return;
       }
-      const credentialSaveFailed = (Boolean(current.webPassword) && result.passwordCredentialUpdated !== true)
-        || (Boolean(current.trackingApiClientId || current.trackingApiClientSecret) && result.trackingApiCredentialsUpdated !== true);
+      const trackingCredentialsSupplied = Boolean(normalized.trackingApiClientId || normalized.trackingApiClientSecret);
+      const credentialSaveFailed = (Boolean(normalized.webPassword) && result.passwordCredentialUpdated !== true)
+        || (trackingCredentialsSupplied && (result.trackingApiCredentialsUpdated !== true || result.trackingApiCredentialsStored !== true));
       if (credentialSaveFailed) {
         showError('setupAssistant.error.credentialSave');
         feedbackEvent('error', 'credential-save-failed', 'setupAssistant.feedback.saveFailed');
         return;
+      }
+      if (trackingCredentialsSupplied && typeof api.loadConfig === 'function') {
+        const persisted = await api.loadConfig();
+        if (persisted?.trackingApiCredentialsStored !== true) {
+          showError('setupAssistant.error.credentialSave');
+          feedbackEvent('error', 'credential-persistence-verification-failed', 'setupAssistant.feedback.saveFailed');
+          return;
+        }
       }
       saveCompleted = true;
       setText('settingsStatus', tr('settings.savedStatus'));
@@ -812,16 +880,23 @@
         productAttemptId: String(state.productAttemptId || ''),
         overlayInstanceId: String(state.overlayInstanceId || '')
       };
+      const preserveBusinessProgress = shouldPreserveConfirmedBusinessProgress(
+        STEPS[stepIndex]?.id,
+        state.pageState,
+        Boolean(confirmedBusiness)
+      );
       const adaptiveIndex = STEPS.findIndex(step => step.id === state.stepId);
-      if (adaptiveIndex >= 0 && state.pageState !== 'UNRECOGNIZED') stepIndex = adaptiveIndex;
-      adaptivePageState = state.pageState === 'BUSINESS_SELECTION' && (state.customerNumberCandidates?.length || 0) > 0
-        ? 'BUSINESS_ACCOUNT_FOUND'
-        : (ADAPTIVE_STATES.has(state.pageState) ? state.pageState : '');
+      if (!preserveBusinessProgress && adaptiveIndex >= 0 && state.pageState !== 'UNRECOGNIZED') stepIndex = adaptiveIndex;
+      if (!preserveBusinessProgress) {
+        adaptivePageState = state.pageState === 'BUSINESS_SELECTION' && (state.customerNumberCandidates?.length || 0) > 0
+          ? 'BUSINESS_ACCOUNT_FOUND'
+          : (ADAPTIVE_STATES.has(state.pageState) ? state.pageState : '');
+      }
       if (state.pageState === 'TRACKING_ENABLED' && setupDraft?.trackingProductEnabled !== true) {
         setupDraft = patchSetupDraft(setupDraft, { trackingProductEnabled: true });
       }
       render({ preserveError: true, preserveRetry: true });
-      renderCustomerCandidates(state.customerNumberCandidates);
+      renderCustomerCandidates(preserveBusinessProgress ? [] : state.customerNumberCandidates);
       if (pageContext.credentialPhase !== lastFocusedCredentialPhase) {
         lastFocusedCredentialPhase = pageContext.credentialPhase;
         const localTarget = pageContext.credentialPhase === 'paste-key' ? byId('setupAssistantClientId')
@@ -932,6 +1007,7 @@
     }
 
     function bind() {
+      observeSettingsStatus();
       byId('guidedCanadaPostSetup')?.addEventListener('click', () => openAssistant().catch(() => showError('setupAssistant.error.open')));
       byId('setupAssistantClose')?.addEventListener('click', () => closeAssistant().catch(() => {}));
       byId('setupAssistantBrowserBack')?.addEventListener('click', () => browserBack().catch(() => showError('setupAssistant.error.backUnavailable')));
@@ -1001,6 +1077,7 @@
 
     function localize() {
       if (open) render({ preserveError: true, preserveRetry: true });
+      renderSettingsStatusSegments();
     }
 
     return Object.freeze({ bind, localize, openAssistant, closeAssistant, goTo, saveAndFinish, pageStateChanged, completionState: () => completionState(values(), storedState()) });
@@ -1016,6 +1093,7 @@
     patchSetupDraft,
     draftPatchForField,
     assessCustomerCandidates,
+    shouldPreserveConfirmedBusinessProgress,
     rectanglesOverlap,
     nativeBrowserBounds,
     completionState,
