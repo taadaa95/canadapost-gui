@@ -23,7 +23,7 @@ jobs:
           node-version: 24
       - name: Normalize package identity
         run: npm version 0.4.3 --no-git-tag-version --ignore-scripts --allow-same-version
-      - name: Normalize release references
+      - name: Normalize non-workflow release references
         shell: bash
         run: |
           python - <<'PY'
@@ -32,7 +32,6 @@ jobs:
 
           replace_files = [
               'package.json',
-              '.github/workflows/ci.yml',
               'tests/github-release-updater-test.js',
               'tests/release-metadata-contract-test.js',
               'OPERATING_GUIDE.md',
@@ -69,10 +68,6 @@ jobs:
 
           Path('docs/RELEASE_V0.4.3.md').write_text('''# Canada Post Claim Runner 0.4.3\n\nVersion 0.4.3 is a focused Windows Guided Setup reliability release.\n\n- Settings colors saved website credentials and missing Tracking API credentials independently.\n- Confirmed business progress remains sticky while entering Create App.\n- Save & Finish verifies the Tracking API credential pair is actually persisted before reporting success.\n- Windows regression coverage protects these fixes.\n- Database schema remains version 8.\n\nCanonical release candidates:\n\n- Linux x64: `Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage`\n- Windows x64: `Canada.Post.Claim.Runner-0.4.3-win-x64.exe`\n\nThe exact public binaries must come from the reviewed 0.4.3 canonical release source commit and pass the existing automated release checks.\n''', encoding='utf-8')
           PY
-      - name: Remove one-shot release-prep workflows
-        run: |
-          git rm -f .github/workflows/prepare-v0.4.3.yml
-          git rm -f .github/workflows/prepare-v0.4.3-head.yml
       - name: Commit normalized release source
         shell: bash
         run: |
@@ -80,6 +75,6 @@ jobs:
           git diff --check
           git config user.name "ChatGPT 5.6 Sol"
           git config user.email "noreply@openai.com"
-          git add -A
+          git add package.json package-lock.json tests/github-release-updater-test.js tests/release-metadata-contract-test.js OPERATING_GUIDE.md README.md RELEASE_NOTES.md MANUAL_RELEASE_GATES.md docs/GITHUB_UPDATES.md docs/LIFECYCLE_AND_PLATFORMS.md docs/MACOS_DISTRIBUTION.md docs/RELEASE_V0.4.3.md
           git commit -m "release: prepare Canada Post Claim Runner 0.4.3"
           git push origin HEAD:agent/release-0.4.3
