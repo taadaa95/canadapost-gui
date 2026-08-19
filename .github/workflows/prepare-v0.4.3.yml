@@ -3,7 +3,7 @@ name: Prepare v0.4.3 release source
 on:
   push:
     branches:
-      - agent/release-0.4.3
+      - feature/dev11-beta-release-hardening
     paths:
       - .github/workflows/prepare-v0.4.3.yml
 
@@ -66,4 +66,4 @@ jobs:
           git config user.email "noreply@openai.com"
           git add package.json package-lock.json .github/workflows/ci.yml tests/github-release-updater-test.js tests/release-metadata-contract-test.js OPERATING_GUIDE.md README.md RELEASE_NOTES.md MANUAL_RELEASE_GATES.md docs/LIFECYCLE_AND_PLATFORMS.md docs/MACOS_DISTRIBUTION.md docs/RELEASE_V0.4.3.md
           git commit -m "release: prepare Canada Post Claim Runner 0.4.3"
-          git push origin HEAD:agent/release-0.4.3
+          git push origin HEAD:feature/dev11-beta-release-hardening
