@@ -1,0 +1,476 @@
+name: Apply KISS two-step workflow changes
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/kiss-two-step-workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/kiss-two-step-workflow
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply KISS product changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {text.count(old)}')
+              return text.replace(old, new, 1)
+
+          # ------------------------------------------------------------
+          # Settings + visible two-step shell
+          # ------------------------------------------------------------
+          p = Path('index.html')
+          s = read(p)
+          s, count = re.subn(r'^\s*<button id="tabStep2"[^\n]*\n', '', s, count=1, flags=re.M)
+          if count != 1:
+              raise SystemExit('index: tabStep2 not found exactly once')
+          s = replace_once(
+              s,
+              '<input id="trackingClientId" type="text" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />',
+              '<input id="trackingClientId" type="password" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />',
+              'index trackingClientId type'
+          )
+          s, count = re.subn(r'^\s*<div class="settings-note" data-i18n="settings\.website\.securityNote"></div>\n', '', s, count=1, flags=re.M)
+          if count != 1:
+              raise SystemExit('index: website security note not found exactly once')
+          s, count = re.subn(
+              r'\n\s*<details class="settings-note">\s*\n\s*<summary data-i18n="settings\.api\.advanced"></summary>[\s\S]*?</details>',
+              '', s, count=1
+          )
+          if count != 1:
+              raise SystemExit('index: advanced Tracking API details not found exactly once')
+          for key in ['settings.api.metadataPending', 'settings.api.accessNote']:
+              s, count = re.subn(rf'^\s*<div[^\n]*data-i18n="{re.escape(key)}"[^\n]*</div>\n', '', s, count=1, flags=re.M)
+              if count != 1:
+                  raise SystemExit(f'index: {key} not found exactly once')
+          s, count = re.subn(r'^\s*<button id="runTrackingOnly"[^\n]*\n', '', s, count=1, flags=re.M)
+          if count != 1:
+              raise SystemExit('index: runTrackingOnly not found exactly once')
+          write(p, s)
+
+          # ------------------------------------------------------------
+          # Renderer: saved-secret masks + automatic Step 1 tracking
+          # ------------------------------------------------------------
+          p = Path('renderer.js')
+          s = read(p)
+          s = replace_once(
+              s,
+              "const DEFAULT_THEME = 'system';\n",
+              "const DEFAULT_THEME = 'system';\nconst SAVED_SECRET_MASK = '••••••••';\n",
+              'renderer saved-secret constant'
+          )
+          s = replace_once(
+              s,
+              "let activeTabId = 'settingsTab';\nlet currentProcessStep = 'step1';\n",
+              "let activeTabId = 'settingsTab';\nlet currentProcessStep = 'step1';\nlet autoTrackingAfterImport = false;\n",
+              'renderer auto-tracking state'
+          )
+          marker = "function stepForStage(stage) {\n"
+          merge_fn = """function mergeTrackingIntoStep1() {
+            const importStep = $('step1');
+            const trackingStep = $('step2');
+            if (!importStep || !trackingStep) return;
+            trackingStep.classList.remove('tab-panel');
+            trackingStep.classList.add('step1-tracking-phase');
+            trackingStep.removeAttribute('role');
+            trackingStep.removeAttribute('aria-labelledby');
+            trackingStep.hidden = false;
+            importStep.appendChild(trackingStep);
+          }
+
+          """
+          s = replace_once(s, marker, merge_fn + marker, 'renderer merge tracking into step1')
+
+          get_field = """function getFieldValue(id) {
+            const el = $(id);
+            return el ? String(el.value || '').trim() : '';
+          }
+
+          """
+          secret_helpers = get_field + """function getSecretFieldValue(id) {
+            const value = $(id)?.value || '';
+            return value === SAVED_SECRET_MASK ? '' : value;
+          }
+
+          function applyStoredCredentialMasks() {
+            const password = $('webPassword');
+            if (password) {
+              password.value = state.passwordStored ? SAVED_SECRET_MASK : '';
+              password.placeholder = tr('settings.website.passwordPlaceholder');
+            }
+            const clientId = $('trackingClientId');
+            if (clientId) {
+              clientId.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+              clientId.placeholder = tr('settings.api.clientIdPlaceholder');
+            }
+            const clientSecret = $('trackingClientSecret');
+            if (clientSecret) {
+              clientSecret.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+              clientSecret.placeholder = tr('settings.api.clientSecretPlaceholder');
+            }
+          }
+
+          function initSavedSecretInputs() {
+            for (const id of ['webPassword', 'trackingClientId', 'trackingClientSecret']) {
+              const input = $(id);
+              input?.addEventListener('focus', () => {
+                if (input.value === SAVED_SECRET_MASK) input.select();
+              });
+            }
+          }
+
+          """
+          s = replace_once(s, get_field, secret_helpers, 'renderer secret helpers')
+          s = replace_once(s, "webPassword: $('webPassword')?.value || '',", "webPassword: getSecretFieldValue('webPassword'),", 'renderer web secret collection')
+          s = replace_once(s, "trackingClientId: getFieldValue('trackingClientId'),", "trackingClientId: getSecretFieldValue('trackingClientId'),", 'renderer API key collection')
+          s = replace_once(s, "trackingClientSecret: $('trackingClientSecret')?.value || '',", "trackingClientSecret: getSecretFieldValue('trackingClientSecret'),", 'renderer API secret collection')
+
+          validation_old = """  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'Customer Number'));
+          if (stepId === 'step3') {
+          """
+          validation_new = """  if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'Customer Number'));
+          if (stepId === 'step1' && !state.trackingApiCredentialsStored) missing.push(tr('settings.api.credentialsRequired', 'Tracking API credentials'));
+          if (stepId === 'step3') {
+          """
+          s = replace_once(s, validation_old, validation_new, 'renderer step1 API validation')
+
+          save_blank = """    if ($('webPassword')) $('webPassword').value = '';
+              if ($('trackingClientId')) $('trackingClientId').value = '';
+              if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
+          """
+          s = replace_once(s, save_blank, "    applyStoredCredentialMasks();\n", 'renderer saved mask after save')
+
+          refresh_old = """  if ($('webPassword')) {
+              $('webPassword').value = '';
+              $('webPassword').placeholder = tr(state.passwordStored ? 'settings.website.passwordSavedPlaceholder' : 'settings.website.passwordPlaceholder');
+            }
+            if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientIdSavedPlaceholder' : 'settings.api.clientIdPlaceholder'); }
+            if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
+            renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
+          """
+          s = replace_once(s, refresh_old, "  applyStoredCredentialMasks();\n  renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});\n", 'renderer refresh masks')
+
+          tracking_start = """async function startTrackingOnly() {
+            currentProcessStep = 'step2';
+            resetRunUi('step2');
+          """
+          s = replace_once(
+              s, tracking_start,
+              """async function startTrackingOnly() {
+            currentProcessStep = 'step2';
+            state.claimQueueLoaded = false;
+            resetRunUi('step2');
+          """,
+              'renderer tracking start queue invalidation'
+          )
+
+          import_start = """$('importEstHistory')?.addEventListener('click', async () => {
+            currentProcessStep = 'step1';
+            resetRunUi('step1');
+          """
+          s = replace_once(
+              s, import_start,
+              """$('importEstHistory')?.addEventListener('click', async () => {
+            currentProcessStep = 'step1';
+            autoTrackingAfterImport = false;
+            resetRunUi('step1');
+            resetRunUi('step2');
+          """,
+              'renderer reset both Step 1 phases'
+          )
+
+          on_event = """window.cpApp.onEvent(({ stage, event }) => {
+            const message = describeEvent(stage, event);
+          """
+          s = replace_once(
+              s, on_event,
+              """window.cpApp.onEvent(({ stage, event }) => {
+            if (stage === 'est-history' && event?.type === 'est_complete') {
+              autoTrackingAfterImport = event.outcome !== 'EMPTY' && Number(event.imported || 0) > 0;
+            }
+            const message = describeEvent(stage, event);
+          """,
+              'renderer mark completed import for auto tracking'
+          )
+
+          history_refresh = """  updateCounters();
+            if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
+              refreshHistory().catch(() => {});
+            }
+          });
+          """
+          history_refresh_new = """  updateCounters();
+            if (step === 'step1' && ['failed', 'blocked', 'stopped'].includes(payload.status)) autoTrackingAfterImport = false;
+            if (step === 'step1' && autoTrackingAfterImport && ['complete', 'complete_with_warnings'].includes(payload.status)) {
+              autoTrackingAfterImport = false;
+              window.setTimeout(() => startTrackingOnly(), 0);
+            }
+            if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
+              refreshHistory().catch(() => {});
+            }
+          });
+          """
+          s = replace_once(s, history_refresh, history_refresh_new, 'renderer auto-chain tracking')
+
+          init_block = """initThemePicker();
+          initStepTabs();
+          initLiveLogs();
+          """
+          s = replace_once(
+              s, init_block,
+              """initThemePicker();
+          mergeTrackingIntoStep1();
+          initSavedSecretInputs();
+          initStepTabs();
+          initLiveLogs();
+          """,
+              'renderer KISS initialization'
+          )
+          write(p, s)
+
+          # ------------------------------------------------------------
+          # Windows updater: launch the verified installer visibly.
+          # ------------------------------------------------------------
+          p = Path('lib/github-release-updater.js')
+          s = read(p)
+          old = """  if (platform === 'win32') {
+            beforeExit();
+            const escaped = downloadedPath.replace(/'/g, "''");
+            const script = `Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue; Start-Process -FilePath '${escaped}'`;
+            launchDetached('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')]);
+            app.quit();
+            return;
+          }
+          """
+          new = """  if (platform === 'win32') {
+            beforeExit();
+            const openError = await shell.openPath(downloadedPath);
+            if (openError) {
+              shell.showItemInFolder?.(downloadedPath);
+              throw fail('UPDATE_WINDOWS_INSTALLER_OPEN_FAILED', `The verified Windows installer could not be opened: ${openError}`);
+            }
+            app.quit();
+            return { installerOpened: true };
+          }
+          """
+          s = replace_once(s, old, new, 'Windows update installer launch')
+          write(p, s)
+
+          # ------------------------------------------------------------
+          # Locales: make every user-facing workflow reference two-step.
+          # ------------------------------------------------------------
+          for locale_path in ['locales/en-CA.json', 'locales/fr-CA.json']:
+              path = Path(locale_path)
+              data = json.loads(read(path))
+              french = locale_path.endswith('fr-CA.json')
+              old2, old3 = ('Étape 2', 'Étape 3') if french else ('Step 2', 'Step 3')
+              token = '__CPCR_SUBMISSION_STEP__'
+              for key, value in list(data.items()):
+                  if isinstance(value, str):
+                      data[key] = value.replace(old3, token).replace(old2, old2.replace('2', '1')).replace(token, old3.replace('3', '2'))
+
+              if french:
+                  data['app.subtitle'] = 'Importez l’historique, repérez automatiquement les envois en retard, puis soumettez-les en deux étapes simples.'
+                  data['nav.step1.title'] = 'Étape 1'
+                  data['nav.step1.detail'] = 'Importer et repérer les retards'
+                  data['nav.step2.title'] = 'Repérage'
+                  data['nav.step2.detail'] = 'Repérer les envois en retard'
+                  data['nav.step3.title'] = 'Étape 2'
+                  data['nav.step3.detail'] = 'Soumettre les envois en retard'
+                  data['step1.title'] = 'Étape 1 — Importer et repérer les envois en retard'
+                  data['step2.title'] = 'Repérer les envois en retard'
+                  data['step3.title'] = 'Étape 2 — Soumettre les envois en retard'
+                  data['settings.website.remember'] = 'Se souvenir de moi'
+                  data['settings.website.passwordSavedPlaceholder'] = data.get('settings.website.passwordPlaceholder', 'Mot de passe Web')
+                  data['settings.api.clientIdSavedPlaceholder'] = data.get('settings.api.clientIdPlaceholder', 'Clé API du portail développeur')
+                  data['settings.api.clientSecretSavedPlaceholder'] = data.get('settings.api.clientSecretPlaceholder', 'Secret API du portail développeur')
+                  data['settings.api.credentialsRequired'] = 'Identifiants de l’API de suivi'
+              else:
+                  data['app.subtitle'] = 'Import shipping history, automatically identify late candidates, then submit them in two simple steps.'
+                  data['nav.step1.title'] = 'Step 1'
+                  data['nav.step1.detail'] = 'Import & identify late candidates'
+                  data['nav.step2.title'] = 'Identify'
+                  data['nav.step2.detail'] = 'Identify late candidates'
+                  data['nav.step3.title'] = 'Step 2'
+                  data['nav.step3.detail'] = 'Submit late candidates'
+                  data['step1.title'] = 'Step 1 — Import & Identify Late Candidates'
+                  data['step2.title'] = 'Identify Late Candidates'
+                  data['step3.title'] = 'Step 2 — Submit Late Candidates'
+                  data['settings.website.remember'] = 'Remember me'
+                  data['settings.website.passwordSavedPlaceholder'] = data.get('settings.website.passwordPlaceholder', 'Web login password')
+                  data['settings.api.clientIdSavedPlaceholder'] = data.get('settings.api.clientIdPlaceholder', 'Developer Portal API Key')
+                  data['settings.api.clientSecretSavedPlaceholder'] = data.get('settings.api.clientSecretPlaceholder', 'Developer Portal API Secret')
+                  data['settings.api.credentialsRequired'] = 'Tracking API credentials'
+
+              data['settings.website.securityNote'] = ''
+              for key in ['settings.api.advanced', 'settings.api.defaultsNote', 'settings.api.metadataPending', 'settings.api.metadata', 'settings.api.accessNote']:
+                  if key in data:
+                      data[key] = ''
+              write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+          # ------------------------------------------------------------
+          # Updater regression test
+          # ------------------------------------------------------------
+          p = Path('tests/github-release-updater-test.js')
+          s = read(p)
+          old = """    await updater.installUpdate({
+              app: { quit: () => { quitCalled = true; } },
+              shell: {},
+              downloadedPath: downloadedAppImage,
+              update: candidate,
+              currentVersion: '0.4.0',
+              platform: 'win32',
+              launchDetached: (command, args) => launches.push({ command, args })
+            });
+            assert.strictEqual(launches.length, 1);
+            assert.strictEqual(launches[0].command, 'powershell.exe');
+            assert.strictEqual(quitCalled, true);
+          """
+          new = """    const windowsOpened = [];
+            let windowsBeforeExit = 0;
+            await updater.installUpdate({
+              app: { quit: () => { quitCalled = true; } },
+              shell: { openPath: async file => { windowsOpened.push(file); return ''; } },
+              downloadedPath: downloadedAppImage,
+              update: candidate,
+              currentVersion: '0.4.0',
+              platform: 'win32',
+              beforeExit: () => { windowsBeforeExit += 1; },
+              launchDetached: (command, args) => launches.push({ command, args })
+            });
+            assert.deepStrictEqual(windowsOpened, [downloadedAppImage]);
+            assert.strictEqual(windowsBeforeExit, 1);
+            assert.strictEqual(launches.length, 0, 'Windows update must not hide the installer behind PowerShell');
+            assert.strictEqual(quitCalled, true);
+
+            quitCalled = false;
+            await assert.rejects(() => updater.installUpdate({
+              app: { quit: () => { quitCalled = true; } },
+              shell: { openPath: async () => 'synthetic installer launch failure', showItemInFolder: () => {} },
+              downloadedPath: downloadedAppImage,
+              update: candidate,
+              currentVersion: '0.4.0',
+              platform: 'win32'
+            }), error => error.code === 'UPDATE_WINDOWS_INSTALLER_OPEN_FAILED');
+            assert.strictEqual(quitCalled, false, 'failed installer launch must keep the current app open');
+          """
+          s = replace_once(s, old, new, 'updater Windows test')
+          write(p, s)
+
+          # ------------------------------------------------------------
+          # Existing UI contracts: update them to the KISS product shell.
+          # ------------------------------------------------------------
+          p = Path('tests/ui-contract-test.js')
+          s = read(p)
+          s = s.replace("'trackingClientId', 'trackingClientSecret', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'clearTrackingApiCredentials',\n  'runTrackingOnly', 'forceStopStep2',", "'trackingClientId', 'trackingClientSecret', 'clearTrackingApiCredentials',\n  'forceStopStep2',")
+          s = replace_once(s, "assert.match(html, /id=\"runTrackingOnly\"[^>]*data-i18n=\"step2\\.run\"/);", "assert.doesNotMatch(html, /id=\"runTrackingOnly\"/, 'Tracking must start automatically after Step 1 import');", 'ui contract manual tracking button')
+          old_saved = """assert.ok(englishLocale['settings.website.remember'].includes('save password securely on this device'));
+          assert.ok(englishLocale['settings.website.securityNote'].includes('AES-256-GCM device-local encryption'));
+          assert.ok(englishLocale['settings.website.passwordSavedPlaceholder'].includes('Saved password available — leave blank to reuse'));
+          """
+          new_saved = """assert.strictEqual(englishLocale['settings.website.remember'], 'Remember me');
+          assert.strictEqual(englishLocale['settings.website.securityNote'], '');
+          assert.strictEqual(englishLocale['settings.website.passwordSavedPlaceholder'], englishLocale['settings.website.passwordPlaceholder']);
+          assert.match(html, /id="trackingClientId"[^>]*type="password"/);
+          assert.match(renderer, /const SAVED_SECRET_MASK = '••••••••'/);
+          assert.match(renderer, /function applyStoredCredentialMasks/);
+          """
+          s = replace_once(s, old_saved, new_saved, 'ui contract credential copy')
+          old_tabs = """const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step2|Step3|History|Results)"[^>]*>([\\s\\S]*?)<\\/button>/g)];
+          assert.strictEqual(stepTabs.length, 6, 'All six workflow tabs must use the shared tab structure');
+          """
+          new_tabs = """const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step3|History|Results)"[^>]*>([\\s\\S]*?)<\\/button>/g)];
+          assert.strictEqual(stepTabs.length, 5, 'The customer shell must contain Settings, two workflow steps, History, and Results');
+          assert.ok(!html.includes('id="tabStep2"'), 'The standalone tracking tab must be removed');
+          assert.strictEqual(englishLocale['nav.step3.title'], 'Step 2');
+          assert.match(renderer, /function mergeTrackingIntoStep1/);
+          assert.match(renderer, /autoTrackingAfterImport/);
+          """
+          s = replace_once(s, old_tabs, new_tabs, 'ui contract tab count')
+          s = s.replace("for (const id of ['importEstHistory', 'forceStopStep1', 'runTrackingOnly', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {", "for (const id of ['importEstHistory', 'forceStopStep1', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {")
+          settings_marker = "assert.match(settingsMarkup, /id=\"checkForUpdates\"/);"
+          settings_extra = """assert.match(settingsMarkup, /id="checkForUpdates"/);
+          assert.doesNotMatch(settingsMarkup, /settings\\.website\\.securityNote/);
+          assert.doesNotMatch(settingsMarkup, /settings\\.api\\.(?:advanced|metadataPending|accessNote)/);
+          assert.doesNotMatch(settingsMarkup, /id="trackingRequestDelayMs"|id="trackingResourceTimeoutMs"|id="trackingApiCredentialMetadata"/);
+          """
+          s = replace_once(s, settings_marker, settings_extra, 'ui contract Settings KISS assertions')
+          write(p, s)
+
+          p = Path('tests/workflow-simplification-contract-test.js')
+          s = read(p)
+          s = replace_once(s, "assert.strictEqual(english['step1.title'], 'Step 1 — Import Shipment History');", "assert.strictEqual(english['step1.title'], 'Step 1 — Import & Identify Late Candidates');", 'workflow EN step1 title')
+          s = replace_once(s, "assert.strictEqual(english['nav.step1.detail'], 'Import Shipment History');", "assert.strictEqual(english['nav.step1.detail'], 'Import & identify late candidates');", 'workflow EN step1 detail')
+          s = replace_once(s, "assert.strictEqual(french['step1.title'], 'Étape 1 — Importer l’historique des envois');", "assert.strictEqual(french['step1.title'], 'Étape 1 — Importer et repérer les envois en retard');", 'workflow FR step1 title')
+          s = replace_once(s, "assert.strictEqual(french['nav.step1.detail'], 'Importer l’historique des envois');", "assert.strictEqual(french['nav.step1.detail'], 'Importer et repérer les retards');", 'workflow FR step1 detail')
+          insert_after = "assert.doesNotMatch(JSON.stringify({ english, french }), /Import EST history|Importer l.historique EST/i);\n"
+          extra = insert_after + """assert.strictEqual(english['nav.step3.title'], 'Step 2');
+          assert.strictEqual(english['step3.title'], 'Step 2 — Submit Late Candidates');
+          assert.doesNotMatch(html, /id="tabStep2"/);
+          assert.doesNotMatch(html, /id="runTrackingOnly"/);
+          assert.match(renderer, /function mergeTrackingIntoStep1/);
+          assert.match(renderer, /autoTrackingAfterImport[\\s\\S]*?startTrackingOnly/);
+          """
+          s = replace_once(s, insert_after, extra, 'workflow two-step assertions')
+          write(p, s)
+
+          # Final static sanity checks before npm tests.
+          html = read('index.html')
+          renderer = read('renderer.js')
+          updater = read('lib/github-release-updater.js')
+          if 'id="tabStep2"' in html or 'id="runTrackingOnly"' in html:
+              raise SystemExit('standalone tracking UI still present')
+          if 'settings.website.securityNote' in html or 'settings.api.advanced' in html or 'settings.api.metadataPending' in html or 'settings.api.accessNote' in html:
+              raise SystemExit('removed Settings explanatory UI still present')
+          if "Start-Process -FilePath" in updater:
+              raise SystemExit('hidden PowerShell updater trampoline still present')
+          if "shell.openPath(downloadedPath)" not in updater:
+              raise SystemExit('visible Windows installer launch missing')
+          if "window.setTimeout(() => startTrackingOnly(), 0)" not in renderer:
+              raise SystemExit('automatic tracking chain missing')
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate KISS changes
+        run: |
+          npm test
+          npm run test:dev10
+          npm run test:updates
+          npm run test:localization
+          npm run lint
+          npm run lint:dev10
+          npm run typecheck
+      - name: Commit validated product changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "ChatGPT 5.6 Sol"
+          git config user.email "noreply@openai.com"
+          git add index.html renderer.js lib/github-release-updater.js locales/en-CA.json locales/fr-CA.json tests/github-release-updater-test.js tests/ui-contract-test.js tests/workflow-simplification-contract-test.js
+          git commit -m "Simplify settings and combine workflow into two steps"
+          git push origin HEAD:agent/kiss-two-step-workflow
