@@ -319,7 +319,7 @@
   "step2.run": "Exécuter l’étape 2 — Vérifier le suivi",
   "step2.statusTitle": "État de l’étape 2",
   "step2.checked": "Vérifiés",
-  "step2.lateClaims": "En retard / réclamations",
+  "step2.lateClaims": "Candidats en retard",
   "step2.onTime": "À temps",
   "step2.notDelivered": "Non livrés",
   "event.tracking.workload": "{recent} envois récents; {carried} anciens envois en transit reportés; {skipped} envois déjà confirmés à temps ignorés.",

@@ -319,7 +319,7 @@
   "step2.run": "Run Step 1 — Check Tracking",
   "step2.statusTitle": "Step 1 Status",
   "step2.checked": "Checked",
-  "step2.lateClaims": "Late / claims",
+  "step2.lateClaims": "Late candidates",
   "step2.onTime": "On time",
   "step2.notDelivered": "Not delivered",
   "event.tracking.workload": "{recent} recent shipments; {carried} older in-transit shipments carried forward; {skipped} previously confirmed on-time shipments skipped.",
