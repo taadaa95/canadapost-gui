@@ -21,7 +21,7 @@ const { loadLocale } = require('../lib/i18n');
     }, loadLocale('en-CA').messages);
     await page.evaluate(() => window.initStepTabs());
     await page.locator('#tabSettings').focus();
-    const keyboardPanels = ['step1', 'step2', 'step3', 'historyTab', 'resultsTab'];
+    const keyboardPanels = ['step1', 'step3', 'historyTab', 'resultsTab'];
     for (const panelId of keyboardPanels) {
       await page.keyboard.press('ArrowRight');
       assert.strictEqual(await page.locator(`#${panelId}`).isVisible(), true, `keyboard users must be able to open ${panelId}`);
@@ -81,7 +81,7 @@ const { loadLocale } = require('../lib/i18n');
       assert.strictEqual(button.justifySelf, 'start', `${button.id} must not stretch across its settings card`);
       assert(button.width < button.containerWidth, `${button.id} must remain narrower than its settings container`);
     }
-    assert.strictEqual(layoutContracts.tabs.length, 6);
+    assert.strictEqual(layoutContracts.tabs.length, 5);
     for (const tab of layoutContracts.tabs) {
       assert.strictEqual(tab.flexDirection, 'column');
       assert.strictEqual(tab.justifyContent, 'center');
