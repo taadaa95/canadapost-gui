@@ -56,8 +56,8 @@ const { chromium } = require('playwright');
     assert.strictEqual(unread.hidden, false);
 
     await page.evaluate(() => {
-      window.activateTab('step2');
-      document.getElementById('step2Log').replaceChildren();
+      window.activateTab('step1');
+      document.getElementById('step1Log').replaceChildren();
       const base = { terminal: true, rendererOnlyFullTrackingNumber: true, expectedDate: '2026-07-15', firstAttemptDate: '2026-07-15', deliveryDate: '2026-07-17', deliveryStatus: 'Delivered' };
       const events = [
         { ...base, type: 'pin_late', primaryCategory: 'late', displayTrackingNumber: '1111111111111111' },
@@ -69,21 +69,21 @@ const { chromium } = require('playwright');
       for (const event of events) window.__emitAppEvent({ stage: 'tracking', event });
       window.__emitAppEvent({ stage: 'tracking', event: { type: 'tracking_protocol_stage', stage: 'tracking_backoff', category: 'transport_timeout', delayMs: 3100, retryAttempt: 1, maxRetries: 2 } });
     });
-    const liveLog = await page.evaluate(() => [...document.querySelectorAll('#step2Log .log-line')].map(line => ({ text: line.textContent, className: line.className })));
+    const liveLog = await page.evaluate(() => [...document.querySelectorAll('#step1Log .log-line')].map(line => ({ text: line.textContent, className: line.className })));
     for (const pin of ['1111111111111111', '2222222222222222', '3333333333333333', '4444444444444444', '5555555555555555']) {
       assert(liveLog.some(line => line.text.includes(pin)), `full tracking number ${pin} missing from transient UI`);
     }
     for (const status of ['LATE', 'ON TIME', 'NOT DELIVERED', 'REVIEW', 'ERROR', 'RETRY']) assert(liveLog.some(line => line.text.includes(status)), `${status} text indicator missing`);
     for (const cls of ['log-late', 'log-on-time', 'log-not-delivered', 'log-warning', 'log-submit-error', 'log-retry']) assert(liveLog.some(line => line.className.includes(cls)), `${cls} presentation missing`);
     const fullRunLogCount = await page.evaluate(() => {
-      document.getElementById('step2Log').replaceChildren();
+      document.getElementById('step1Log').replaceChildren();
       for (let index = 0; index < 284; index += 1) {
         window.__emitAppEvent({ stage: 'tracking', event: {
           type: 'pin_on_time', terminal: true, primaryCategory: 'on_time', rendererOnlyFullTrackingNumber: true,
           displayTrackingNumber: `77${String(index).padStart(14, '0')}`, expectedDate: '2026-07-15', deliveryDate: '2026-07-15', deliveryStatus: 'Delivered'
         } });
       }
-      return [...document.querySelectorAll('#step2Log .log-line')].filter(line => line.textContent.includes('— ON TIME —')).length;
+      return [...document.querySelectorAll('#step1Log .log-line')].filter(line => line.textContent.includes('— ON TIME —')).length;
     });
     assert.strictEqual(fullRunLogCount, 284, 'a 284-row traversal must show one final line per shipment');
 

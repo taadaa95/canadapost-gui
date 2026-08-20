@@ -39,7 +39,15 @@ assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].so
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
-assert(localizedAttributes.length >= 200, 'major interface text and accessibility attributes must use declarative localization after removing obsolete controls');
+const requiredLocalizedDomKeys = [
+  'nav.settings.title', 'nav.step1.title', 'nav.step3.title', 'nav.history.title', 'nav.results.title',
+  'settings.save', 'step1.title', 'step1.start', 'step1.stop', 'step1.shipmentsImported',
+  'step1.checkedImported', 'step1.importProgress', 'step1.identifyProgress', 'step1.liveLog', 'step3.title'
+];
+assert(localizedAttributes.length > 0, 'interface must retain declarative localization attributes');
+for (const key of requiredLocalizedDomKeys) {
+  assert(localizedAttributes.includes(key), `major localized interface control is missing from the DOM: ${key}`);
+}
 for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
 
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]

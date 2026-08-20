@@ -78,7 +78,8 @@ function assertProductSurfaceCleanup() {
   assert.doesNotMatch(html, /id="tabStep2"/, 'Tracking no longer has a standalone customer-facing tab');
   assert.match(renderer, /function mergeTrackingIntoStep1/);
   assert.match(renderer, /autoTrackingAfterImport/);
-  assert.match(html, /id="forceStopStep2"[^>]*data-force-stop="step2"/);
+  assert.match(html, /id="forceStopStep1"[^>]*data-force-stop="step1"/, 'Step 1 must expose one stop control for both import and tracking');
+  assert.doesNotMatch(html, /id="forceStopStep2"/, 'The removed standalone tracking phase must not expose a second stop button');
 
   assert.ok(!renderer.includes('function reconciliationActionButton('));
   for (const label of ['Mark submitted', 'Mark not submitted', 'Approve retry']) {

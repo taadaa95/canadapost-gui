@@ -18,7 +18,7 @@ const requiredIds = [
   'exportHistory', 'refreshHistory',
   'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'step3AutomationNotice', 'step3AutomationNoticeStatus', 'openStep3Diagnostics', 'setupWizard', 'setupReadinessList', 'setupFinish',
   'trackingClientId', 'trackingClientSecret', 'clearTrackingApiCredentials',
-  'forceStopStep2', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
+  'forceStopStep1', 'step1JumpLatest', 'step3JumpLatest',
   'selectAllClaims', 'clearClaimSelection'
 ];
 for (const id of requiredIds) {
@@ -75,7 +75,8 @@ for (const removedKey of ['step2.freshRun', 'step2.testConnection', 'step2.expor
   assert.ok(!html.includes(`data-i18n="${removedKey}"`), `Removed Step 2 product copy ${removedKey} must stay absent`);
 }
 assert.doesNotMatch(html, /id="runTrackingOnly"/);
-assert.match(html, /id="forceStopStep2"[^>]*data-force-stop="step2"/);
+assert.match(html, /id="forceStopStep1"[^>]*data-force-stop="step1"/);
+assert.doesNotMatch(html, /id="forceStopStep2"/);
 assert.match(main, /const diagnosticMode = options\.diagnosticMode === true/);
 assert.match(preload, /tracking:diagnosticDefaultRow/);
 assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Current credential metadata must not disclose secret lengths');
@@ -146,7 +147,7 @@ for (const [, tabMarkup] of stepTabs) {
   assert.doesNotMatch(tabMarkup, /<br\s*\/?\s*>/i, 'Workflow tab layout must not depend on an extra flex line-break element');
 }
 assert.ok(/\.step-tab,[\s\S]*?\.step-tab\.active\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*gap:\s*4px\s*!important/s.test(styles), 'Workflow tab text must remain vertically centred with explicit title/subtitle spacing');
-for (const id of ['importEstHistory', 'forceStopStep1', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {
+for (const id of ['importEstHistory', 'forceStopStep1', 'runSubmitOnly', 'stop', 'forceStopStep3']) {
   assert.match(html, new RegExp(`id="${id}"[^>]*class="[^"]*step-execution-control`), `${id} must use the shared execution-control class`);
 }
 assert.match(styles, /\.step-execution-control\s*\{[^}]*min-width:\s*108px\s*!important;[^}]*height:\s*48px\s*!important;/s);
