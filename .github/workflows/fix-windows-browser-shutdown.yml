@@ -1,0 +1,101 @@
+name: Fix Windows browser shutdown crash
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test-build:
+    if: github.head_ref == 'agent/kiss-two-step-workflow'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/kiss-two-step-workflow
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply shutdown hardening
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('main.js')
+          s = p.read_text(encoding='utf-8')
+
+          old = """function destroyBuiltinBrowserView() {\n  if (!builtinBrowserView) return;\n  const identityHash = builtinBrowserTargetPublication?.webContentsIdentityHash\n    || targetIdentityHash(`${builtinBrowserView.webContents?.id || ''}:${builtinBrowserTargetNonce}`);\n"""
+          new = """function safeBuiltinBrowserWebContents(view = builtinBrowserView) {\n  if (!view) return null;\n  try {\n    const contents = view.webContents;\n    if (!contents || contents.isDestroyed()) return null;\n    return contents;\n  } catch (_) {\n    return null;\n  }\n}\n\nfunction resetBuiltinBrowserViewState(reason = 'destroyed') {\n  builtinBrowserView = null;\n  builtinBrowserAttached = false;\n  builtinBrowserTargetNonce = '';\n  builtinBrowserTargetPublication = null;\n  builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason, appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });\n}\n\nfunction releaseBuiltinBrowserViewAfterWindowClosed() {\n  // BrowserWindow destruction already destroys child WebContentsViews.\n  // Never touch the native view again from the `closed` callback.\n  resetBuiltinBrowserViewState('window-closed');\n}\n\nfunction destroyBuiltinBrowserView() {\n  const view = builtinBrowserView;\n  if (!view) return;\n  if (!win || win.isDestroyed()) {\n    releaseBuiltinBrowserViewAfterWindowClosed();\n    return;\n  }\n  const contents = safeBuiltinBrowserWebContents(view);\n  const identityHash = builtinBrowserTargetPublication?.webContentsIdentityHash\n    || targetIdentityHash(`${contents?.id || ''}:${builtinBrowserTargetNonce}`);\n"""
+          if old not in s:
+              raise SystemExit('destroyBuiltinBrowserView anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """  try {\n    if (win && !win.isDestroyed() && childViewIndex(builtinBrowserView) >= 0) win.contentView.removeChildView(builtinBrowserView);\n  } catch (_) {}\n  try {\n    if (!builtinBrowserView.webContents.isDestroyed()) builtinBrowserView.webContents.close({ waitForBeforeUnload: false });\n  } catch (_) {\n    try { builtinBrowserView.webContents.destroy(); } catch (_) {}\n  }\n  builtinBrowserView = null;\n  builtinBrowserAttached = false;\n  builtinBrowserTargetNonce = '';\n  builtinBrowserTargetPublication = null;\n  builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason: 'destroyed', appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });\n  emitBrowserDisplayState(browserDisplaySnapshot());\n"""
+          new = """  try {\n    if (childViewIndex(view) >= 0) win.contentView.removeChildView(view);\n  } catch (_) {}\n  if (contents) {\n    try {\n      contents.close({ waitForBeforeUnload: false });\n    } catch (_) {\n      try { contents.destroy(); } catch (_) {}\n    }\n  }\n  resetBuiltinBrowserViewState('destroyed');\n  emitBrowserDisplayState(browserDisplaySnapshot());\n"""
+          if old not in s:
+              raise SystemExit('destroy body anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """  win.on('closed', () => {\n    stopActiveChildForShutdown();\n    setupAssistantController.closeSetupAssistant('renderer-window-closed').catch(() => {});\n    destroyBuiltinBrowserView();\n    win = null;\n  });\n"""
+          new = """  win.on('closed', () => {\n    stopActiveChildForShutdown();\n    setupAssistantController.closeSetupAssistant('renderer-window-closed').catch(() => {});\n    releaseBuiltinBrowserViewAfterWindowClosed();\n    win = null;\n  });\n"""
+          if old not in s:
+              raise SystemExit('closed handler anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """function childViewIndex(view = builtinBrowserView) {\n  const children = win?.contentView?.children;\n  return Array.isArray(children) && view ? children.indexOf(view) : -1;\n}\n\nfunction browserDisplaySnapshot(overrides = {}) {\n  const bounds = builtinBrowserView && !builtinBrowserView.webContents.isDestroyed()\n    ? normalizeBounds(builtinBrowserView.getBounds())\n    : { x: 0, y: 0, width: 0, height: 0 };\n  return {\n    ok: true,\n    created: Boolean(builtinBrowserView),\n    destroyed: Boolean(builtinBrowserView?.webContents?.isDestroyed()),\n"""
+          new = """function childViewIndex(view = builtinBrowserView) {\n  if (!view || !win) return -1;\n  try {\n    if (win.isDestroyed()) return -1;\n    const children = win.contentView?.children;\n    return Array.isArray(children) ? children.indexOf(view) : -1;\n  } catch (_) {\n    return -1;\n  }\n}\n\nfunction browserDisplaySnapshot(overrides = {}) {\n  const view = builtinBrowserView;\n  const contents = safeBuiltinBrowserWebContents(view);\n  let bounds = { x: 0, y: 0, width: 0, height: 0 };\n  if (view && contents) {\n    try { bounds = normalizeBounds(view.getBounds()); } catch (_) {}\n  }\n  let currentUrl = '';\n  if (contents) {\n    try { currentUrl = contents.getURL(); } catch (_) {}\n  }\n  return {\n    ok: true,\n    created: Boolean(view),\n    destroyed: Boolean(view && !contents),\n"""
+          if old not in s:
+              raise SystemExit('snapshot anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """    currentUrl: builtinBrowserView?.webContents && !builtinBrowserView.webContents.isDestroyed()\n      ? builtinBrowserView.webContents.getURL()\n      : '',\n"""
+          new = """    currentUrl,\n"""
+          if old not in s:
+              raise SystemExit('currentUrl anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/dev10-browser-lifecycle-contract-test.js')
+          t = p.read_text(encoding='utf-8')
+          marker = "assert.match(main, /function releaseBuiltinBrowserViewAfterWindowClosed/);"
+          if marker not in t:
+              insertion = """\nconst closedHandler = main.match(/win\\.on\\('closed'[\\s\\S]*?\\n  \\}\\);/)?.[0] || '';\nassert.ok(closedHandler, 'BrowserWindow closed handler must be present');\nassert.match(closedHandler, /releaseBuiltinBrowserViewAfterWindowClosed\\(\\)/, 'closed handler must only release browser references');\nassert.doesNotMatch(closedHandler, /destroyBuiltinBrowserView\\(\\)/, 'closed handler must not touch an already-destroyed native browser view');\nassert.match(main, /function safeBuiltinBrowserWebContents/);\nassert.match(main, /function releaseBuiltinBrowserViewAfterWindowClosed/);\nconst browserSnapshot = main.match(/function browserDisplaySnapshot\\([\\s\\S]*?\\n\\}/)?.[0] || '';\nassert.match(browserSnapshot, /safeBuiltinBrowserWebContents/, 'browser display snapshots must tolerate destroyed native views');\nassert.doesNotMatch(browserSnapshot, /builtinBrowserView\\.webContents\\.isDestroyed/, 'snapshot must not directly dereference a possibly destroyed native view');\n"""
+              t = t.replace("\nprocess.stdout.write('Dev.10 browser-lifecycle contracts passed.\\n');", insertion + "\nprocess.stdout.write('Dev.10 browser-lifecycle contracts passed.\\n');")
+              p.write_text(t, encoding='utf-8')
+      - run: npm ci
+      - name: Validate shutdown regression
+        run: |
+          node --check main.js
+          node tests/dev10-browser-lifecycle-contract-test.js
+          npm run test:updates
+          npm run lint:dev10
+      - name: Install Electron runtime
+        timeout-minutes: 10
+        run: npx install-electron --no
+      - name: Build Windows test installer
+        run: npm run package:windows
+      - name: Audit packaged application
+        run: npm run package:audit -- dist/packages/win-unpacked
+      - name: Upload Windows test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Canada-Post-Claim-Runner-0.4.3-Windows-shutdown-fix
+          path: dist/packages/*.exe
+          if-no-files-found: error
+          retention-days: 7
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add main.js tests/dev10-browser-lifecycle-contract-test.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Fix Windows browser shutdown crash"
+          git push origin HEAD:agent/kiss-two-step-workflow
