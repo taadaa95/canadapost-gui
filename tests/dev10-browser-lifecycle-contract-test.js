@@ -47,4 +47,14 @@ assert.match(main, /emitBuiltinBrowserActivity\(false, 'Canada Post loaded'\)/);
 assert.match(queue, /if \(isExecutable\(item\)\) selected\.add/);
 assert.match(queue, /if \(!item \|\| !isExecutable\(item\)\)/);
 
+const closedHandler = main.match(/win\.on\('closed'[\s\S]*?\n  \}\);/)?.[0] || '';
+assert.ok(closedHandler, 'BrowserWindow closed handler must be present');
+assert.match(closedHandler, /releaseBuiltinBrowserViewAfterWindowClosed\(\)/, 'closed handler must only release browser references');
+assert.doesNotMatch(closedHandler, /destroyBuiltinBrowserView\(\)/, 'closed handler must not touch an already-destroyed native browser view');
+assert.match(main, /function safeBuiltinBrowserWebContents/);
+assert.match(main, /function releaseBuiltinBrowserViewAfterWindowClosed/);
+const browserSnapshot = main.match(/function browserDisplaySnapshot\([\s\S]*?\n\}/)?.[0] || '';
+assert.match(browserSnapshot, /safeBuiltinBrowserWebContents/, 'browser display snapshots must tolerate destroyed native views');
+assert.doesNotMatch(browserSnapshot, /builtinBrowserView\.webContents\.isDestroyed/, 'snapshot must not directly dereference a possibly destroyed native view');
+
 process.stdout.write('Dev.10 browser-lifecycle contracts passed.\n');
