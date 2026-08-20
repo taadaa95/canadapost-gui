@@ -59,19 +59,29 @@ jobs:
               elif new not in s:
                   raise SystemExit(f'UI contract anchor not found: {old}')
           p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/live-log-layout-test.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("window.activateTab('step2');\n      document.getElementById('step2Log').replaceChildren();", "window.activateTab('step1');\n      document.getElementById('step1Log').replaceChildren();")
+          s = s.replace("document.querySelectorAll('#step2Log .log-line')", "document.querySelectorAll('#step1Log .log-line')")
+          s = s.replace("document.getElementById('step2Log').replaceChildren();", "document.getElementById('step1Log').replaceChildren();")
+          if 'step2Log' in s:
+              raise SystemExit('stale step2Log reference remains in live-log-layout-test')
+          p.write_text(s, encoding='utf-8')
       - run: npm ci
       - name: Install Chromium for browser-backed tests
         run: npx playwright install --with-deps chromium
       - run: node tests/localization-test.js
       - run: node tests/product-ui-cleanup-test.js
       - run: node tests/ui-contract-test.js
+      - run: node tests/live-log-layout-test.js
       - run: npm test
       - name: Commit validated test contracts
         shell: bash
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add tests/localization-test.js tests/product-ui-cleanup-test.js tests/ui-contract-test.js
+          git add tests/localization-test.js tests/product-ui-cleanup-test.js tests/ui-contract-test.js tests/live-log-layout-test.js
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "Update tests for simplified two-step workflow"
           git push origin HEAD:agent/kiss-two-step-workflow
