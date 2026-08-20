@@ -21,26 +21,40 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Replace brittle localization count contract
+      - name: Update simplified-workflow test contracts
         shell: python
         run: |
           from pathlib import Path
+
           p = Path('tests/localization-test.js')
           s = p.read_text(encoding='utf-8')
           old = "assert(localizedAttributes.length >= 200, 'major interface text and accessibility attributes must use declarative localization after removing obsolete controls');\n"
           new = """const requiredLocalizedDomKeys = [\n  'nav.settings.title', 'nav.step1.title', 'nav.step3.title', 'nav.history.title', 'nav.results.title',\n  'settings.save', 'step1.title', 'step1.start', 'step1.stop', 'step1.shipmentsImported',\n  'step1.checkedImported', 'step1.importProgress', 'step1.identifyProgress', 'step1.liveLog', 'step3.title'\n];\nassert(localizedAttributes.length > 0, 'interface must retain declarative localization attributes');\nfor (const key of requiredLocalizedDomKeys) {\n  assert(localizedAttributes.includes(key), `major localized interface control is missing from the DOM: ${key}`);\n}\n"""
-          if old not in s:
-              raise SystemExit('old localization threshold not found')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'const requiredLocalizedDomKeys = [' not in s:
+              raise SystemExit('localization contract anchor not found')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/product-ui-cleanup-test.js')
+          s = p.read_text(encoding='utf-8')
+          old = "  assert.match(html, /id=\"forceStopStep2\"[^>]*data-force-stop=\"step2\"/);\n"
+          new = """  assert.match(html, /id=\"forceStopStep1\"[^>]*data-force-stop=\"step1\"/, 'Step 1 must expose one stop control for both import and tracking');\n  assert.doesNotMatch(html, /id=\"forceStopStep2\"/, 'The removed standalone tracking phase must not expose a second stop button');\n"""
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'The removed standalone tracking phase must not expose a second stop button' not in s:
+              raise SystemExit('product cleanup stop-button anchor not found')
+          p.write_text(s, encoding='utf-8')
       - run: npm ci
       - run: node tests/localization-test.js
+      - run: node tests/product-ui-cleanup-test.js
       - run: npm test
-      - name: Commit validated test contract
+      - name: Commit validated test contracts
         shell: bash
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add tests/localization-test.js
+          git add tests/localization-test.js tests/product-ui-cleanup-test.js
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Update localization contract for simplified workflow"
+          git commit -m "Update tests for simplified two-step workflow"
           git push origin HEAD:agent/kiss-two-step-workflow
