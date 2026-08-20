@@ -11,7 +11,7 @@ jobs:
   fix-test:
     if: github.head_ref == 'agent/kiss-two-step-workflow'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +60,8 @@ jobs:
                   raise SystemExit(f'UI contract anchor not found: {old}')
           p.write_text(s, encoding='utf-8')
       - run: npm ci
+      - name: Install Chromium for browser-backed tests
+        run: npx playwright install --with-deps chromium
       - run: node tests/localization-test.js
       - run: node tests/product-ui-cleanup-test.js
       - run: node tests/ui-contract-test.js
