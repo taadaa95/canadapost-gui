@@ -86,7 +86,7 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
   return { fileSystem, hashFile, files, calls, counts };
 }
 
-assert.strictEqual(require('../package.json').version, '0.4.3');
+assert.strictEqual(require('../package.json').version, '0.4.4');
 const updaterUiText = [
   fs.readFileSync(path.join(__dirname, '..', 'lib', 'github-release-updater.js'), 'utf8'),
   fs.readFileSync(path.join(__dirname, '..', 'locales', 'en-CA.json'), 'utf8'),

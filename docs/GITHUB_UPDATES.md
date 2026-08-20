@@ -48,11 +48,11 @@ Stable 0.4.1 publishes Linux x64 and Windows x64 binaries, their legacy Dev 10 c
 - `package-manifest-windows.json`
 - `SHA256SUMS.txt`
 
-Version 0.4.3 must not be published until Kris approves the exact packages intended for publication:
+Version 0.4.4 must not be published until Kris approves the exact packages intended for publication:
 
-- `Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage`
-- `Canada.Post.Claim.Runner-0.4.3-win-x64.exe`
-- `Canada.Post.Claim.Runner-0.4.3-mac-universal.dmg` only if Developer ID signed and notarized
+- `Canada.Post.Claim.Runner-0.4.4-linux-x86_64.AppImage`
+- `Canada.Post.Claim.Runner-0.4.4-win-x64.exe`
+- `Canada.Post.Claim.Runner-0.4.4-mac-universal.dmg` only if Developer ID signed and notarized
 
 SBOM, licence inventory, provenance, and package-audit reports remain internal metadata rather than public download clutter.
 

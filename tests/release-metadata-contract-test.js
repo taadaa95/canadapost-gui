@@ -12,7 +12,7 @@ const {
   validateReleaseMetadata
 } = require('../scripts/finalize-artifacts');
 
-const VERSION = '0.4.3';
+const VERSION = '0.4.4';
 const SOURCE_SHA = 'a'.repeat(40);
 
 function primary(platform) {

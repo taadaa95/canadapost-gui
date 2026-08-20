@@ -1,6 +1,6 @@
 # Canada Post Claim Runner
 
-Current public stable version: **0.4.2** for Linux x64 and Windows x64. Version **0.4.3** is the next release candidate and remains unpublished until the exact canonical packages are validated. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
+Current public stable version: **0.4.3** for Linux x64 and Windows x64. Version **0.4.4** is the next release candidate and remains unpublished until the exact canonical packages are validated. `OPERATING_GUIDE.md` is the authoritative operator guide; development checkpoint reports remain historical.
 
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 

@@ -1,5 +1,15 @@
 # Release notes
 
+## Canada Post Claim Runner 0.4.4 — workflow simplification and Windows shutdown fix
+
+- Prevents the Windows `Object has been destroyed` JavaScript error when closing Claim Runner after a successful claim submission by making built-in browser shutdown idempotent and safe after Electron has already destroyed the native browser object.
+- Adds a Windows browser-lifecycle regression contract for the close-after-submission path.
+- Simplifies the customer workflow to two visible steps: shipment-history import automatically continues into Tracking API classification, followed by claim submission.
+- Simplifies Settings and saved-credential presentation while preserving encrypted credential storage and existing security boundaries.
+- Keeps saved credentials masked in the UI and retains the guided Canada Post Setup persistence fixes from 0.4.3.
+- Makes Windows update installation launch the downloaded installer visibly instead of appearing to do nothing.
+- Retains database schema version 8.
+
 ## Canada Post Claim Runner 0.4.3 — Windows Guided Setup fixes
 
 - Corrects the Settings credential-status banner so saved website credentials remain green while missing Tracking API credentials are shown independently as an error.
@@ -40,7 +50,7 @@
 - Standardizes the Step 1, Step 2, and Step 3 run/stop controls as one compact button family and adds a clear Step 3 information panel explaining that Claim Runner controls the browser automatically and pauses when login, verification, or CAPTCHA input is required.
 - Retains database schema version 8.
 
-Entries below preserve earlier release and development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for the current 0.4.3 candidate.
+Entries below preserve earlier release and development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for the current 0.4.4 candidate.
 
 ## Canada Post Claim Runner 0.4.1 — stable
 
