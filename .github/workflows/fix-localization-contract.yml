@@ -45,16 +45,31 @@ jobs:
           elif 'The removed standalone tracking phase must not expose a second stop button' not in s:
               raise SystemExit('product cleanup stop-button anchor not found')
           p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/ui-contract-test.js')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              "  'forceStopStep2', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',\n": "  'forceStopStep1', 'step1JumpLatest', 'step3JumpLatest',\n",
+              "assert.match(html, /id=\"forceStopStep2\"[^>]*data-force-stop=\"step2\"/);\n": "assert.match(html, /id=\"forceStopStep1\"[^>]*data-force-stop=\"step1\"/);\nassert.doesNotMatch(html, /id=\"forceStopStep2\"/);\n",
+              "for (const id of ['importEstHistory', 'forceStopStep1', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {\n": "for (const id of ['importEstHistory', 'forceStopStep1', 'runSubmitOnly', 'stop', 'forceStopStep3']) {\n",
+          }
+          for old, new in replacements.items():
+              if old in s:
+                  s = s.replace(old, new, 1)
+              elif new not in s:
+                  raise SystemExit(f'UI contract anchor not found: {old}')
+          p.write_text(s, encoding='utf-8')
       - run: npm ci
       - run: node tests/localization-test.js
       - run: node tests/product-ui-cleanup-test.js
+      - run: node tests/ui-contract-test.js
       - run: npm test
       - name: Commit validated test contracts
         shell: bash
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add tests/localization-test.js tests/product-ui-cleanup-test.js
+          git add tests/localization-test.js tests/product-ui-cleanup-test.js tests/ui-contract-test.js
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "Update tests for simplified two-step workflow"
           git push origin HEAD:agent/kiss-two-step-workflow
