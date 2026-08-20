@@ -14,4 +14,4 @@ Canonical release candidates:
 - Linux x64: `Canada.Post.Claim.Runner-0.4.4-linux-x86_64.AppImage`
 - Windows x64: `Canada.Post.Claim.Runner-0.4.4-win-x64.exe`
 
-The exact public binaries must come from the reviewed 0.4.4 canonical release source commit and pass the existing automated release checks.
+The exact public binaries must come from the reviewed 0.4.4 canonical release source commit and pass the existing automated release checks. Physical Windows validation of the exact public installer remains a post-publication manual check.
