@@ -11,7 +11,7 @@ jobs:
   fix-test:
     if: github.head_ref == 'agent/kiss-two-step-workflow'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,10 +21,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Update simplified-workflow test contracts
+      - name: Update simplified-workflow contracts and clean Step 1 CSS
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           p = Path('tests/localization-test.js')
           s = p.read_text(encoding='utf-8')
@@ -68,6 +69,114 @@ jobs:
           if 'step2Log' in s:
               raise SystemExit('stale step2Log reference remains in live-log-layout-test')
           p.write_text(s, encoding='utf-8')
+
+          p = Path('renderer/base.css')
+          s = p.read_text(encoding='utf-8')
+          marker = '/* Step 1 KISS two-phase layout */'
+          if marker not in s:
+              raise SystemExit('Step 1 KISS CSS marker not found')
+          clean = r'''/* Step 1 KISS two-phase layout */
+#step1.step-panel.active {
+  gap: 16px !important;
+}
+
+#step1 .step1-simple-top {
+  display: block !important;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+#step1 .step1-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  min-height: 0;
+}
+
+#step1 .step1-heading-copy { min-width: 0; }
+#step1 .step1-heading-copy h2 { margin: 0 0 6px; }
+
+#step1 .step-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 760px;
+}
+
+#step1 .step1-primary-actions {
+  flex-wrap: nowrap !important;
+  width: auto;
+  overflow: visible;
+}
+
+#step1 .step1-primary-actions .step-execution-control {
+  width: 132px !important;
+  min-width: 132px !important;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+#step1 .step1-workspace {
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  gap: 14px !important;
+}
+
+#step1 .step1-status-card {
+  grid-template-rows: auto auto auto minmax(56px, auto);
+  overflow: auto !important;
+}
+
+#step1 .step1-status-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+#step1 .step1-status-heading h2 { margin: 0; }
+
+#step1 .step1-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto;
+  gap: 10px;
+  height: auto;
+  margin: 0;
+}
+
+#step1 .step1-status-grid .stat {
+  min-height: 82px;
+  height: auto;
+}
+
+#step1 .step1-ratio {
+  font-size: 24px;
+  white-space: nowrap;
+}
+
+#step1 .step1-progress-stack {
+  display: grid;
+  gap: 10px;
+}
+
+#step1 .step1-progress-stack .progress-wrap { margin: 0; }
+
+@media (max-width: 1050px) {
+  #step1.step-panel.active { overflow: auto !important; }
+  #step1 .step1-title-row,
+  #step1 .step1-workspace { grid-template-columns: minmax(0, 1fr); }
+  #step1 .step1-primary-actions { justify-content: flex-start !important; }
+  #step1 .step1-workspace { overflow: visible !important; }
+}
+'''
+          s = s[:s.index(marker)] + clean
+          p.write_text(s, encoding='utf-8')
       - run: npm ci
       - name: Install Chromium for browser-backed tests
         run: npx playwright install --with-deps chromium
@@ -75,13 +184,15 @@ jobs:
       - run: node tests/product-ui-cleanup-test.js
       - run: node tests/ui-contract-test.js
       - run: node tests/live-log-layout-test.js
+      - run: node tests/step1-kiss-layout-test.js
+      - run: node tests/architecture-decomposition-test.js
       - run: npm test
-      - name: Commit validated test contracts
+      - name: Commit validated cleanup
         shell: bash
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add tests/localization-test.js tests/product-ui-cleanup-test.js tests/ui-contract-test.js tests/live-log-layout-test.js
+          git add renderer/base.css tests/localization-test.js tests/product-ui-cleanup-test.js tests/ui-contract-test.js tests/live-log-layout-test.js
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Update tests for simplified two-step workflow"
+          git commit -m "Clean two-step workflow contracts and Step 1 layout CSS"
           git push origin HEAD:agent/kiss-two-step-workflow
