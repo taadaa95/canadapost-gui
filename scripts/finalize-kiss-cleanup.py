@@ -62,10 +62,10 @@ marker = '/* Step 1 KISS two-phase layout */'
 if marker not in s:
     raise SystemExit('Step 1 CSS marker missing')
 clean = r'''/* Step 1 KISS two-phase layout */
-#step1.step-panel.active { gap: 16px !important; }
+#step1.step-panel.active { gap: 16px; }
 
 #step1 .step1-simple-top {
-  display: block !important;
+  display: block;
   height: auto;
   min-height: 0;
   max-height: none;
@@ -85,7 +85,7 @@ clean = r'''/* Step 1 KISS two-phase layout */
 #step1 .step-description { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; max-width: 760px; }
 
 #step1 .step1-primary-actions {
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
   width: auto;
   overflow: visible;
 }
@@ -101,12 +101,12 @@ clean = r'''/* Step 1 KISS two-phase layout */
 
 #step1 .step1-workspace {
   grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
-  gap: 14px !important;
+  gap: 14px;
 }
 
 #step1 .step1-status-card {
   grid-template-rows: auto auto auto minmax(56px, auto);
-  overflow: auto !important;
+  overflow: auto;
 }
 
 #step1 .step1-status-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -118,11 +118,13 @@ clean = r'''/* Step 1 KISS two-phase layout */
 #step1 .step1-progress-stack .progress-wrap { margin: 0; }
 
 @media (max-width: 1050px) {
-  #step1.step-panel.active { overflow: auto !important; }
+  #step1.step-panel.active { overflow: auto; }
   #step1 .step1-title-row,
   #step1 .step1-workspace { grid-template-columns: minmax(0, 1fr); }
-  #step1 .step1-primary-actions { justify-content: flex-start !important; }
-  #step1 .step1-workspace { overflow: visible !important; }
+  #step1 .step1-primary-actions { justify-content: flex-start; }
+  #step1 .step1-workspace { overflow: visible; }
 }
 '''
-p.write_text(s[:s.index(marker)] + clean, encoding='utf-8')
+final_css = s[:s.index(marker)] + clean
+p.write_text(final_css, encoding='utf-8')
+print(f'base.css !important count after cleanup: {final_css.count("!important")}')
