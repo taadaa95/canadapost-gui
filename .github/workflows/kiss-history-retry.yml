@@ -23,7 +23,7 @@ jobs:
           cache: npm
       - name: Apply KISS History changes
         run: python scripts/apply-kiss-history-retry.py
-      - name: Correct empty-locale History assertion
+      - name: Correct transformed History assertions
         shell: bash
         run: |
           python - <<'PY'
@@ -34,7 +34,12 @@ jobs:
           new = "    assert.strictEqual(await page.locator('#historyList .history-row.history-status-submitted').filter({ hasText: 'RETRY-SUCCESS' }).count(), 1);"
           if old not in s:
               raise SystemExit('expected retry success assertion not found')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          s = s.replace(old, new, 1)
+          hidden_filter = "      await window.refreshHistory();\n    });\n    await page.locator('#historyStatusFilter').selectOption('all');\n    assert.strictEqual(await page.locator('#historyList').getByText('NEW-HISTORY-RECORD', { exact: true }).count(), 1, 'History did not display a newly refreshed record');"
+          hidden_filter_fixed = "      await window.refreshHistory();\n    });\n    assert.strictEqual(await page.locator('#historyList').getByText('NEW-HISTORY-RECORD', { exact: true }).count(), 1, 'History did not display a newly refreshed record');"
+          if hidden_filter not in s:
+              raise SystemExit('expected hidden History filter assertion not found')
+          p.write_text(s.replace(hidden_filter, hidden_filter_fixed, 1), encoding='utf-8')
           PY
       - name: Remove temporary transform
         run: rm scripts/apply-kiss-history-retry.py
