@@ -49,6 +49,19 @@ jobs:
           if old not in s:
               raise SystemExit('expected stale History localization assertion not found')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          p = Path('tests/ui-contract-test.js')
+          s = p.read_text(encoding='utf-8')
+          old = "  'historySearch', 'historyStatusFilter', 'clearHistoryFilters', 'reconciliationList',"
+          new = "  'historySearch', 'clearHistoryFilters', 'reconciliationList',"
+          if old not in s:
+              raise SystemExit('expected stale History UI removed-ID assertion not found')
+          s = s.replace(old, new, 1)
+          anchor = "for (const removedId of [\n  'historySearch', 'clearHistoryFilters', 'reconciliationList',\n  'reconciliationCountPill', 'addManualShipment', 'manualShipmentList',\n  'historyClassificationList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus'\n]) assert.ok(!historyMarkup.includes(`id=\"${removedId}\"`), `History must not retain #${removedId}`);"
+          replacement = anchor + "\nassert.strictEqual((historyMarkup.match(/id=\"historyStatusFilter\"/g) || []).length, 1, 'History must contain exactly one simple status filter');"
+          if anchor not in s:
+              raise SystemExit('expected History UI contract anchor not found')
+          p.write_text(s.replace(anchor, replacement, 1), encoding='utf-8')
           PY
       - name: Remove temporary transform
         run: rm scripts/apply-kiss-history-retry.py
