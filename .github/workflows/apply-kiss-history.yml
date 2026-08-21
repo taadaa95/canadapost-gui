@@ -23,7 +23,9 @@ jobs:
           cache: npm
       - name: Apply History transformation
         shell: pwsh
-        run: python scripts/apply-kiss-history.py
+        run: |
+          python scripts/apply-kiss-history.py
+          python scripts/fix-kiss-history-generated-test.py
       - run: npm ci
       - run: npx install-electron --no
       - run: npx playwright install chromium
