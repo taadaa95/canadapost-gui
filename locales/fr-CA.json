@@ -1117,5 +1117,18 @@
   "step1.simpleDescription": "Importer l’historique des envois, puis identifier automatiquement les candidats livrés en retard.",
   "step1.checkedImported": "Vérifiés / importés",
   "step1.importProgress": "Progression de l’importation",
-  "step1.identifyProgress": "Progression des candidats en retard"
+  "step1.identifyProgress": "Progression des candidats en retard",
+  "history.filter.label": "Statut",
+  "history.filter.all": "Tous",
+  "history.filter.submitted": "Soumises",
+  "history.filter.needsAttention": "Attention requise",
+  "history.filter.failed": "Échouées",
+  "history.filter.alreadySubmitted": "Déjà soumises",
+  "history.filter.rejected": "Rejetées",
+  "history.retryStep2": "Réessayer à l’étape 2",
+  "history.retryConfirm": "Réessayer cette réclamation à l’étape 2? Continuez seulement si la tentative précédente n’a pas été soumise avec succès.",
+  "history.retryFailed": "Impossible de préparer cette réclamation pour l’étape 2.",
+  "history.retryQueueFailed": "Impossible d’actualiser la file de l’étape 2.",
+  "history.retryUnavailable": "Cette réclamation n’est pas disponible à l’étape 2. Exécutez de nouveau l’étape 1, puis réessayez.",
+  "history.noMatchingAttempts": "Aucun élément de l’historique ne correspond à ce statut."
 }

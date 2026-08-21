@@ -1117,5 +1117,18 @@
   "step1.simpleDescription": "Import shipping history, then automatically identify late-delivery candidates.",
   "step1.checkedImported": "Checked / imported",
   "step1.importProgress": "Import progress",
-  "step1.identifyProgress": "Late-candidate progress"
+  "step1.identifyProgress": "Late-candidate progress",
+  "history.filter.label": "Status",
+  "history.filter.all": "All",
+  "history.filter.submitted": "Submitted",
+  "history.filter.needsAttention": "Needs attention",
+  "history.filter.failed": "Failed",
+  "history.filter.alreadySubmitted": "Already submitted",
+  "history.filter.rejected": "Rejected",
+  "history.retryStep2": "Retry in Step 2",
+  "history.retryConfirm": "Retry this claim in Step 2? Only continue if the previous attempt did not submit successfully.",
+  "history.retryFailed": "Could not prepare this claim for Step 2.",
+  "history.retryQueueFailed": "The Step 2 queue could not be refreshed.",
+  "history.retryUnavailable": "This claim is not currently available in Step 2. Run Step 1 again, then retry.",
+  "history.noMatchingAttempts": "No claim history records match this status."
 }

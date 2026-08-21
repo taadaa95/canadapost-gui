@@ -307,6 +307,18 @@
           <div class="stat"><div id="historyRecordTotal" class="num">0</div><div class="label" data-i18n="history.totalRecords"></div></div>
         </div>
 
+        <div class="history-filter-row">
+          <label for="historyStatusFilter" data-i18n="history.filter.label"></label>
+          <select id="historyStatusFilter">
+            <option value="all" data-i18n="history.filter.all"></option>
+            <option value="submitted" data-i18n="history.filter.submitted"></option>
+            <option value="needs_attention" data-i18n="history.filter.needsAttention"></option>
+            <option value="failed" data-i18n="history.filter.failed"></option>
+            <option value="already_submitted" data-i18n="history.filter.alreadySubmitted"></option>
+            <option value="rejected" data-i18n="history.filter.rejected"></option>
+          </select>
+        </div>
+
         <div class="history-content">
           <div class="history-section">
             <div class="history-section-head"><h3 data-i18n="history.claimAttempts"></h3><span id="historyResultCount" class="pill" role="status" aria-live="polite" data-i18n="history.zeroRecords"></span></div>

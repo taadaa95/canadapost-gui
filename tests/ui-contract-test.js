@@ -99,10 +99,11 @@ assert.doesNotMatch(`${renderer}\n${preload}\n${main}`, /listManualReviews|updat
   'eligibility manual-review renderer and IPC APIs must be absent');
 const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?.[0] || '';
 for (const removedId of [
-  'historySearch', 'historyStatusFilter', 'clearHistoryFilters', 'reconciliationList',
+  'historySearch', 'clearHistoryFilters', 'reconciliationList',
   'reconciliationCountPill', 'addManualShipment', 'manualShipmentList',
   'historyClassificationList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus'
 ]) assert.ok(!historyMarkup.includes(`id="${removedId}"`), `History must not retain #${removedId}`);
+assert.strictEqual((historyMarkup.match(/id="historyStatusFilter"/g) || []).length, 1, 'History must contain exactly one simple status filter');
 assert.doesNotMatch(historyMarkup, /Reconciliation Queue|Manually add|classification records/i);
 const settingsMarkup = html.match(/<section id="settingsTab"[\s\S]*?<section id="step1"/)?.[0] || '';
 for (const id of ['trackingApiEnvironment', 'createBackup', 'restoreBackup', 'manageStoredData', 'createDiagnostics']) {

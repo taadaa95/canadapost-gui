@@ -3834,3 +3834,43 @@ body.page-scroll-layout .history-panel.active {
   #step1 .step1-primary-actions { justify-content: flex-start; }
   #step1 .step1-workspace { overflow: visible; }
 }
+
+
+/* KISS History status states */
+.history-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.history-filter-row label {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+#historyStatusFilter {
+  width: auto;
+  min-width: 220px;
+  height: 36px;
+}
+
+.history-row.history-status-submitted {
+  background: var(--success-soft);
+  border-left: 4px solid var(--success);
+}
+
+.history-row.history-status-already {
+  background: var(--accent-soft);
+  border-left: 4px solid var(--info);
+}
+
+.history-row.history-status-failed {
+  background: var(--danger-soft);
+  border-left: 4px solid var(--danger);
+}
+
+.history-row.history-status-attention {
+  background: var(--warning-soft);
+  border-left: 4px solid var(--warning);
+}

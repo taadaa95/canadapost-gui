@@ -815,7 +815,7 @@ function localizedInterfaceValue(value) {
     Resuming: 'outcome.resuming', Done: 'outcome.done', 'Runner error': 'event.runnerError',
     submitted: 'outcome.submitted', submitted_manual: 'history.status.submittedManual', already_submitted: 'outcome.alreadySubmitted',
     failed: 'outcome.failed', unknown: 'history.status.unknown', not_submitted: 'history.status.notSubmitted',
-    retry_approved: 'history.status.retryApproved', dry_run_ready: 'history.status.dryRunReady', dry_run_interrupted: 'history.status.dryRunInterrupted'
+    retry_approved: 'history.status.retryApproved', rejected: 'outcome.rejected', dry_run_ready: 'history.status.dryRunReady', dry_run_interrupted: 'history.status.dryRunInterrupted'
   };
   return keys[text] ? tr(keys[text], text) : (text || '—');
 }
@@ -1812,6 +1812,8 @@ function describeEvent(stage, event) {
 }
 
 
+let historyItems = [];
+
 function historyDate(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -1823,6 +1825,48 @@ function historyCell(text, className = '') {
   cell.className = className;
   cell.textContent = text === undefined || text === null || text === '' ? '—' : String(text);
   return cell;
+}
+
+function historyStatus(item = {}) {
+  return String(item.status || '').toLowerCase();
+}
+
+function historyMatchesFilter(item, filter) {
+  const status = historyStatus(item);
+  if (!filter || filter === 'all') return true;
+  if (filter === 'submitted') return ['submitted', 'submitted_manual'].includes(status);
+  if (filter === 'needs_attention') return item.needsAttention === true;
+  if (filter === 'failed') return status === 'failed';
+  return status === filter;
+}
+
+function historyRowClasses(item = {}) {
+  const classes = ['history-row'];
+  const status = historyStatus(item);
+  if (['submitted', 'submitted_manual'].includes(status)) classes.push('history-status-submitted');
+  if (status === 'already_submitted') classes.push('history-status-already');
+  if (status === 'failed' || status === 'rejected') classes.push('history-status-failed');
+  if (item.needsAttention === true) classes.push('history-status-attention');
+  return classes.join(' ');
+}
+
+function historyCanRetry(item = {}) {
+  const status = historyStatus(item);
+  return item.needsAttention === true || status === 'failed';
+}
+
+function updateHistorySummary(data = {}) {
+  setText('historySubmitted', data.submitted || 0);
+  setText('historyNeedsAttention', data.reconciliation || 0);
+  setText('historyRecordTotal', data.historyRecords || 0);
+}
+
+function historySummaryFromItems(items = []) {
+  return {
+    submitted: items.filter(item => ['submitted', 'submitted_manual'].includes(historyStatus(item))).length,
+    reconciliation: items.filter(item => item.needsAttention === true).length,
+    historyRecords: items.length
+  };
 }
 
 function setHistoryRecordState(root, state) {
@@ -1843,26 +1887,72 @@ function renderHistoryRecordMessage(rootId, message, state = 'error') {
   root.appendChild(notice);
 }
 
+async function retryHistoryItemInStep2(item) {
+  if (!historyCanRetry(item)) return;
+  const status = historyStatus(item);
+  if (item.needsAttention === true && ['unknown', 'in_progress'].includes(status)) {
+    const confirmed = window.confirm(tr('history.retryConfirm', 'Retry this claim in Step 2? Only continue if the previous attempt did not submit successfully.'));
+    if (!confirmed) return;
+  }
+
+  const result = await window.cpApp.reconcileAttempt({
+    attemptId: item.id,
+    action: 'retry',
+    note: 'Retry requested from History'
+  });
+  if (!result?.ok) {
+    window.alert(result?.error || tr('history.retryFailed', 'Could not prepare this claim for Step 2.'));
+    return;
+  }
+
+  state.claimQueueLoaded = false;
+  const queue = await refreshClaimQueue();
+  if (!queue?.ok) {
+    await refreshHistory();
+    window.alert(queue?.error || tr('history.retryQueueFailed', 'The Step 2 queue could not be refreshed.'));
+    return;
+  }
+
+  const candidate = state.claimQueueItems.find(candidateItem => (
+    String(candidateItem.trackingNumber || '') === String(item.trackingNumber || '')
+  ));
+  if (!candidate) {
+    await refreshHistory();
+    window.alert(tr('history.retryUnavailable', 'This claim is not currently available in Step 2. Run Step 1 again, then retry.'));
+    return;
+  }
+
+  step3QueueController.set(candidate.recordId, true);
+  renderClaimQueue(state.claimQueueItems, true);
+  await refreshHistory();
+  activateTab('step3');
+}
+
 function renderHistory(items = []) {
   const root = $('historyList');
   if (!root) return;
-  setHistoryRecordState(root, items.length ? '' : 'empty');
-  setLocalizedText($('historyResultCount'), items.length === 1 ? 'history.oneRecord' : 'history.recordCount', { count: items.length }, items.length === 1 ? '1 record' : '{count} records');
+  historyItems = Array.isArray(items) ? items.slice() : [];
+  const filter = $('historyStatusFilter')?.value || 'all';
+  const visibleItems = historyItems.filter(item => historyMatchesFilter(item, filter));
+  setHistoryRecordState(root, visibleItems.length ? '' : 'empty');
+  setLocalizedText($('historyResultCount'), visibleItems.length === 1 ? 'history.oneRecord' : 'history.recordCount', { count: visibleItems.length }, visibleItems.length === 1 ? '1 record' : '{count} records');
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'history-row head';
   ['common.tracking', 'history.attemptTime', 'common.status', 'history.confirmation', 'history.message'].forEach(key => head.appendChild(historyCell(tr(key))));
   root.appendChild(head);
-  if (!items.length) {
+  if (!visibleItems.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = tr('history.noAttempts', 'No claim history records yet.');
+    empty.textContent = historyItems.length
+      ? tr('history.noMatchingAttempts', 'No claim history records match this status.')
+      : tr('history.noAttempts', 'No claim history records yet.');
     root.appendChild(empty);
     return;
   }
-  for (const item of items) {
+  for (const item of visibleItems) {
     const row = document.createElement('div');
-    row.className = 'history-row';
+    row.className = historyRowClasses(item);
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
     row.appendChild(historyCell(item.needsAttention ? tr('history.needsAttention', 'Needs attention') : localizedInterfaceValue(item.status)));
@@ -1897,6 +1987,14 @@ function renderHistory(items = []) {
       });
       actions.appendChild(button);
     }
+    if (historyCanRetry(item)) {
+      const retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = item.needsAttention ? 'warning' : 'secondary';
+      retryButton.textContent = tr('history.retryStep2', 'Retry in Step 2');
+      retryButton.addEventListener('click', () => retryHistoryItemInStep2(item));
+      actions.appendChild(retryButton);
+    }
     if (actions.childElementCount) messageCell.appendChild(actions);
     row.appendChild(messageCell);
     root.appendChild(row);
@@ -1906,20 +2004,15 @@ function renderHistory(items = []) {
 async function refreshHistory() {
   if (!window.cpApp?.listHistory) return;
   renderHistoryRecordMessage('historyList', tr('history.loading', 'Loading claim history…'), 'loading');
-  const [history, dashboard] = await Promise.all([
-    window.cpApp.listHistory({ limit: 500, offset: 0 }),
-    window.cpApp.getDashboard()
-  ]);
-  if (history.ok) renderHistory(history.items || []);
-  else {
+  const history = await window.cpApp.listHistory({ limit: 500, offset: 0, latestOnly: true });
+  if (history.ok) {
+    const items = history.items || [];
+    renderHistory(items);
+    updateHistorySummary(historySummaryFromItems(items));
+  } else {
+    updateHistorySummary({});
     setLocalizedText($('historyResultCount'), 'common.unavailable', {}, 'Unavailable');
     renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
-  }
-  if (dashboard.ok) {
-    const data = dashboard.dashboard || {};
-    setText('historySubmitted', data.submitted || 0);
-    setText('historyNeedsAttention', data.reconciliation || 0);
-    setText('historyRecordTotal', data.historyRecords || 0);
   }
 }
 
@@ -2556,6 +2649,7 @@ $('openStep3Diagnostics')?.addEventListener('click', async () => {
   if (!result?.ok) log(result?.error || tr('diagnostics.noneAvailable', 'No Step 3 diagnostics are available yet.'), 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
+$('historyStatusFilter')?.addEventListener('change', () => renderHistory(historyItems));
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
 $('setupOpenSettings')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); activateTab('settingsTab'); $('webUsername')?.focus(); });
 $('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); });
