@@ -1,0 +1,39 @@
+name: Corrected History Linux test build
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.head_ref == 'agent/history-source-fix-linux-test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact corrected History source
+        uses: actions/checkout@v4
+        with:
+          ref: 031461a3347d2227040ba77989ae7b64987fe8b8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx install-electron --no
+      - run: npm run package:linux
+      - run: npm run package:audit -- dist/packages/linux-unpacked
+      - run: npm run package:size -- dist/packages
+      - name: Verify AppImage
+        shell: bash
+        run: test -f dist/packages/Canada.Post.Claim.Runner-0.4.4-linux-x86_64.AppImage
+      - name: Upload Linux test AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-history-linux-test
+          path: dist/packages/Canada.Post.Claim.Runner-0.4.4-linux-x86_64.AppImage
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 2
