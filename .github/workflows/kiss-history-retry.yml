@@ -23,14 +23,25 @@ jobs:
           cache: npm
       - name: Apply KISS History changes
         run: python scripts/apply-kiss-history-retry.py
+      - name: Correct empty-locale History assertion
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/history-refinement-test.js')
+          s = p.read_text(encoding='utf-8')
+          old = "    assert.strictEqual(await page.locator('#historyList').getByText('Submitted', { exact: true }).count() >= 1, true);"
+          new = "    assert.strictEqual(await page.locator('#historyList .history-row.history-status-submitted').filter({ hasText: 'RETRY-SUCCESS' }).count(), 1);"
+          if old not in s:
+              raise SystemExit('expected retry success assertion not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Remove temporary transform
         run: rm scripts/apply-kiss-history-retry.py
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Focused History contract
         run: node tests/history-kiss-contract-test.js
-      - name: Show History assertion context
-        run: nl -ba tests/history-refinement-test.js | sed -n '165,180p'
       - name: History browser regression
         run: node tests/history-refinement-test.js
       - run: npm test
