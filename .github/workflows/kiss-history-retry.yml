@@ -29,6 +29,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Focused History contract
         run: node tests/history-kiss-contract-test.js
+      - name: Show History assertion context
+        run: nl -ba tests/history-refinement-test.js | sed -n '165,180p'
       - name: History browser regression
         run: node tests/history-refinement-test.js
       - run: npm test
