@@ -141,7 +141,9 @@ assert.ok(!html.includes('id="siteHealthResult"'));
 assert.ok(!Object.hasOwn(english, 'health.run'), 'obsolete manual health-check localization must be removed');
 assert.ok(!Object.hasOwn(french.messages, 'health.run'), 'obsolete manual health-check French localization must be removed');
 for (const locale of [english, french.messages]) {
-  assert.ok(!Object.keys(locale).some(key => key.startsWith('history.filter.')), 'History filter localization must be removed');
+  for (const key of ['history.filter.label', 'history.filter.all', 'history.filter.submitted', 'history.filter.needsAttention', 'history.filter.failed', 'history.filter.alreadySubmitted', 'history.filter.rejected']) {
+    assert.ok(Object.hasOwn(locale, key) && String(locale[key] || '').trim(), `${key} must be localized`);
+  }
   assert.ok(!Object.keys(locale).some(key => key.startsWith('history.manual.')), 'manual-shipment localization must be removed');
   for (const key of ['history.reconciliationQueue', 'history.classifications', 'history.clearFilters']) {
     assert.ok(!Object.hasOwn(locale, key), `${key} must be removed`);

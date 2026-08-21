@@ -31,6 +31,8 @@ const { chromium } = require('playwright');
     window.__historyCalls = [];
     window.__mutationCalls = [];
     window.prompt = () => '';
+    window.confirm = () => true;
+    window.alert = message => { window.__lastAlert = String(message || ''); };
     const ok = async () => ({ ok: true });
     window.cpApp = new Proxy({
       onEvent: () => {}, onRun: () => {}, onStage: () => {}, onBrowserActivity: () => {},
@@ -40,9 +42,22 @@ const { chromium } = require('playwright');
         window.__historyCalls.push({ ...options });
         return { ok: true, items: window.__historyRecords.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 500)) };
       },
-      getDashboard: async () => ({ ok: true, dashboard: { submitted: 333, reconciliation: 1, historyRecords: 500 }, integrity: { ok: true } }),
+      getDashboard: async () => ({ ok: true, dashboard: {
+        submitted: window.__historyRecords.filter(item => ['submitted', 'submitted_manual'].includes(item.status)).length,
+        reconciliation: window.__historyRecords.filter(item => item.needsAttention === true).length,
+        historyRecords: window.__historyRecords.length
+      }, integrity: { ok: true } }),
       getFinancialReport: async () => ({ ok: true, report: { currency: 'CAD', totalsMinor: {}, pendingMinor: 0, recoveryRateBasisPoints: null } }),
-      reconcileAttempt: async value => { window.__mutationCalls.push(['reconcileAttempt', value]); return { ok: true }; }
+      reconcileAttempt: async value => {
+        window.__mutationCalls.push(['reconcileAttempt', value]);
+        const item = window.__historyRecords.find(record => Number(record.id) === Number(value.attemptId));
+        if (item && value.action === 'retry') { item.status = 'retry_approved'; item.needsAttention = false; }
+        return { ok: true };
+      },
+      previewClaims: async () => ({ ok: true, items: [{
+        recordId: 9001, evidenceHash: 'a'.repeat(64), trackingNumber: 'HISTORY000000000000',
+        referenceNumber: 'REFERENCE-0', serviceCode: 'EXP', executionState: 'executable', executable: true
+      }] })
     }, { get: (target, property) => property in target ? target[property] : ok });
   });
 
@@ -97,7 +112,7 @@ const { chromium } = require('playwright');
     }
 
     assert.strictEqual(await page.locator('#historySearch').count(), 0);
-    assert.strictEqual(await page.locator('#historyStatusFilter').count(), 0);
+    assert.strictEqual(await page.locator('#historyStatusFilter').count(), 1);
     assert.strictEqual(await page.locator('#clearHistoryFilters').count(), 0);
     assert.strictEqual(await page.locator('#reconciliationList').count(), 0);
     assert.strictEqual(await page.locator('#manualShipmentList').count(), 0);
@@ -111,14 +126,52 @@ const { chromium } = require('playwright');
     assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark submitted' }).count(), 0);
     assert.strictEqual(await attentionRow.getByRole('button', { name: 'Mark not submitted' }).count(), 0);
     assert.strictEqual(await attentionRow.getByRole('button', { name: 'Approve retry' }).count(), 0);
+    assert.strictEqual(await attentionRow.getByRole('button', { name: 'Retry in Step 2' }).count(), 1);
     const ordinaryRow = page.locator('#historyList .history-row:not(.head)').nth(1);
     assert.strictEqual(await ordinaryRow.locator('.history-actions button').count(), 0,
-      'ordinary History rows must not expose reconciliation actions');
+      'submitted History rows must not expose retry actions');
+    const failedRow = page.locator('#historyList .history-row:not(.head)').nth(3);
+    assert.strictEqual(await failedRow.getByRole('button', { name: 'Retry in Step 2' }).count(), 1,
+      'failed History rows must expose the simple Step 2 retry action');
     assert.strictEqual(await page.evaluate(() => window.__historyRecords.length), 500,
       'History rendering must not delete historical reconciliation records');
     assert.deepStrictEqual(await page.evaluate(() => window.__mutationCalls), [],
       'History rendering must not invoke reconciliation mutation IPC');
     assert.deepStrictEqual(fs.readFileSync(evidencePath), evidence, 'History rendering changed an evidence file');
+    await page.locator('#historyStatusFilter').selectOption('submitted');
+    assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), 333);
+    await page.locator('#historyStatusFilter').selectOption('needs_attention');
+    assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), 1);
+    await page.locator('#historyStatusFilter').selectOption('failed');
+    assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), 166);
+    await page.locator('#historyStatusFilter').selectOption('all');
+
+    assert.strictEqual(await page.locator('#historySubmitted').textContent(), '333');
+    assert.strictEqual(await page.locator('#historyNeedsAttention').textContent(), '1');
+    assert.strictEqual(await page.locator('#historyRecordTotal').textContent(), '500');
+
+    await attentionRow.getByRole('button', { name: 'Retry in Step 2' }).click();
+    await page.waitForFunction(() => window.__mutationCalls.length === 1);
+    assert.deepStrictEqual(await page.evaluate(() => window.__mutationCalls[0][1]), {
+      attemptId: 1,
+      action: 'retry',
+      note: 'Retry requested from History'
+    });
+    assert.strictEqual(await page.locator('#tabStep3').getAttribute('aria-selected'), 'true', 'retry should navigate to Step 2');
+    assert.strictEqual(await page.locator('#claimQueueList input[type="checkbox"]:checked').count(), 1, 'retry target should be selected in Step 2');
+    assert.strictEqual(await page.locator('#historyNeedsAttention').textContent(), '0', 'History summary should update after retry approval');
+
+    await page.evaluate(async () => {
+      const record = window.__historyRecords.find(item => item.id === 1);
+      record.status = 'submitted';
+      record.needsAttention = false;
+      record.confirmationNumber = 'RETRY-SUCCESS';
+      record.message = 'Submitted on retry';
+      await window.refreshHistory();
+    });
+    assert.strictEqual(await page.locator('#historyList').getByText('RETRY-SUCCESS', { exact: true }).count(), 1);
+    assert.strictEqual(await page.locator('#historyList .history-row.history-status-submitted').filter({ hasText: 'RETRY-SUCCESS' }).count(), 1);
+    assert.strictEqual(await page.locator('#historySubmitted').textContent(), '334', 'History submitted count should update after a successful retry');
 
     await page.evaluate(async () => {
       window.__historyRecords.unshift({ id: 501, trackingNumber: 'NEW-HISTORY-RECORD', attemptedAt: '2026-07-29T15:00:00Z', status: 'submitted', confirmationNumber: 'NEW', message: 'New record' });
@@ -131,7 +184,7 @@ const { chromium } = require('playwright');
       assert.strictEqual(await page.locator('#historyList .history-row:not(.head)').count(), count);
     }
 
-    process.stdout.write('Simple Claim History, evidence-only attention records and 500-record layout tests passed.\n');
+    process.stdout.write('KISS Claim History filtering, retry routing, dynamic status and 500-record layout tests passed.\n');
   } finally {
     await browser.close();
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
