@@ -82,6 +82,11 @@ replace_once('tests/history-refinement-test.js', """      getDashboard: async ()
       }, integrity: { ok: true } }),
 """)
 
+# Existing source contract should require the legacy-safe current-row predicate.
+replace_once('tests/history-kiss-contract-test.js',
+    "assert(database.includes('latest_ca.shipment_id = ca.shipment_id AND latest_ca.dry_run = 0'), 'latest-only History must be per shipment and exclude dry runs');",
+    "assert(database.includes('latest_ca.shipment_id = ca.shipment_id AND COALESCE(CAST(latest_ca.dry_run AS INTEGER), 0) = 0'), 'latest-only History must be per shipment and exclude actual dry runs while accepting legacy null values');")
+
 # Source contract catches the regression that produced nonzero cards with an
 # empty History table and prevents failed claims being double-counted.
 contract = ROOT / 'tests/history-source-of-truth-test.js'
