@@ -51,8 +51,10 @@ try {
   let queue = claimDb.listReconciliation(dbPath, 100, 3);
   assert.strictEqual(queue.length, 1);
   assert.strictEqual(queue[0].status, 'failed');
-  assert.strictEqual(claimDb.listClaimHistory(dbPath).find(item => item.id === queue[0].id).needsAttention, true,
-    'a max-attempt failure must be marked for inline History attention');
+  const failedHistoryItem = claimDb.listClaimHistory(dbPath).find(item => item.id === queue[0].id);
+  assert.strictEqual(failedHistoryItem.status, 'failed');
+  assert.strictEqual(failedHistoryItem.needsAttention, false,
+    'a failed claim must remain Failed rather than also being counted as Needs attention');
 
   claimDb.reconcileAttempt(dbPath, queue[0].id, 'retry', 'Verified not submitted remotely.');
   assert.strictEqual(claimDb.canAutomaticallyAttempt(dbPath, '1234567890123456', 3).allowed, true);

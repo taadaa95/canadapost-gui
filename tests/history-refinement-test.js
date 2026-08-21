@@ -43,9 +43,9 @@ const { chromium } = require('playwright');
         return { ok: true, items: window.__historyRecords.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 500)) };
       },
       getDashboard: async () => ({ ok: true, dashboard: {
-        submitted: window.__historyRecords.filter(item => ['submitted', 'submitted_manual'].includes(item.status)).length,
-        reconciliation: window.__historyRecords.filter(item => item.needsAttention === true).length,
-        historyRecords: window.__historyRecords.length
+        submitted: 999,
+        reconciliation: 999,
+        historyRecords: 999
       }, integrity: { ok: true } }),
       getFinancialReport: async () => ({ ok: true, report: { currency: 'CAD', totalsMinor: {}, pendingMinor: 0, recoveryRateBasisPoints: null } }),
       reconcileAttempt: async value => {

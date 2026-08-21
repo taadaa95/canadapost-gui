@@ -2004,18 +2004,16 @@ function renderHistory(items = []) {
 async function refreshHistory() {
   if (!window.cpApp?.listHistory) return;
   renderHistoryRecordMessage('historyList', tr('history.loading', 'Loading claim history…'), 'loading');
-  const [history, dashboard] = await Promise.all([
-    window.cpApp.listHistory({ limit: 500, offset: 0, latestOnly: true }),
-    window.cpApp.getDashboard()
-  ]);
+  const history = await window.cpApp.listHistory({ limit: 500, offset: 0, latestOnly: true });
   if (history.ok) {
-    renderHistory(history.items || []);
-    if (!dashboard.ok) updateHistorySummary(historySummaryFromItems(history.items || []));
+    const items = history.items || [];
+    renderHistory(items);
+    updateHistorySummary(historySummaryFromItems(items));
   } else {
+    updateHistorySummary({});
     setLocalizedText($('historyResultCount'), 'common.unavailable', {}, 'Unavailable');
     renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
   }
-  if (dashboard.ok) updateHistorySummary(dashboard.dashboard || {});
 }
 
 async function exportClaimHistory() {
