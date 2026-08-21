@@ -82,6 +82,16 @@ replace_once('tests/history-refinement-test.js', """      getDashboard: async ()
       }, integrity: { ok: true } }),
 """)
 
+# A failed claim remains retryable via the reconciliation safety queue, but in
+# customer-facing History it is Failed only, not also Needs attention.
+replace_once('tests/database-test.js', """  assert.strictEqual(claimDb.listClaimHistory(dbPath).find(item => item.id === queue[0].id).needsAttention, true,
+    'a max-attempt failure must be marked for inline History attention');
+""", """  const failedHistoryItem = claimDb.listClaimHistory(dbPath).find(item => item.id === queue[0].id);
+  assert.strictEqual(failedHistoryItem.status, 'failed');
+  assert.strictEqual(failedHistoryItem.needsAttention, false,
+    'a failed claim must remain Failed rather than also being counted as Needs attention');
+""")
+
 # Existing source contract should require the legacy-safe current-row predicate.
 replace_once('tests/history-kiss-contract-test.js',
     "assert(database.includes('latest_ca.shipment_id = ca.shipment_id AND latest_ca.dry_run = 0'), 'latest-only History must be per shipment and exclude dry runs');",
@@ -116,13 +126,15 @@ assert(database.includes('JOIN shipments history_shipments ON history_shipments.
 process.stdout.write('History source-of-truth consistency contracts passed.\\n');
 '''.replace("\\'use strict\\';", "'use strict';"), encoding='utf-8')
 
-# Run the new contract in the normal npm test chain if there is an existing
-# History contract anchor.
+# Keep both History contracts in the normal suite.
 p = ROOT / 'package.json'
 package = p.read_text(encoding='utf-8')
-anchor = 'node tests/history-kiss-contract-test.js'
-if anchor in package and 'history-source-of-truth-test.js' not in package:
-    package = package.replace(anchor, anchor + ' && node tests/history-source-of-truth-test.js', 1)
-    p.write_text(package, encoding='utf-8')
+anchor = 'node tests/history-refinement-test.js && node tests/github-release-updater-test.js'
+replacement = 'node tests/history-refinement-test.js && node tests/history-kiss-contract-test.js && node tests/history-source-of-truth-test.js && node tests/github-release-updater-test.js'
+if anchor in package:
+    package = package.replace(anchor, replacement, 1)
+elif 'node tests/history-source-of-truth-test.js' not in package:
+    raise SystemExit('missing History test-chain anchor in package.json')
+p.write_text(package, encoding='utf-8')
 
 print('Applied History single-source-of-truth and legacy-current-row fixes.')
