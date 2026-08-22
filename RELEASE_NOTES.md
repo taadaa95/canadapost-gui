@@ -1,5 +1,12 @@
 # Release notes
 
+## Canada Post Claim Runner 0.4.6 — History hotfix
+
+- Fixes Claim History failing to load because the renderer's `latestOnly` option was rejected at the IPC boundary.
+- Restores the current/latest History records, status counts, filters, colors, and Step 2 retry actions.
+- Corrects EST Desktop HTTP 401 guidance so rejected website credentials no longer appear as a Tracking Bearer-token failure.
+- Retains database schema version 8.
+
 ## Canada Post Claim Runner 0.4.4 — workflow simplification and Windows shutdown fix
 
 - Prevents the Windows `Object has been destroyed` JavaScript error when closing Claim Runner after a successful claim submission by making built-in browser shutdown idempotent and safe after Electron has already destroyed the native browser object.
