@@ -1,114 +1,21 @@
-name: v0.4.5 artifact transfer
+name: Cleanup v0.4.5 artifact transfer
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [synchronize]
 
 permissions:
   contents: write
 
-env:
-  RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
-  RELEASE_SOURCE_COMMIT: 1ed752feb4fea66a4ecf03490688b368e5d9e163
-
 jobs:
-  linux:
+  cleanup:
     if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 1ed752feb4fea66a4ecf03490688b368e5d9e163
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx install-electron --no
-      - run: npm run release:guard
-      - run: npm run package:linux
-      - run: npm run package:audit -- dist/packages/linux-unpacked
-      - run: npm run package:size -- dist/packages
-      - run: npm run sbom
-      - run: npm run release:finalize
-        env:
-          RELEASE_PLATFORM: linux
-      - run: npm run release:validate
-        env:
-          RELEASE_PLATFORM: linux
-      - run: npm run release:provenance
-        env:
-          RELEASE_PLATFORM: linux
-      - uses: actions/upload-artifact@v4
-        with:
-          name: v045-linux
-          path: dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage
-          if-no-files-found: error
-          retention-days: 1
-
-  windows:
-    if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 1ed752feb4fea66a4ecf03490688b368e5d9e163
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx install-electron --no
-      - run: npm run release:guard
-      - run: npm run package:windows
-      - run: npm run package:audit -- dist/packages/win-unpacked
-      - run: npm run package:size -- dist/packages
-      - run: npm run sbom
-      - run: npm run release:finalize
-        env:
-          RELEASE_PLATFORM: windows
-      - run: npm run release:validate
-        env:
-          RELEASE_PLATFORM: windows
-      - run: npm run release:provenance
-        env:
-          RELEASE_PLATFORM: windows
-      - uses: actions/upload-artifact@v4
-        with:
-          name: v045-windows
-          path: dist/packages/Canada.Post.Claim.Runner-0.4.5-win-x64.exe
-          if-no-files-found: error
-          retention-days: 1
-
-  transfer-release:
-    if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
-    needs: [linux, windows]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: v045-*
-          path: transfer
-          merge-multiple: true
-      - name: Verify and publish temporary transfer release
+      - name: Remove temporary transfer prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          cd transfer
-          test -f Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage
-          test -f Canada.Post.Claim.Runner-0.4.5-win-x64.exe
-          sha256sum Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage Canada.Post.Claim.Runner-0.4.5-win-x64.exe > SHA256SUMS-transfer.txt
-          tag='v0.4.5-transfer-1ed752f'
-          gh release delete "$tag" -R taadaa95/canadapost-gui --yes --cleanup-tag >/dev/null 2>&1 || true
-          gh release create "$tag" \
+          gh release delete v0.4.5-transfer-1ed752f \
             -R taadaa95/canadapost-gui \
-            Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage \
-            Canada.Post.Claim.Runner-0.4.5-win-x64.exe \
-            SHA256SUMS-transfer.txt \
-            --target 1ed752feb4fea66a4ecf03490688b368e5d9e163 \
-            --title 'Temporary v0.4.5 publication transfer' \
-            --notes 'Temporary transfer only. Public release is in canadapost-claim-runner-releases.' \
-            --prerelease
+            --yes --cleanup-tag
