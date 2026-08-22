@@ -1,9 +1,10 @@
 name: Prepare v0.4.6
 
 on:
-  push:
+  pull_request:
     branches:
-      - release/prepare-v0.4.6
+      - feature/dev11-beta-release-hardening
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -23,20 +24,49 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Bump version to 0.4.6
+      - name: Prepare v0.4.6 source
         shell: bash
         run: |
           set -euo pipefail
           npm version 0.4.6 --no-git-tag-version
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('package.json')
-          s = p.read_text()
-          old = 'dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage'
-          new = 'dist/packages/Canada.Post.Claim.Runner-0.4.6-linux-x86_64.AppImage'
-          if old not in s:
-              raise SystemExit('Expected v0.4.5 packaged AppImage test path was not found')
-          p.write_text(s.replace(old, new))
+
+          def replace_required(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Expected text not found in {path}: {old}')
+              p.write_text(s.replace(old, new))
+
+          replace_required(
+              'package.json',
+              'dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage',
+              'dist/packages/Canada.Post.Claim.Runner-0.4.6-linux-x86_64.AppImage'
+          )
+          replace_required(
+              'README.md',
+              'Current public stable version: **0.4.4** for Linux x64 and Windows x64. Version **0.4.5** is the current release candidate.',
+              'Current public stable version: **0.4.5** for Linux x64 and Windows x64. Version **0.4.6** is the current release candidate.'
+          )
+          replace_required(
+              'OPERATING_GUIDE.md',
+              'This is the operator guide for application version **0.4.5** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.4 supports Linux x64 and Windows x64. Version 0.4.5 is the current release candidate.',
+              'This is the operator guide for application version **0.4.6** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.5 supports Linux x64 and Windows x64. Version 0.4.6 is the current release candidate.'
+          )
+          p = Path('OPERATING_GUIDE.md')
+          s = p.read_text().replace('`0.4.5`', '`0.4.6`').replace('Canada.Post.Claim.Runner-0.4.5-', 'Canada.Post.Claim.Runner-0.4.6-')
+          p.write_text(s)
+
+          notes = Path('RELEASE_NOTES.md')
+          s = notes.read_text()
+          heading = '# Release notes\n\n'
+          entry = '''## Canada Post Claim Runner 0.4.6 — History hotfix\n\n- Fixes Claim History failing to load because the renderer's `latestOnly` option was rejected at the IPC boundary.\n- Restores the current/latest History records, status counts, filters, colors, and Step 2 retry actions.\n- Corrects EST Desktop HTTP 401 guidance so rejected website credentials no longer appear as a Tracking Bearer-token failure.\n- Retains database schema version 8.\n\n'''
+          if not s.startswith(heading):
+              raise SystemExit('Unexpected RELEASE_NOTES.md heading')
+          if '## Canada Post Claim Runner 0.4.6 — History hotfix' not in s:
+              s = heading + entry + s[len(heading):]
+          notes.write_text(s)
           PY
 
       - name: Validate release source
@@ -53,6 +83,6 @@ jobs:
           rm -f .github/workflows/prepare-v0.4.6.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json .github/workflows/prepare-v0.4.6.yml
+          git add package.json package-lock.json README.md OPERATING_GUIDE.md RELEASE_NOTES.md .github/workflows/prepare-v0.4.6.yml
           git commit -m "Prepare v0.4.6"
           git push origin HEAD:release/prepare-v0.4.6
