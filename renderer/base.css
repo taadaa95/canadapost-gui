@@ -3769,3 +3769,108 @@ body.page-scroll-layout .history-panel.active {
   min-height: 48px !important;
   padding: 9px 14px !important;
 }
+
+
+/* Step 1 KISS two-phase layout */
+#step1.step-panel.active { gap: 16px; }
+
+#step1 .step1-simple-top {
+  display: block;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+#step1 .step1-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  min-height: 0;
+}
+
+#step1 .step1-heading-copy { min-width: 0; }
+#step1 .step1-heading-copy h2 { margin: 0 0 6px; }
+#step1 .step-description { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; max-width: 760px; }
+
+#step1 .step1-primary-actions {
+  flex-wrap: nowrap;
+  width: auto;
+  overflow: visible;
+}
+
+#step1 .step1-primary-actions .step-execution-control {
+  width: 132px !important;
+  min-width: 132px !important;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+#step1 .step1-workspace {
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  gap: 14px;
+}
+
+#step1 .step1-status-card {
+  grid-template-rows: auto auto auto minmax(56px, auto);
+  overflow: auto;
+}
+
+#step1 .step1-status-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+#step1 .step1-status-heading h2 { margin: 0; }
+#step1 .step1-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; gap: 10px; height: auto; margin: 0; }
+#step1 .step1-status-grid .stat { min-height: 82px; height: auto; }
+#step1 .step1-ratio { font-size: 24px; white-space: nowrap; }
+#step1 .step1-progress-stack { display: grid; gap: 10px; }
+#step1 .step1-progress-stack .progress-wrap { margin: 0; }
+
+@media (max-width: 1050px) {
+  #step1.step-panel.active { overflow: auto; }
+  #step1 .step1-title-row,
+  #step1 .step1-workspace { grid-template-columns: minmax(0, 1fr); }
+  #step1 .step1-primary-actions { justify-content: flex-start; }
+  #step1 .step1-workspace { overflow: visible; }
+}
+
+
+/* KISS History status states */
+.history-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.history-filter-row label {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+#historyStatusFilter {
+  width: auto;
+  min-width: 220px;
+  height: 36px;
+}
+
+.history-row.history-status-submitted {
+  background: var(--success-soft);
+  border-left: 4px solid var(--success);
+}
+
+.history-row.history-status-already {
+  background: var(--accent-soft);
+  border-left: 4px solid var(--info);
+}
+
+.history-row.history-status-failed {
+  background: var(--danger-soft);
+  border-left: 4px solid var(--danger);
+}
+
+.history-row.history-status-attention {
+  background: var(--warning-soft);
+  border-left: 4px solid var(--warning);
+}

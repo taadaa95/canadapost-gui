@@ -1,6 +1,31 @@
 # Release notes
 
-## Canada Post Claim Runner 0.4.2 — pending physical package validation
+## Canada Post Claim Runner 0.4.6 — History hotfix
+
+- Fixes Claim History failing to load because the renderer's `latestOnly` option was rejected at the IPC boundary.
+- Restores the current/latest History records, status counts, filters, colors, and Step 2 retry actions.
+- Corrects EST Desktop HTTP 401 guidance so rejected website credentials no longer appear as a Tracking Bearer-token failure.
+- Retains database schema version 8.
+
+## Canada Post Claim Runner 0.4.4 — workflow simplification and Windows shutdown fix
+
+- Prevents the Windows `Object has been destroyed` JavaScript error when closing Claim Runner after a successful claim submission by making built-in browser shutdown idempotent and safe after Electron has already destroyed the native browser object.
+- Adds a Windows browser-lifecycle regression contract for the close-after-submission path.
+- Simplifies the customer workflow to two visible steps: shipment-history import automatically continues into Tracking API classification, followed by claim submission.
+- Simplifies Settings and saved-credential presentation while preserving encrypted credential storage and existing security boundaries.
+- Keeps saved credentials masked in the UI and retains the guided Canada Post Setup persistence fixes from 0.4.3.
+- Makes Windows update installation launch the downloaded installer visibly instead of appearing to do nothing.
+- Retains database schema version 8.
+
+## Canada Post Claim Runner 0.4.3 — Windows Guided Setup fixes
+
+- Corrects the Settings credential-status banner so saved website credentials remain green while missing Tracking API credentials are shown independently as an error.
+- Prevents Guided Canada Post Setup from returning to the business-selection step after the business was already confirmed and the user has progressed to Create App.
+- Hardens **Save & Finish** so pasted Tracking API Key/Secret values are normalized, mirrored into Settings, written to encrypted storage, and verified by a sanitized config re-read before setup can report success.
+- Adds Windows-focused regression coverage for the business-step transition, credential persistence verification, and mixed credential-status rendering.
+- Retains database schema version 8 and the existing Canada Post workflow behavior outside these fixes.
+
+## Canada Post Claim Runner 0.4.2 — stable
 
 - Rebuilds **Guided Canada Post Setup** around the recorded live Developer Portal journey. Its seven visible steps are **Sign in**, **Verify your account**, **Choose your business**, **Create your Claim Runner app**, **Save API credentials**, **Enable Tracking API**, and **Finish**. It starts directly at the Developer Portal, adapts to an already-authenticated session, and handles MFA plus the optional session-limit page without turning either into a permanent step.
 - Guides the observed **User menu → Sign in**, Username/Password, Continue/Access code, business selector, Apps, Create new app, Production, App name, Create, App credentials generated, Copy API Key, Copy API Secret, OK, API products, and Add API product controls. Existing suitable Production apps remain selectable so repeated setup does not force duplicate creation.
@@ -32,7 +57,7 @@
 - Standardizes the Step 1, Step 2, and Step 3 run/stop controls as one compact button family and adds a clear Step 3 information panel explaining that Claim Runner controls the browser automatically and pauses when login, verification, or CAPTCHA input is required.
 - Retains database schema version 8.
 
-Entries below preserve earlier release and development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for the current 0.4.2 candidate.
+Entries below preserve earlier release and development checkpoints. They are not current operator or release instructions. See `OPERATING_GUIDE.md` for the current 0.4.4 candidate.
 
 ## Canada Post Claim Runner 0.4.1 — stable
 

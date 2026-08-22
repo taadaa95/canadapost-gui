@@ -1,6 +1,6 @@
 # Canada Post Claim Runner operating guide
 
-This is the operator guide for application version **0.4.2** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.0 supports Linux x64 and Windows x64. Version 0.4.2 remains unpublished until Kris validates the exact canonical packages.
+This is the operator guide for application version **0.4.6** on branch `feature/dev11-beta-release-hardening`. Public stable 0.4.5 supports Linux x64 and Windows x64. Version 0.4.6 is the current release candidate.
 
 ## Safety model
 
@@ -12,7 +12,7 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 
 | Item | Current value |
 | --- | --- |
-| Application | `0.4.2` |
+| Application | `0.4.6` |
 | Database schema | `8` |
 | EST parser/schema | `est-import-v5` |
 | Tracking API contract | `1.0.0` |
@@ -20,9 +20,9 @@ Step 3 uses only Electron's built-in browser. Its queue contains only actionable
 | Tracking pacing | sequential, `3100 ms` minimum plus `0–100 ms` positive jitter |
 | Tracking test gateway | `https://api-stg.canadapost-postescanada.ca` |
 | Tracking production gateway | `https://api.canadapost-postescanada.ca` |
-| Linux artifact | `Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage` |
-| Windows artifact | `Canada.Post.Claim.Runner-0.4.2-win-x64.exe` |
-| macOS artifact | `Canada.Post.Claim.Runner-0.4.2-mac-universal.dmg` (publish only if Developer ID signed and notarized) |
+| Linux artifact | `Canada.Post.Claim.Runner-0.4.6-linux-x86_64.AppImage` |
+| Windows artifact | `Canada.Post.Claim.Runner-0.4.6-win-x64.exe` |
+| macOS artifact | `Canada.Post.Claim.Runner-0.4.6-mac-universal.dmg` (publish only if Developer ID signed and notarized) |
 
 ## Supported workflow
 

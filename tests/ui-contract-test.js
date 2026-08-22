@@ -17,14 +17,17 @@ const requiredIds = [
   'historySubmitted', 'historyNeedsAttention', 'historyRecordTotal',
   'exportHistory', 'refreshHistory',
   'claimQueueList', 'step3ActionAdvisory', 'builtinBrowserActivity', 'builtinBrowserActivityText', 'step3AutomationNotice', 'step3AutomationNoticeStatus', 'openStep3Diagnostics', 'setupWizard', 'setupReadinessList', 'setupFinish',
-  'trackingClientId', 'trackingClientSecret', 'trackingRequestDelayMs', 'trackingResourceTimeoutMs', 'trackingApiCredentialMetadata', 'clearTrackingApiCredentials',
-  'runTrackingOnly', 'forceStopStep2', 'step1JumpLatest', 'step2JumpLatest', 'step3JumpLatest',
+  'trackingClientId', 'trackingClientSecret', 'clearTrackingApiCredentials',
+  'forceStopStep1', 'step1JumpLatest', 'step3JumpLatest',
   'selectAllClaims', 'clearClaimSelection'
 ];
 for (const id of requiredIds) {
   assert.ok(html.includes(`id="${id}"`), `Missing UI element #${id}`);
 }
-assert.strictEqual(pkg.version, '0.4.2');
+const packageLock = require('../package-lock.json');
+assert.match(pkg.version, /^\d+\.\d+\.\d+$/, 'Package version must be a release semver');
+assert.strictEqual(packageLock.version, pkg.version);
+assert.strictEqual(packageLock.packages[''].version, pkg.version);
 assert.doesNotMatch(`${html}\n${renderer}\n${preload}\n${main}`, /unsigned beta|beta channel|release channel|signing key/i,
   'normal update UI must not expose beta, channel, or signing-key messaging');
 assert.ok(!preload.includes("note.id = 'step3CanadaPostSupport'"), 'Preload must not construct Step 3 support UI');
@@ -74,8 +77,9 @@ for (const removedId of ['freshTracking', 'testTrackingConnection', 'exportTrack
 for (const removedKey of ['step2.freshRun', 'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete', 'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel']) {
   assert.ok(!html.includes(`data-i18n="${removedKey}"`), `Removed Step 2 product copy ${removedKey} must stay absent`);
 }
-assert.match(html, /id="runTrackingOnly"[^>]*data-i18n="step2\.run"/);
-assert.match(html, /id="forceStopStep2"[^>]*data-force-stop="step2"/);
+assert.doesNotMatch(html, /id="runTrackingOnly"/);
+assert.match(html, /id="forceStopStep1"[^>]*data-force-stop="step1"/);
+assert.doesNotMatch(html, /id="forceStopStep2"/);
 assert.match(main, /const diagnosticMode = options\.diagnosticMode === true/);
 assert.match(preload, /tracking:diagnosticDefaultRow/);
 assert.ok(!/client (?:ID|secret).{0,80}(?:length|characters)/i.test(html), 'Current credential metadata must not disclose secret lengths');
@@ -85,9 +89,10 @@ assert.ok(renderer.includes("window.addEventListener('scroll', scheduleBuiltinBr
 assert.ok(renderer.includes("new ResizeObserver(() => requestBuiltinBrowserLayout('browser-slot-resize'))"), 'Built-in browser must force a fresh slot measurement after size changes');
 assert.ok(renderer.includes('window.visualViewport?.addEventListener'), 'Built-in browser must track visual viewport movement');
 
-assert.ok(englishLocale['settings.website.remember'].includes('save password securely on this device'));
-assert.ok(englishLocale['settings.website.securityNote'].includes('AES-256-GCM device-local encryption'));
-assert.ok(englishLocale['settings.website.passwordSavedPlaceholder'].includes('Saved password available — leave blank to reuse'));
+assert.strictEqual(englishLocale['settings.website.remember'], 'Remember me');
+assert.strictEqual(englishLocale['settings.website.passwordSavedPlaceholder'], englishLocale['settings.website.passwordPlaceholder']);
+assert.match(html, /id="trackingClientId"[^>]*type="password"/);
+assert.match(renderer, /const SAVED_SECRET_MASK = '••••••••'/);
 
 assert.doesNotMatch(`${html}\n${renderer}\n${preload}\n${main}`, /runSiteHealth|siteHealth:run|portalCompatibility|portal-compatibility/,
   'health-check and portal-compatibility plumbing must be absent');
@@ -97,10 +102,11 @@ assert.doesNotMatch(`${renderer}\n${preload}\n${main}`, /listManualReviews|updat
   'eligibility manual-review renderer and IPC APIs must be absent');
 const historyMarkup = html.match(/<section id="historyTab"[\s\S]*?<\/section>/)?.[0] || '';
 for (const removedId of [
-  'historySearch', 'historyStatusFilter', 'clearHistoryFilters', 'reconciliationList',
+  'historySearch', 'clearHistoryFilters', 'reconciliationList',
   'reconciliationCountPill', 'addManualShipment', 'manualShipmentList',
   'historyClassificationList', 'refreshBrowserSession', 'clearBrowserSession', 'browserSessionStatus'
 ]) assert.ok(!historyMarkup.includes(`id="${removedId}"`), `History must not retain #${removedId}`);
+assert.strictEqual((historyMarkup.match(/id="historyStatusFilter"/g) || []).length, 1, 'History must contain exactly one simple status filter');
 assert.doesNotMatch(historyMarkup, /Reconciliation Queue|Manually add|classification records/i);
 const settingsMarkup = html.match(/<section id="settingsTab"[\s\S]*?<section id="step1"/)?.[0] || '';
 for (const id of ['trackingApiEnvironment', 'createBackup', 'restoreBackup', 'manageStoredData', 'createDiagnostics']) {
@@ -108,6 +114,9 @@ for (const id of ['trackingApiEnvironment', 'createBackup', 'restoreBackup', 'ma
 }
 assert.doesNotMatch(settingsMarkup, /advancedSettingsTitle|class="[^"]*advanced-settings/);
 assert.match(settingsMarkup, /id="checkForUpdates"/);
+assert.doesNotMatch(settingsMarkup, /settings\.website\.securityNote/);
+assert.doesNotMatch(settingsMarkup, /settings\.api\.(?:advanced|metadataPending|accessNote)/);
+assert.doesNotMatch(settingsMarkup, /id="trackingRequestDelayMs"|id="trackingResourceTimeoutMs"|id="trackingApiCredentialMetadata"/);
 assert.doesNotMatch(`${renderer}\n${preload}`, /listReconciliation|listClassificationQueue|listManualShipments|addManualShipment/,
   'removed History-only preload and renderer APIs must not remain exposed');
 assert.doesNotMatch(main, /registerIpcHandler\('(reconciliation:list|classification:list|shipment:listManual|shipment:manualAdd)'/,
@@ -131,15 +140,18 @@ assert.doesNotMatch(styles, /\.checkbox-field/, 'Removed Step 3 checkbox-panel s
 assert.ok(/\.field label\s*\{[^}]*padding:\s*0 2px/s.test(styles), 'Standard field labels must remain plain text above their controls');
 assert.ok(/input, select, textarea\s*\{[^}]*border:\s*1px solid var\(--line\)/s.test(styles), 'Interactive form controls must retain their borders');
 assert.ok(/\.settings-section > button,[\s\S]*?\.settings-footer-actions > button\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*180px;[^}]*justify-self:\s*start/s.test(styles), 'Settings actions must size to their content instead of stretching across their cards');
-const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step2|Step3|History|Results)"[^>]*>([\s\S]*?)<\/button>/g)];
-assert.strictEqual(stepTabs.length, 6, 'All six workflow tabs must use the shared tab structure');
+const stepTabs = [...html.matchAll(/<button id="tab(?:Settings|Step1|Step3|History|Results)"[^>]*>([\s\S]*?)<\/button>/g)];
+assert.strictEqual(stepTabs.length, 5, 'Settings, two workflow steps, History, and Results must remain');
+assert.ok(!html.includes('id="tabStep2"'));
+assert.strictEqual(englishLocale['nav.step3.title'], 'Step 2');
+assert.match(renderer, /function mergeTrackingIntoStep1/);
 for (const [, tabMarkup] of stepTabs) {
   assert.match(tabMarkup, /class="step-tab-title"/, 'Workflow tab title must use the title layout hook');
   assert.match(tabMarkup, /class="step-tab-detail"/, 'Workflow tab subtitle must use the detail layout hook');
   assert.doesNotMatch(tabMarkup, /<br\s*\/?\s*>/i, 'Workflow tab layout must not depend on an extra flex line-break element');
 }
 assert.ok(/\.step-tab,[\s\S]*?\.step-tab\.active\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*gap:\s*4px\s*!important/s.test(styles), 'Workflow tab text must remain vertically centred with explicit title/subtitle spacing');
-for (const id of ['importEstHistory', 'forceStopStep1', 'runTrackingOnly', 'forceStopStep2', 'runSubmitOnly', 'stop', 'forceStopStep3']) {
+for (const id of ['importEstHistory', 'forceStopStep1', 'runSubmitOnly', 'stop', 'forceStopStep3']) {
   assert.match(html, new RegExp(`id="${id}"[^>]*class="[^"]*step-execution-control`), `${id} must use the shared execution-control class`);
 }
 assert.match(styles, /\.step-execution-control\s*\{[^}]*min-width:\s*108px\s*!important;[^}]*height:\s*48px\s*!important;/s);

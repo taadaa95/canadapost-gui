@@ -86,7 +86,7 @@ function fakeAppImageFileSystem({ current, downloaded, currentBytes, downloadedB
   return { fileSystem, hashFile, files, calls, counts };
 }
 
-assert.strictEqual(require('../package.json').version, '0.4.2');
+assert.match(require('../package.json').version, /^\d+\.\d+\.\d+$/, 'Updater test requires a release semver');
 const updaterUiText = [
   fs.readFileSync(path.join(__dirname, '..', 'lib', 'github-release-updater.js'), 'utf8'),
   fs.readFileSync(path.join(__dirname, '..', 'locales', 'en-CA.json'), 'utf8'),
@@ -123,10 +123,10 @@ assert.strictEqual(candidate.artifact.sha256, digest(artifactBytes));
 const macCandidate = updater.validateLatestRelease(stableRelease, '0.4.0', 'darwin', 'arm64');
 assert.strictEqual(macCandidate.artifact.file, 'Canada.Post.Claim.Runner-0.4.1-mac-universal.dmg');
 assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.1', 'linux', 'x64').available, false);
-assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.2', 'linux', 'x64').available, false);
+assert.strictEqual(updater.validateLatestRelease(stableRelease, '0.4.3', 'linux', 'x64').available, false);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, draft: true }, '0.4.0', 'linux', 'x64'), /normal stable release/i);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, prerelease: true }, '0.4.0-beta.1', 'linux', 'x64'), /normal stable release/i);
-assert.throws(() => updater.validateLatestRelease(release('v0.4.2-rc.1', artifactBytes), '0.4.1', 'linux', 'x64'), /stable semantic version/i);
+assert.throws(() => updater.validateLatestRelease(release('v0.4.3-rc.1', artifactBytes), '0.4.1', 'linux', 'x64'), /stable semantic version/i);
 assert.throws(() => updater.validateLatestRelease({ ...stableRelease, assets: [] }, '0.4.0', 'linux', 'x64'), /missing Canada\.Post/i);
 assert.throws(() => updater.validateLatestRelease({
   ...stableRelease,
@@ -188,9 +188,9 @@ assert.throws(() => updater.validateLatestRelease({
     assert.strictEqual(fs.readFileSync(downloaded, 'utf8'), artifactBytes.toString('utf8'));
     assert.strictEqual(security.verifyArtifact(downloaded, candidate.artifact), true);
 
-    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.2', artifact: {
+    await assert.rejects(() => updater.downloadUpdate({ ...candidate, version: '0.4.3', artifact: {
       ...candidate.artifact,
-      file: 'Canada.Post.Claim.Runner-0.4.2-linux-x86_64.AppImage'
+      file: 'Canada.Post.Claim.Runner-0.4.3-linux-x86_64.AppImage'
     } }, {
       app: { getPath: () => downloadRoot },
       userAgent: 'synthetic-test',
@@ -282,18 +282,32 @@ assert.throws(() => updater.validateLatestRelease({
     }), error => error.code === 'UPDATE_DOWNGRADE_BLOCKED');
     assert.strictEqual(quitCalled, false);
 
-    await updater.installUpdate({
-      app: { quit: () => { quitCalled = true; } },
-      shell: {},
-      downloadedPath: downloadedAppImage,
-      update: candidate,
-      currentVersion: '0.4.0',
-      platform: 'win32',
-      launchDetached: (command, args) => launches.push({ command, args })
-    });
-    assert.strictEqual(launches.length, 1);
-    assert.strictEqual(launches[0].command, 'powershell.exe');
-    assert.strictEqual(quitCalled, true);
+    const windowsOpened = [];
+  let windowsBeforeExit = 0;
+  await updater.installUpdate({
+    app: { quit: () => { quitCalled = true; } },
+    shell: { openPath: async file => { windowsOpened.push(file); return ''; } },
+    downloadedPath: downloadedAppImage,
+    update: candidate,
+    currentVersion: '0.4.0',
+    platform: 'win32',
+    beforeExit: () => { windowsBeforeExit += 1; },
+    launchDetached: (command, args) => launches.push({ command, args })
+  });
+  assert.deepStrictEqual(windowsOpened, [downloadedAppImage]);
+  assert.strictEqual(windowsBeforeExit, 1);
+  assert.strictEqual(launches.length, 0);
+  assert.strictEqual(quitCalled, true);
+  quitCalled = false;
+  await assert.rejects(() => updater.installUpdate({
+    app: { quit: () => { quitCalled = true; } },
+    shell: { openPath: async () => 'synthetic installer launch failure', showItemInFolder: () => {} },
+    downloadedPath: downloadedAppImage,
+    update: candidate,
+    currentVersion: '0.4.0',
+    platform: 'win32'
+  }), error => error.code === 'UPDATE_WINDOWS_INSTALLER_OPEN_FAILED');
+  assert.strictEqual(quitCalled, false);
 
     const downloadedDmg = path.join(root, macCandidate.artifact.file);
     fs.writeFileSync(downloadedDmg, artifactBytes);

@@ -6,6 +6,7 @@ const LOG_BOTTOM_THRESHOLD_PX = 56;
 
 const THEME_STORAGE_KEY = 'canadapostClaimRunnerTheme';
 const DEFAULT_THEME = 'system';
+const SAVED_SECRET_MASK = '••••••••';
 let activeMessages = {};
 let preferredLocale = '';
 let localeRequestVersion = 0;
@@ -103,6 +104,7 @@ function initThemePicker() {
 
 let activeTabId = 'settingsTab';
 let currentProcessStep = 'step1';
+let autoTrackingAfterImport = false;
 const liveLogState = new Map();
 
 function activateTab(tabId) {
@@ -135,16 +137,20 @@ function activateTab(tabId) {
   rendererEvents.emit('tab:changed', { tabId: target });
 }
 
+function mergeTrackingIntoStep1() {
+  // Tracking is an internal phase of Step 1. No second panel is mounted.
+}
+
 function stepForStage(stage) {
   if (stage === 'est-history' || stage === 'history') return 'step1';
-  if (stage === 'tracking') return 'step2';
+  if (stage === 'tracking') return 'step1';
   if (stage === 'submit') return 'step3';
   return currentProcessStep || activeTabId || 'step1';
 }
 
 function logIdForStep(stepId) {
   if (stepId === 'step1') return 'step1Log';
-  if (stepId === 'step2') return 'step2Log';
+  if (stepId === 'step2') return 'step1Log';
   if (stepId === 'step3') return 'step3Log';
   return 'step1Log';
 }
@@ -197,14 +203,14 @@ function initLiveLogs() {
 
 function statusIdForStep(stepId) {
   if (stepId === 'step1') return 'step1RunStatus';
-  if (stepId === 'step2') return 'step2RunStatus';
+  if (stepId === 'step2') return 'step1RunStatus';
   if (stepId === 'step3') return 'step3RunStatus';
   return 'step1RunStatus';
 }
 
 function actionIdForStep(stepId) {
   if (stepId === 'step1') return 'step1CurrentAction';
-  if (stepId === 'step2') return 'step2CurrentAction';
+  if (stepId === 'step2') return 'step1CurrentAction';
   if (stepId === 'step3') return 'step3CurrentAction';
   return 'step1CurrentAction';
 }
@@ -809,7 +815,7 @@ function localizedInterfaceValue(value) {
     Resuming: 'outcome.resuming', Done: 'outcome.done', 'Runner error': 'event.runnerError',
     submitted: 'outcome.submitted', submitted_manual: 'history.status.submittedManual', already_submitted: 'outcome.alreadySubmitted',
     failed: 'outcome.failed', unknown: 'history.status.unknown', not_submitted: 'history.status.notSubmitted',
-    retry_approved: 'history.status.retryApproved', dry_run_ready: 'history.status.dryRunReady', dry_run_interrupted: 'history.status.dryRunInterrupted'
+    retry_approved: 'history.status.retryApproved', rejected: 'outcome.rejected', dry_run_ready: 'history.status.dryRunReady', dry_run_interrupted: 'history.status.dryRunInterrupted'
   };
   return keys[text] ? tr(keys[text], text) : (text || '—');
 }
@@ -948,6 +954,8 @@ function updateCounters() {
   const step1Pct = state.step1TotalRows > 0 ? Math.round((state.step1Imported / state.step1TotalRows) * 100) : 0;
   if ($('step1Progress')) $('step1Progress').value = Math.max(0, Math.min(100, step1Pct));
   setText('step1Pct', `${Math.max(0, Math.min(100, step1Pct))}%`);
+  const importProgressTotal = state.step1TotalRows || state.step1Imported || 0;
+  setText('step1ImportProgressCount', `${state.step1Imported} / ${importProgressTotal}`);
 
   setText('checked', state.checked);
   setText('late', state.late);
@@ -962,6 +970,8 @@ function updateCounters() {
   const trackingPct = state.trackingTotal > 0 ? Math.round((state.checked / state.trackingTotal) * 100) : 0;
   if ($('trackingProgress')) $('trackingProgress').value = trackingPct;
   setText('trackingPct', `${trackingPct}%`);
+  const trackingProgressTotal = state.trackingTotal || state.step1Imported || 0;
+  setText('step1TrackingProgressCount', `${state.checked} / ${trackingProgressTotal}`);
 
   const submitPct = state.submitTotal > 0 ? Math.round((processedClaims() / state.submitTotal) * 100) : 0;
   if ($('submitProgress')) $('submitProgress').value = submitPct;
@@ -1032,7 +1042,7 @@ function resetStepUi(stepId) {
   };
 
   const logEl = $(logIdForStep(step));
-  if (logEl) logEl.textContent = '';
+  if (logEl && step !== 'step2') logEl.textContent = '';
   setStatus('Idle', '', step);
   setLocalizedText($(actionIdForStep(step)), 'status.waiting', {}, 'Waiting.');
   updateCounters();
@@ -1802,6 +1812,8 @@ function describeEvent(stage, event) {
 }
 
 
+let historyItems = [];
+
 function historyDate(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -1813,6 +1825,48 @@ function historyCell(text, className = '') {
   cell.className = className;
   cell.textContent = text === undefined || text === null || text === '' ? '—' : String(text);
   return cell;
+}
+
+function historyStatus(item = {}) {
+  return String(item.status || '').toLowerCase();
+}
+
+function historyMatchesFilter(item, filter) {
+  const status = historyStatus(item);
+  if (!filter || filter === 'all') return true;
+  if (filter === 'submitted') return ['submitted', 'submitted_manual'].includes(status);
+  if (filter === 'needs_attention') return item.needsAttention === true;
+  if (filter === 'failed') return status === 'failed';
+  return status === filter;
+}
+
+function historyRowClasses(item = {}) {
+  const classes = ['history-row'];
+  const status = historyStatus(item);
+  if (['submitted', 'submitted_manual'].includes(status)) classes.push('history-status-submitted');
+  if (status === 'already_submitted') classes.push('history-status-already');
+  if (status === 'failed' || status === 'rejected') classes.push('history-status-failed');
+  if (item.needsAttention === true) classes.push('history-status-attention');
+  return classes.join(' ');
+}
+
+function historyCanRetry(item = {}) {
+  const status = historyStatus(item);
+  return item.needsAttention === true || status === 'failed';
+}
+
+function updateHistorySummary(data = {}) {
+  setText('historySubmitted', data.submitted || 0);
+  setText('historyNeedsAttention', data.reconciliation || 0);
+  setText('historyRecordTotal', data.historyRecords || 0);
+}
+
+function historySummaryFromItems(items = []) {
+  return {
+    submitted: items.filter(item => ['submitted', 'submitted_manual'].includes(historyStatus(item))).length,
+    reconciliation: items.filter(item => item.needsAttention === true).length,
+    historyRecords: items.length
+  };
 }
 
 function setHistoryRecordState(root, state) {
@@ -1833,26 +1887,72 @@ function renderHistoryRecordMessage(rootId, message, state = 'error') {
   root.appendChild(notice);
 }
 
+async function retryHistoryItemInStep2(item) {
+  if (!historyCanRetry(item)) return;
+  const status = historyStatus(item);
+  if (item.needsAttention === true && ['unknown', 'in_progress'].includes(status)) {
+    const confirmed = window.confirm(tr('history.retryConfirm', 'Retry this claim in Step 2? Only continue if the previous attempt did not submit successfully.'));
+    if (!confirmed) return;
+  }
+
+  const result = await window.cpApp.reconcileAttempt({
+    attemptId: item.id,
+    action: 'retry',
+    note: 'Retry requested from History'
+  });
+  if (!result?.ok) {
+    window.alert(result?.error || tr('history.retryFailed', 'Could not prepare this claim for Step 2.'));
+    return;
+  }
+
+  state.claimQueueLoaded = false;
+  const queue = await refreshClaimQueue();
+  if (!queue?.ok) {
+    await refreshHistory();
+    window.alert(queue?.error || tr('history.retryQueueFailed', 'The Step 2 queue could not be refreshed.'));
+    return;
+  }
+
+  const candidate = state.claimQueueItems.find(candidateItem => (
+    String(candidateItem.trackingNumber || '') === String(item.trackingNumber || '')
+  ));
+  if (!candidate) {
+    await refreshHistory();
+    window.alert(tr('history.retryUnavailable', 'This claim is not currently available in Step 2. Run Step 1 again, then retry.'));
+    return;
+  }
+
+  step3QueueController.set(candidate.recordId, true);
+  renderClaimQueue(state.claimQueueItems, true);
+  await refreshHistory();
+  activateTab('step3');
+}
+
 function renderHistory(items = []) {
   const root = $('historyList');
   if (!root) return;
-  setHistoryRecordState(root, items.length ? '' : 'empty');
-  setLocalizedText($('historyResultCount'), items.length === 1 ? 'history.oneRecord' : 'history.recordCount', { count: items.length }, items.length === 1 ? '1 record' : '{count} records');
+  historyItems = Array.isArray(items) ? items.slice() : [];
+  const filter = $('historyStatusFilter')?.value || 'all';
+  const visibleItems = historyItems.filter(item => historyMatchesFilter(item, filter));
+  setHistoryRecordState(root, visibleItems.length ? '' : 'empty');
+  setLocalizedText($('historyResultCount'), visibleItems.length === 1 ? 'history.oneRecord' : 'history.recordCount', { count: visibleItems.length }, visibleItems.length === 1 ? '1 record' : '{count} records');
   root.replaceChildren();
   const head = document.createElement('div');
   head.className = 'history-row head';
   ['common.tracking', 'history.attemptTime', 'common.status', 'history.confirmation', 'history.message'].forEach(key => head.appendChild(historyCell(tr(key))));
   root.appendChild(head);
-  if (!items.length) {
+  if (!visibleItems.length) {
     const empty = document.createElement('div');
     empty.className = 'history-empty';
-    empty.textContent = tr('history.noAttempts', 'No claim history records yet.');
+    empty.textContent = historyItems.length
+      ? tr('history.noMatchingAttempts', 'No claim history records match this status.')
+      : tr('history.noAttempts', 'No claim history records yet.');
     root.appendChild(empty);
     return;
   }
-  for (const item of items) {
+  for (const item of visibleItems) {
     const row = document.createElement('div');
-    row.className = 'history-row';
+    row.className = historyRowClasses(item);
     row.appendChild(historyCell(item.trackingNumber));
     row.appendChild(historyCell(historyDate(item.attemptedAt)));
     row.appendChild(historyCell(item.needsAttention ? tr('history.needsAttention', 'Needs attention') : localizedInterfaceValue(item.status)));
@@ -1887,6 +1987,14 @@ function renderHistory(items = []) {
       });
       actions.appendChild(button);
     }
+    if (historyCanRetry(item)) {
+      const retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = item.needsAttention ? 'warning' : 'secondary';
+      retryButton.textContent = tr('history.retryStep2', 'Retry in Step 2');
+      retryButton.addEventListener('click', () => retryHistoryItemInStep2(item));
+      actions.appendChild(retryButton);
+    }
     if (actions.childElementCount) messageCell.appendChild(actions);
     row.appendChild(messageCell);
     root.appendChild(row);
@@ -1896,20 +2004,15 @@ function renderHistory(items = []) {
 async function refreshHistory() {
   if (!window.cpApp?.listHistory) return;
   renderHistoryRecordMessage('historyList', tr('history.loading', 'Loading claim history…'), 'loading');
-  const [history, dashboard] = await Promise.all([
-    window.cpApp.listHistory({ limit: 500, offset: 0 }),
-    window.cpApp.getDashboard()
-  ]);
-  if (history.ok) renderHistory(history.items || []);
-  else {
+  const history = await window.cpApp.listHistory({ limit: 500, offset: 0, latestOnly: true });
+  if (history.ok) {
+    const items = history.items || [];
+    renderHistory(items);
+    updateHistorySummary(historySummaryFromItems(items));
+  } else {
+    updateHistorySummary({});
     setLocalizedText($('historyResultCount'), 'common.unavailable', {}, 'Unavailable');
     renderHistoryRecordMessage('historyList', history.error || tr('history.loadAttemptsFailed', 'Could not load claim attempts.'));
-  }
-  if (dashboard.ok) {
-    const data = dashboard.dashboard || {};
-    setText('historySubmitted', data.submitted || 0);
-    setText('historyNeedsAttention', data.reconciliation || 0);
-    setText('historyRecordTotal', data.historyRecords || 0);
   }
 }
 
@@ -1924,13 +2027,45 @@ function getFieldValue(id) {
   return el ? String(el.value || '').trim() : '';
 }
 
+function getSecretFieldValue(id) {
+  const value = $(id)?.value || '';
+  return value === SAVED_SECRET_MASK ? '' : value;
+}
+
+function applyStoredCredentialMasks() {
+  const password = $('webPassword');
+  if (password) {
+    password.value = state.passwordStored ? SAVED_SECRET_MASK : '';
+    password.placeholder = tr('settings.website.passwordPlaceholder');
+  }
+  const clientId = $('trackingClientId');
+  if (clientId) {
+    clientId.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+    clientId.placeholder = tr('settings.api.clientIdPlaceholder');
+  }
+  const clientSecret = $('trackingClientSecret');
+  if (clientSecret) {
+    clientSecret.value = state.trackingApiCredentialsStored ? SAVED_SECRET_MASK : '';
+    clientSecret.placeholder = tr('settings.api.clientSecretPlaceholder');
+  }
+}
+
+function initSavedSecretInputs() {
+  for (const id of ['webPassword', 'trackingClientId', 'trackingClientSecret']) {
+    const input = $(id);
+    input?.addEventListener('focus', () => {
+      if (input.value === SAVED_SECRET_MASK) input.select();
+    });
+  }
+}
+
 function collectUserSettingsOptions() {
   const rememberSettings = $('rememberSettings') ? $('rememberSettings').checked : false;
   return {
     webUsername: getFieldValue('webUsername'),
-    webPassword: $('webPassword')?.value || '',
-    trackingClientId: getFieldValue('trackingClientId'),
-    trackingClientSecret: $('trackingClientSecret')?.value || '',
+    webPassword: getSecretFieldValue('webPassword'),
+    trackingClientId: getSecretFieldValue('trackingClientId'),
+    trackingClientSecret: getSecretFieldValue('trackingClientSecret'),
     trackingApiEnvironment: 'production',
     trackingRequestDelayMs: Number.parseInt(getFieldValue('trackingRequestDelayMs') || '3100', 10),
     trackingResourceTimeoutMs: Number.parseInt(getFieldValue('trackingResourceTimeoutMs') || '45000', 10),
@@ -1962,6 +2097,7 @@ function validateSettingsForStep(stepId) {
     if (!settings.webPassword && !state.passwordStored) missing.push(tr('settings.website.password', 'Canada Post Web Password'));
   }
   if (stepId === 'step1' && !settings.estCustomerNumber) missing.push(tr('settings.est.customerNumber', 'Customer Number'));
+  if (stepId === 'step1' && !state.trackingApiCredentialsStored) missing.push(tr('settings.api.credentialsRequired', 'Tracking API credentials'));
   if (stepId === 'step3') {
     if (!settings.claimStreetNumber) missing.push(tr('settings.sender.streetNumberShort', 'Claim sender street number'));
     if (!settings.claimStreetName) missing.push(tr('settings.sender.streetNameShort', 'Claim sender street name dropdown option'));
@@ -1988,9 +2124,7 @@ async function saveUserSettings(showLog = true) {
       setLocalizedText(status, 'settings.savedStatus', {}, 'Settings saved');
       status.className = 'pill good';
     }
-    if ($('webPassword')) $('webPassword').value = '';
-    if ($('trackingClientId')) $('trackingClientId').value = '';
-    if ($('trackingClientSecret')) $('trackingClientSecret').value = '';
+    applyStoredCredentialMasks();
     if ($('trackingApiCredentialMetadata') && res.trackingApiCredentialMetadata) renderTrackingApiCredentialMetadata(res.trackingApiCredentialMetadata);
     if (showLog) log(res.warning || tr('settings.saved', 'User settings saved.'), res.warning ? 'log-warning' : '', 'step1');
   }
@@ -2239,7 +2373,8 @@ function buildSubmitOnlyOptions() {
 }
 
 async function startTrackingOnly() {
-  currentProcessStep = 'step2';
+  currentProcessStep = 'step1';
+  state.claimQueueLoaded = false;
   resetRunUi('step2');
   setStatus('Running', 'warn', 'step2');
   setActionLocalized('step2.comparingAction', {}, 'Comparing successful-delivery dates with original Delivery Standards and recording late-delivery candidates.', 'step2');
@@ -2404,12 +2539,7 @@ async function refreshConfig() {
   await applyLocale(preferredLocale || cfg.locale || 'en-CA');
   if (state.isolatedTestMode) document.title = tr('app.isolatedTitle', 'Canada Post Claim Runner [ISOLATED TEST DATA]');
   if ($('webUsername')) $('webUsername').value = cfg.webUsername || '';
-  if ($('webPassword')) {
-    $('webPassword').value = '';
-    $('webPassword').placeholder = tr(state.passwordStored ? 'settings.website.passwordSavedPlaceholder' : 'settings.website.passwordPlaceholder');
-  }
-  if ($('trackingClientId')) { $('trackingClientId').value = ''; $('trackingClientId').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientIdSavedPlaceholder' : 'settings.api.clientIdPlaceholder'); }
-  if ($('trackingClientSecret')) { $('trackingClientSecret').value = ''; $('trackingClientSecret').placeholder = tr(state.trackingApiCredentialsStored ? 'settings.api.clientSecretSavedPlaceholder' : 'settings.api.clientSecretPlaceholder'); }
+  applyStoredCredentialMasks();
   renderTrackingApiCredentialMetadata(cfg.trackingApiCredentialMetadata || {});
   if ($('rememberSettings')) $('rememberSettings').checked = Object.prototype.hasOwnProperty.call(cfg, 'rememberSettings') ? !!cfg.rememberSettings : true;
 
@@ -2519,6 +2649,7 @@ $('openStep3Diagnostics')?.addEventListener('click', async () => {
   if (!result?.ok) log(result?.error || tr('diagnostics.noneAvailable', 'No Step 3 diagnostics are available yet.'), 'log-warning', 'step3');
 });
 $('refreshHistory')?.addEventListener('click', () => refreshHistory());
+$('historyStatusFilter')?.addEventListener('change', () => renderHistory(historyItems));
 $('exportHistory')?.addEventListener('click', exportClaimHistory);
 $('setupOpenSettings')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); activateTab('settingsTab'); $('webUsername')?.focus(); });
 $('setupLater')?.addEventListener('click', () => { $('setupWizard')?.classList.add('hidden'); $('setupWizard')?.setAttribute('aria-hidden', 'true'); });
@@ -2592,7 +2723,9 @@ document.addEventListener('keydown', (event) => {
 
 $('importEstHistory')?.addEventListener('click', async () => {
   currentProcessStep = 'step1';
+  autoTrackingAfterImport = false;
   resetRunUi('step1');
+  resetRunUi('step2');
   const missing = validateSettingsForStep('step1');
   if (missing.length) {
     setStatus('Failed', 'bad', 'step1');
@@ -2712,6 +2845,9 @@ window.cpApp.onBuiltinBrowserVisibilityRequest?.((payload) => {
 });
 
 window.cpApp.onEvent(({ stage, event }) => {
+  if (stage === 'est-history' && event?.type === 'est_complete') {
+    autoTrackingAfterImport = event.outcome !== 'EMPTY' && Number(event.imported || 0) > 0;
+  }
   const message = describeEvent(stage, event);
   const classByType = {
     pin_late: 'log-late', pin_on_time: 'log-on-time', pin_overdue: 'log-not-delivered', pin_overdue_in_transit: 'log-not-delivered',
@@ -2791,9 +2927,14 @@ window.cpApp.onRun((payload) => {
     deactivateBuiltinBrowser(`run-${payload.status}`).catch(() => {});
   }
   updateCounters();
-  if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
-    refreshHistory().catch(() => {});
-  }
+if (step === 'step1' && ['failed', 'blocked', 'stopped'].includes(payload.status)) autoTrackingAfterImport = false;
+if (step === 'step1' && autoTrackingAfterImport && ['complete', 'complete_with_warnings'].includes(payload.status)) {
+  autoTrackingAfterImport = false;
+  window.setTimeout(() => startTrackingOnly(), 0);
+}
+if (['complete', 'complete_with_warnings', 'failed', 'blocked', 'stopped', 'diagnostic_complete'].includes(payload.status)) {
+  refreshHistory().catch(() => {});
+}
 });
 
 window.cpApp.onStage(({ stage, status, code }) => {
@@ -2834,6 +2975,8 @@ guidedSetupController.bind();
 rendererEvents.on('locale:changed', () => guidedSetupController.localize());
 
 initThemePicker();
+mergeTrackingIntoStep1();
+initSavedSecretInputs();
 initStepTabs();
 initLiveLogs();
 initBuiltinBrowserPositionTracking();

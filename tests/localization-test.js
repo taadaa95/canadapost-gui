@@ -39,7 +39,15 @@ assert.deepStrictEqual(identical.sort(), [...identicalFrenchAllowlist.keys()].so
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const localizedAttributes = [...html.matchAll(/data-i18n(?:-placeholder|-aria-label|-title|-alt)?="([^"]+)"/g)].map(match => match[1]);
-assert(localizedAttributes.length >= 200, 'major interface text and accessibility attributes must use declarative localization after removing obsolete controls');
+const requiredLocalizedDomKeys = [
+  'nav.settings.title', 'nav.step1.title', 'nav.step3.title', 'nav.history.title', 'nav.results.title',
+  'settings.save', 'step1.title', 'step1.start', 'step1.stop', 'step1.shipmentsImported',
+  'step1.checkedImported', 'step1.importProgress', 'step1.identifyProgress', 'step1.liveLog', 'step3.title'
+];
+assert(localizedAttributes.length > 0, 'interface must retain declarative localization attributes');
+for (const key of requiredLocalizedDomKeys) {
+  assert(localizedAttributes.includes(key), `major localized interface control is missing from the DOM: ${key}`);
+}
 for (const key of localizedAttributes) assert(Object.hasOwn(english, key), `HTML localization key is missing: ${key}`);
 
 const visibleTextNodes = [...html.matchAll(/>([^<>]+)</g)]
@@ -87,7 +95,7 @@ for (const key of [
 }
 
 const observedEnglish = [
-  'Run Step 1 — Import Shipment History', 'Force Stop', 'Step 2 — Check Tracking / Create Claims',
+  'Run Step 1 — Import Shipment History', 'Force Stop', 'Identify Late Candidates',
   'Stop After Current Item', 'Results & Evidence — click any row for details'
 ];
 for (const text of observedEnglish) {
@@ -133,7 +141,9 @@ assert.ok(!html.includes('id="siteHealthResult"'));
 assert.ok(!Object.hasOwn(english, 'health.run'), 'obsolete manual health-check localization must be removed');
 assert.ok(!Object.hasOwn(french.messages, 'health.run'), 'obsolete manual health-check French localization must be removed');
 for (const locale of [english, french.messages]) {
-  assert.ok(!Object.keys(locale).some(key => key.startsWith('history.filter.')), 'History filter localization must be removed');
+  for (const key of ['history.filter.label', 'history.filter.all', 'history.filter.submitted', 'history.filter.needsAttention', 'history.filter.failed', 'history.filter.alreadySubmitted', 'history.filter.rejected']) {
+    assert.ok(Object.hasOwn(locale, key) && String(locale[key] || '').trim(), `${key} must be localized`);
+  }
   assert.ok(!Object.keys(locale).some(key => key.startsWith('history.manual.')), 'manual-shipment localization must be removed');
   for (const key of ['history.reconciliationQueue', 'history.classifications', 'history.clearFilters']) {
     assert.ok(!Object.hasOwn(locale, key), `${key} must be removed`);

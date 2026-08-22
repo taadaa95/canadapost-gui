@@ -10,6 +10,7 @@ const { loadLocale } = require('../lib/i18n');
 
 (async () => {
   const root = path.resolve(__dirname, '..');
+  const englishMessages = loadLocale('en-CA', root).messages;
   const frenchMessages = loadLocale('fr-CA', root).messages;
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cpcr-electron-e2e-'));
   const portal = createMockPortal();
@@ -34,7 +35,7 @@ const { loadLocale } = require('../lib/i18n');
     assert.strictEqual(await window.evaluate(() => typeof globalThis.process), 'undefined');
     await window.locator('#setupWizard').waitFor({ state: 'hidden' });
     const primaryTabs = [
-      ['tabSettings', 'settingsTab'], ['tabStep1', 'step1'], ['tabStep2', 'step2'],
+      ['tabSettings', 'settingsTab'], ['tabStep1', 'step1'],
       ['tabStep3', 'step3'], ['tabHistory', 'historyTab'], ['tabResults', 'resultsTab']
     ];
     for (const [tabId, panelId] of primaryTabs) {
@@ -89,21 +90,17 @@ const { loadLocale } = require('../lib/i18n');
       assert.deepStrictEqual(mismatches, []);
     };
     await assertFrenchKeys([
-      'step1.title', 'step1.createsTrackingCsv', 'step1.rollingWindow', 'step1.carryForward', 'step1.run', 'action.forceStop',
-      'step1.statusTitle', 'runStatus.idle', 'step1.ordersFound', 'step1.shipmentsImported', 'step1.workgroups',
-      'step1.warningsInspect', 'step1.progress', 'status.waiting', 'step1.liveLog'
+      'step1.title', 'step1.simpleDescription', 'step1.start', 'step1.stop',
+      'step1.statusTitle', 'runStatus.idle', 'step1.shipmentsImported', 'step1.checkedImported',
+      'step2.lateClaims', 'step1.warningsInspect', 'step1.importProgress', 'step1.identifyProgress',
+      'status.waiting', 'step1.liveLog'
     ]);
     assert.strictEqual(await window.locator('#step1WarningsCard').getAttribute('aria-label'), frenchMessages['step1.warningsAria']);
-    await window.evaluate(() => window.activateTab('step2'));
-    await assertFrenchKeys([
-      'step2.title', 'step2.readsTrackingCsv', 'step2.candidateExplanation', 'step2.run',
-      'action.forceStop', 'step2.statusTitle',
-      'runStatus.idle', 'step2.checked', 'step2.lateClaims', 'step2.onTime', 'step2.notDelivered', 'step2.progress',
-      'status.waiting', 'step2.liveLog'
-    ]);
-    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Exécuter l’étape 1 — Importer l’historique des envois');
-    assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Exécuter l’étape 2 — Vérifier le suivi');
-    assert.strictEqual(await window.locator('#stop').textContent(), 'Arrêter après l’élément en cours');
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), frenchMessages['step1.start']);
+    assert.strictEqual(await window.locator('#forceStopStep1').textContent(), frenchMessages['step1.stop']);
+    assert.strictEqual(await window.locator('#tabStep2').count(), 0, 'standalone tracking tab must remain removed');
+    assert.strictEqual(await window.locator('#runTrackingOnly').count(), 0, 'standalone tracking run control must remain removed');
+    assert.strictEqual(await window.locator('#forceStopStep2').count(), 0, 'standalone tracking stop control must remain removed');
     assert.strictEqual(await window.locator('#runSiteHealth').count(), 0, 'manual workflow health-check button must be removed');
     assert.strictEqual(await window.locator('#siteHealthResult').count(), 0, 'standalone workflow health-check result must be removed');
     const emptyHistoryToolbars = await window.evaluate(() => [...document.querySelectorAll('#historyTab .history-toolbar')]
@@ -124,15 +121,13 @@ const { loadLocale } = require('../lib/i18n');
       const tracking = window.describeEvent('tracking', { type: 'tracking_start', total: 1, requestIntervalMs: 3100, jitterMaxMs: 100 });
       window.setStatus('Running', 'warn', 'step1');
       window.setActionLocalized('step1.exportStarting', {}, '', 'step1');
-      const step1 = {
-        status: document.getElementById('step1RunStatus').textContent,
-        action: document.getElementById('step1CurrentAction').textContent
-      };
       window.UpdateProgress.render(document, { stage: 'checking' }, key => window.tr(key), () => {});
       const result = {
         tracking,
-        step1,
-        status: document.getElementById('step2RunStatus').textContent,
+        step1: {
+          status: document.getElementById('step1RunStatus').textContent,
+          action: document.getElementById('step1CurrentAction').textContent
+        },
         updater: document.getElementById('updateProgressTitle').textContent,
         updaterStage: document.getElementById('updateProgressStage').textContent
       };
@@ -140,42 +135,24 @@ const { loadLocale } = require('../lib/i18n');
       return result;
     });
     assert(dynamicFrench.tracking.startsWith('Étape de suivi démarrée.'));
-    assert.strictEqual(dynamicFrench.step1.status, 'En cours');
+    assert.strictEqual(dynamicFrench.step1.status, frenchMessages['runStatus.running']);
     assert.strictEqual(dynamicFrench.step1.action, frenchMessages['step1.exportStarting']);
-    assert.strictEqual(dynamicFrench.status, 'En cours');
     assert.strictEqual(dynamicFrench.updater, 'Mise à jour de l’application');
     assert.strictEqual(dynamicFrench.updaterStage, 'Vérification des versions GitHub…');
     const localizedStates = await window.evaluate(() => {
       const result = {};
       for (const [label, key] of [
-        ['Running', 'running'], ['Complete', 'complete'], ['Failed', 'failed'], ['Blocked', 'blocked'], ['Stopped', 'stopped'],
-        ['Diagnostic passed', 'diagnosticPassed'], ['Diagnostic failed', 'diagnosticFailed'],
-        ['Diagnostic running', 'diagnosticRunning'], ['Diagnostic blocked', 'diagnosticBlocked']
+        ['Running', 'running'], ['Complete', 'complete'], ['Failed', 'failed'], ['Blocked', 'blocked'], ['Stopped', 'stopped']
       ]) {
-        window.setStatus(label, '', 'step2');
-        result[key] = document.getElementById('step2RunStatus').textContent;
+        window.setStatus(label, '', 'step1');
+        result[key] = document.getElementById('step1RunStatus').textContent;
       }
-      window.setLocalizedText(document.getElementById('step2RunStatus'), 'step2.discardedStatus');
-      result.discarded = document.getElementById('step2RunStatus').textContent;
-      document.getElementById('forceStopStep2').disabled = true;
-      result.disabledForceStop = document.getElementById('forceStopStep2').textContent;
       return result;
     });
     for (const [state, key] of [
       ['running', 'runStatus.running'], ['complete', 'runStatus.complete'], ['failed', 'runStatus.failed'],
-      ['blocked', 'runStatus.blocked'], ['stopped', 'runStatus.stopped'], ['diagnosticPassed', 'runStatus.diagnosticPassed'],
-      ['diagnosticFailed', 'runStatus.diagnosticFailed'], ['diagnosticRunning', 'runStatus.diagnosticRunning'],
-      ['diagnosticBlocked', 'runStatus.diagnosticBlocked'], ['discarded', 'step2.discardedStatus']
+      ['blocked', 'runStatus.blocked'], ['stopped', 'runStatus.stopped']
     ]) assert.strictEqual(localizedStates[state], frenchMessages[key]);
-    assert.strictEqual(localizedStates.disabledForceStop, frenchMessages['action.forceStop']);
-    const frenchConfirmationPromise = window.waitForEvent('dialog');
-    const discardPromise = window.evaluate(() => window.discardIncompleteTracking());
-    const frenchConfirmation = await frenchConfirmationPromise;
-    assert.match(frenchConfirmation.message(), /Abandonner l’état de préparation incomplet de l’étape 2/);
-    await frenchConfirmation.dismiss();
-    await discardPromise;
-    await window.evaluate(() => window.describeEvent('tracking', { type: 'tracking_circuit_open', attempted: 1, total: 2, remaining: 1, errors: 1, queuePreserved: true }));
-    assert.match(await window.locator('#step2CurrentAction').textContent(), /défaillance systémique de l’intégration/);
     await window.evaluate(async () => window.showSetupWizard(await window.cpApp.loadConfig()));
     assert.strictEqual(await window.locator('#setupWizardTitle').textContent(), 'Bienvenue — configuration de l’état de préparation');
     assert.strictEqual(await window.locator('#setupLater').textContent(), 'Continuer plus tard');
@@ -188,11 +165,13 @@ const { loadLocale } = require('../lib/i18n');
     assert.deepStrictEqual(mixedEnglish, [], 'major French workflow surfaces must not retain observed English copy');
     await window.locator('#localeSelect').selectOption('en-CA');
     await window.locator('html[lang="en-CA"]').waitFor();
-    assert.strictEqual(await window.locator('#importEstHistory').textContent(), 'Run Step 1 — Import Shipment History');
-    assert.strictEqual(await window.locator('#step1CurrentAction').textContent(), 'Exporting EST Desktop history and generating tracking.csv.');
-    assert.strictEqual(await window.locator('#runTrackingOnly').textContent(), 'Run Step 2 — Check Tracking');
-    assert.match(await window.locator('#step2CurrentAction').textContent(), /systemic integration failure/,
-      'visible dynamic status text must be regenerated immediately after a language switch');
+    assert.strictEqual(await window.locator('#importEstHistory').textContent(), englishMessages['step1.start']);
+    assert.strictEqual(await window.locator('#forceStopStep1').textContent(), englishMessages['step1.stop']);
+    assert.strictEqual(await window.locator('#step1CurrentAction').textContent(), englishMessages['step1.exportStarting'],
+      'visible Step 1 dynamic status text must be regenerated immediately after a language switch');
+    assert.strictEqual(await window.locator('#tabStep2').count(), 0);
+    assert.strictEqual(await window.locator('#runTrackingOnly').count(), 0);
+    assert.strictEqual(await window.locator('#forceStopStep2').count(), 0);
 
     const beforeStep3Target = await window.evaluate(() => window.cpApp.builtinBrowserTargetState());
     assert.strictEqual(beforeStep3Target.created, false, 'native browser must be created deliberately, not by unrelated startup');

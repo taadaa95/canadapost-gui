@@ -74,8 +74,12 @@ function assertProductSurfaceCleanup() {
     'step2.freshRun', 'step2.testConnection', 'step2.exportStructure', 'step2.discardIncomplete',
     'step2.diagnostic.title', 'step2.diagnostic.message', 'step2.diagnostic.rowLabel', 'build.unsigned'
   ]) assert.ok(!html.includes(`data-i18n="${key}"`), `Product HTML still contains removed copy ${key}`);
-  assert.match(html, /id="runTrackingOnly"[^>]*data-i18n="step2\.run"/);
-  assert.match(html, /id="forceStopStep2"[^>]*data-force-stop="step2"/);
+  assert.doesNotMatch(html, /id="runTrackingOnly"/, 'Tracking starts automatically after Step 1 import');
+  assert.doesNotMatch(html, /id="tabStep2"/, 'Tracking no longer has a standalone customer-facing tab');
+  assert.match(renderer, /function mergeTrackingIntoStep1/);
+  assert.match(renderer, /autoTrackingAfterImport/);
+  assert.match(html, /id="forceStopStep1"[^>]*data-force-stop="step1"/, 'Step 1 must expose one stop control for both import and tracking');
+  assert.doesNotMatch(html, /id="forceStopStep2"/, 'The removed standalone tracking phase must not expose a second stop button');
 
   assert.ok(!renderer.includes('function reconciliationActionButton('));
   for (const label of ['Mark submitted', 'Mark not submitted', 'Approve retry']) {
@@ -151,6 +155,7 @@ async function testSettingsSaveStatus() {
     tr: (key, fallback) => fallback || key,
     setLocalizedText: (element, key, values, fallback) => { element.textContent = key === 'settings.savedStatus' ? 'Settings saved' : fallback; },
     renderTrackingApiCredentialMetadata: () => {},
+    applyStoredCredentialMasks: () => {},
     log: () => {}
   });
   vm.runInContext(functionSource(renderer, 'saveUserSettings', 'clearTrackingApiCredentials'), context);

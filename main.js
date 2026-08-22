@@ -256,24 +256,53 @@ function stopActiveChildForShutdown() {
   if (typeof timer.unref === 'function') timer.unref();
 }
 
-function destroyBuiltinBrowserView() {
-  if (!builtinBrowserView) return;
-  const identityHash = builtinBrowserTargetPublication?.webContentsIdentityHash
-    || targetIdentityHash(`${builtinBrowserView.webContents?.id || ''}:${builtinBrowserTargetNonce}`);
-  appendStep3ElectronDiagnostic('browser-target-destroyed', { webContentsIdentityHash: identityHash, generation: builtinBrowserGeneration });
+function safeBuiltinBrowserWebContents(view = builtinBrowserView) {
+  if (!view) return null;
   try {
-    if (win && !win.isDestroyed() && childViewIndex(builtinBrowserView) >= 0) win.contentView.removeChildView(builtinBrowserView);
-  } catch (_) {}
-  try {
-    if (!builtinBrowserView.webContents.isDestroyed()) builtinBrowserView.webContents.close({ waitForBeforeUnload: false });
+    const contents = view.webContents;
+    if (!contents || contents.isDestroyed()) return null;
+    return contents;
   } catch (_) {
-    try { builtinBrowserView.webContents.destroy(); } catch (_) {}
+    return null;
   }
+}
+
+function resetBuiltinBrowserViewState(reason = 'destroyed') {
   builtinBrowserView = null;
   builtinBrowserAttached = false;
   builtinBrowserTargetNonce = '';
   builtinBrowserTargetPublication = null;
-  builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason: 'destroyed', appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });
+  builtinBrowserDisplayState = Object.freeze({ visible: false, attached: false, reason, appliedBounds: { x: 0, y: 0, width: 0, height: 0 } });
+}
+
+function releaseBuiltinBrowserViewAfterWindowClosed() {
+  // BrowserWindow destruction already destroys child WebContentsViews.
+  // Never touch the native view again from the `closed` callback.
+  resetBuiltinBrowserViewState('window-closed');
+}
+
+function destroyBuiltinBrowserView() {
+  const view = builtinBrowserView;
+  if (!view) return;
+  if (!win || win.isDestroyed()) {
+    releaseBuiltinBrowserViewAfterWindowClosed();
+    return;
+  }
+  const contents = safeBuiltinBrowserWebContents(view);
+  const identityHash = builtinBrowserTargetPublication?.webContentsIdentityHash
+    || targetIdentityHash(`${contents?.id || ''}:${builtinBrowserTargetNonce}`);
+  appendStep3ElectronDiagnostic('browser-target-destroyed', { webContentsIdentityHash: identityHash, generation: builtinBrowserGeneration });
+  try {
+    if (childViewIndex(view) >= 0) win.contentView.removeChildView(view);
+  } catch (_) {}
+  if (contents) {
+    try {
+      contents.close({ waitForBeforeUnload: false });
+    } catch (_) {
+      try { contents.destroy(); } catch (_) {}
+    }
+  }
+  resetBuiltinBrowserViewState('destroyed');
   emitBrowserDisplayState(browserDisplaySnapshot());
 }
 
@@ -356,7 +385,7 @@ function createWindow() {
   win.on('closed', () => {
     stopActiveChildForShutdown();
     setupAssistantController.closeSetupAssistant('renderer-window-closed').catch(() => {});
-    destroyBuiltinBrowserView();
+    releaseBuiltinBrowserViewAfterWindowClosed();
     win = null;
   });
   win.loadFile('index.html');
@@ -389,18 +418,31 @@ function browserContentBounds() {
 }
 
 function childViewIndex(view = builtinBrowserView) {
-  const children = win?.contentView?.children;
-  return Array.isArray(children) && view ? children.indexOf(view) : -1;
+  if (!view || !win) return -1;
+  try {
+    if (win.isDestroyed()) return -1;
+    const children = win.contentView?.children;
+    return Array.isArray(children) ? children.indexOf(view) : -1;
+  } catch (_) {
+    return -1;
+  }
 }
 
 function browserDisplaySnapshot(overrides = {}) {
-  const bounds = builtinBrowserView && !builtinBrowserView.webContents.isDestroyed()
-    ? normalizeBounds(builtinBrowserView.getBounds())
-    : { x: 0, y: 0, width: 0, height: 0 };
+  const view = builtinBrowserView;
+  const contents = safeBuiltinBrowserWebContents(view);
+  let bounds = { x: 0, y: 0, width: 0, height: 0 };
+  if (view && contents) {
+    try { bounds = normalizeBounds(view.getBounds()); } catch (_) {}
+  }
+  let currentUrl = '';
+  if (contents) {
+    try { currentUrl = contents.getURL(); } catch (_) {}
+  }
   return {
     ok: true,
-    created: Boolean(builtinBrowserView),
-    destroyed: Boolean(builtinBrowserView?.webContents?.isDestroyed()),
+    created: Boolean(view),
+    destroyed: Boolean(view && !contents),
     attached: builtinBrowserAttached,
     visible: Boolean(builtinBrowserDisplayState.visible),
     reason: builtinBrowserDisplayState.reason || 'unknown',
@@ -409,9 +451,7 @@ function browserDisplaySnapshot(overrides = {}) {
     targetAttached: Boolean(builtinBrowserTargetPublication),
     webContentsIdentityHash: builtinBrowserTargetPublication?.webContentsIdentityHash || '',
     targetIdHash: builtinBrowserTargetPublication?.targetIdHash || '',
-    currentUrl: builtinBrowserView?.webContents && !builtinBrowserView.webContents.isDestroyed()
-      ? builtinBrowserView.webContents.getURL()
-      : '',
+    currentUrl,
     ...overrides
   };
 }

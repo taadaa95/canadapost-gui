@@ -39,7 +39,6 @@
       <div class="step-tabs" role="tablist" data-i18n-aria-label="nav.sectionsAria">
         <button id="tabSettings" class="step-tab active" data-tab="settingsTab" type="button" role="tab" aria-controls="settingsTab" aria-selected="true" tabindex="0"><span class="step-tab-title" data-i18n="nav.settings.title"></span><span class="step-tab-detail" data-i18n="nav.settings.detail"></span></button>
         <button id="tabStep1" class="step-tab" data-tab="step1" type="button" role="tab" aria-controls="step1" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step1.title"></span><span class="step-tab-detail" data-i18n="nav.step1.detail"></span></button>
-        <button id="tabStep2" class="step-tab" data-tab="step2" type="button" role="tab" aria-controls="step2" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step2.title"></span><span class="step-tab-detail" data-i18n="nav.step2.detail"></span></button>
         <button id="tabStep3" class="step-tab" data-tab="step3" type="button" role="tab" aria-controls="step3" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.step3.title"></span><span class="step-tab-detail" data-i18n="nav.step3.detail"></span></button>
         <button id="tabHistory" class="step-tab" data-tab="historyTab" type="button" role="tab" aria-controls="historyTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.history.title"></span><span class="step-tab-detail" data-i18n="nav.history.detail"></span></button>
         <button id="tabResults" class="step-tab" data-tab="resultsTab" type="button" role="tab" aria-controls="resultsTab" aria-selected="false" tabindex="-1"><span class="step-tab-title" data-i18n="nav.results.title"></span><span class="step-tab-detail" data-i18n="nav.results.detail"></span><span id="notificationsBadge" class="notification-badge hidden" data-i18n-aria-label="results.notificationsAria" aria-hidden="true" hidden></span></button>
@@ -73,33 +72,18 @@
             <div class="check-row">
               <label><input id="rememberSettings" type="checkbox" checked /> <span data-i18n="settings.website.remember"></span></label>
             </div>
-            <div class="settings-note" data-i18n="settings.website.securityNote"></div>
           </div>
 
           <div class="settings-section">
             <h3 data-i18n="settings.api.title"></h3>
             <div class="field">
               <label for="trackingClientId" data-i18n="settings.api.clientId"></label>
-              <input id="trackingClientId" type="text" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
+              <input id="trackingClientId" type="password" data-i18n-placeholder="settings.api.clientIdPlaceholder" autocomplete="off" />
             </div>
             <div class="field">
               <label for="trackingClientSecret" data-i18n="settings.api.clientSecret"></label>
               <input id="trackingClientSecret" type="password" data-i18n-placeholder="settings.api.clientSecretPlaceholder" autocomplete="new-password" />
             </div>
-            <details class="settings-note">
-              <summary data-i18n="settings.api.advanced"></summary>
-              <div class="field">
-                <label for="trackingRequestDelayMs" data-i18n="settings.api.requestInterval"></label>
-                <input id="trackingRequestDelayMs" type="number" min="3100" max="60000" step="100" value="3100" inputmode="numeric" />
-              </div>
-              <div class="field">
-                <label for="trackingResourceTimeoutMs" data-i18n="settings.api.timeout"></label>
-                <input id="trackingResourceTimeoutMs" type="number" min="1000" max="120000" step="1000" value="45000" inputmode="numeric" />
-              </div>
-              <div data-i18n="settings.api.defaultsNote"></div>
-            </details>
-            <div id="trackingApiCredentialMetadata" class="settings-note" data-i18n="settings.api.metadataPending"></div>
-            <div class="settings-note" data-i18n="settings.api.accessNote"></div>
             <button id="clearTrackingApiCredentials" class="warning" type="button" data-i18n="settings.api.clear"></button>
           </div>
 
@@ -173,15 +157,18 @@
           </div>
         </div>
       </section>
-
       <section id="step1" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep1">
-        <div class="step-top">
-          <div class="step-title-row">
-            <h2 data-i18n="step1.title"></h2>
-            <span class="pill" data-i18n="step1.createsTrackingCsv"></span>
+        <div class="step-top step1-simple-top">
+          <div class="step-title-row step1-title-row">
+            <div class="step1-heading-copy">
+              <h2 data-i18n="step1.title"></h2>
+              <p class="step-description" data-i18n="step1.simpleDescription"></p>
+            </div>
+            <div class="step-actions step-execution-controls step1-primary-actions">
+              <button id="importEstHistory" class="success step-execution-control" type="button" data-i18n="step1.start"></button>
+              <button id="forceStopStep1" class="danger step-execution-control" type="button" data-force-stop="step1" data-i18n="step1.stop"></button>
+            </div>
           </div>
-          <p class="step-description" data-i18n="step1.rollingWindow"></p>
-          <p class="muted" data-i18n="step1.carryForward"></p>
           <input id="estWorkgroup" type="hidden" value="" />
           <input id="estMobo" type="hidden" value="-2" />
           <input id="estCategoryGroup" type="hidden" value="SHP" />
@@ -190,71 +177,34 @@
           <input id="historyMobo" type="hidden" />
           <input id="historyAutoMobo" type="checkbox" checked hidden />
           <input id="historyIncludeNoManifest" type="checkbox" checked hidden />
-          <div class="step-actions step-execution-controls">
-            <button id="importEstHistory" class="success step-execution-control" data-i18n="step1.run"></button>
-            <button id="forceStopStep1" class="danger step-execution-control" data-force-stop="step1" data-i18n="action.forceStop"></button>
-          </div>
         </div>
-        <div class="step-workspace">
-          <div class="card step-status-card">
-            <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;" data-i18n="step1.statusTitle"></h2>
+        <div class="step-workspace step1-workspace">
+          <div class="card step-status-card step1-status-card">
+            <div class="row step1-status-heading">
+              <h2 data-i18n="step1.statusTitle"></h2>
               <span id="step1RunStatus" class="pill" data-i18n="runStatus.idle"></span>
             </div>
-            <div class="status-grid">
-              <div class="stat"><div id="step1Orders" class="num">0</div><div class="label" data-i18n="step1.ordersFound"></div></div>
+            <div class="status-grid step1-status-grid">
               <div class="stat"><div id="step1Imported" class="num">0</div><div class="label" data-i18n="step1.shipmentsImported"></div></div>
-              <div class="stat"><div id="step1Workgroups" class="num">0</div><div class="label" data-i18n="step1.workgroups"></div></div>
+              <div class="stat"><div id="step1TrackingProgressCount" class="num step1-ratio">0 / 0</div><div class="label" data-i18n="step1.checkedImported"></div></div>
+              <div class="stat"><div id="late" class="num">0</div><div class="label" data-i18n="step2.lateClaims"></div></div>
               <div id="step1WarningsCard" class="stat stat-clickable" role="button" tabindex="0" data-i18n-aria-label="step1.warningsAria"><div id="step1Warnings" class="num">0</div><div class="label" data-i18n="step1.warningsInspect"></div></div>
             </div>
-            <div class="progress-wrap">
-              <div class="progress-label"><span data-i18n="step1.progress"></span><span id="step1Pct">0%</span></div>
-              <progress id="step1Progress" max="100" value="0"></progress>
+            <div class="step1-progress-stack">
+              <div class="progress-wrap">
+                <div class="progress-label"><span data-i18n="step1.importProgress"></span><span id="step1ImportProgressCount">0 / 0</span></div>
+                <progress id="step1Progress" max="100" value="0"></progress>
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-label"><span data-i18n="step1.identifyProgress"></span><span id="trackingPct">0%</span></div>
+                <progress id="trackingProgress" max="100" value="0"></progress>
+              </div>
             </div>
             <div class="current-action" id="step1CurrentAction" data-i18n="status.waiting"></div>
           </div>
           <div class="card step-log-card">
             <div class="live-log-header"><h2 data-i18n="step1.liveLog"></h2><button id="step1JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
             <div id="step1Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="step2" class="tab-panel step-panel" role="tabpanel" aria-labelledby="tabStep2">
-        <div class="step-top">
-          <div class="step-title-row">
-            <h2 data-i18n="step2.title"></h2>
-            <span class="pill" data-i18n="step2.readsTrackingCsv"></span>
-          </div>
-          <div class="step-fields step2-fields">
-            <div id="step2CandidateExplanation" class="step-copy-box" data-i18n="step2.candidateExplanation"></div>
-          </div>
-          <div class="step-actions step-execution-controls">
-            <button id="runTrackingOnly" class="success step-execution-control" data-i18n="step2.run"></button>
-            <button id="forceStopStep2" class="danger step-execution-control" data-force-stop="step2" data-i18n="action.forceStop"></button>
-          </div>
-        </div>
-        <div class="step-workspace">
-          <div class="card step-status-card">
-            <div class="row" style="justify-content: space-between;">
-              <h2 style="margin:0;" data-i18n="step2.statusTitle"></h2>
-              <span id="step2RunStatus" class="pill" data-i18n="runStatus.idle"></span>
-            </div>
-            <div class="status-grid">
-              <div class="stat"><div id="checked" class="num">0</div><div class="label" data-i18n="step2.checked"></div></div>
-              <div class="stat"><div id="late" class="num">0</div><div class="label" data-i18n="step2.lateClaims"></div></div>
-              <div class="stat"><div id="onTime" class="num">0</div><div class="label" data-i18n="step2.onTime"></div></div>
-              <div class="stat"><div id="notDelivered" class="num">0</div><div class="label" data-i18n="step2.notDelivered"></div></div>
-            </div>
-            <div class="progress-wrap">
-              <div class="progress-label"><span data-i18n="step2.progress"></span><span id="trackingPct">0%</span></div>
-              <progress id="trackingProgress" max="100" value="0"></progress>
-            </div>
-            <div class="current-action" id="step2CurrentAction" data-i18n="status.waiting"></div>
-          </div>
-          <div class="card step-log-card">
-            <div class="live-log-header"><h2 data-i18n="step2.liveLog"></h2><button id="step2JumpLatest" class="secondary jump-latest" type="button" hidden data-i18n="log.jumpLatest"></button></div>
-            <div id="step2Log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
           </div>
         </div>
       </section>
@@ -355,6 +305,18 @@
           <div class="stat"><div id="historySubmitted" class="num">0</div><div class="label" data-i18n="history.submitted"></div></div>
           <div class="stat"><div id="historyNeedsAttention" class="num">0</div><div class="label" data-i18n="history.needsAttention"></div></div>
           <div class="stat"><div id="historyRecordTotal" class="num">0</div><div class="label" data-i18n="history.totalRecords"></div></div>
+        </div>
+
+        <div class="history-filter-row">
+          <label for="historyStatusFilter" data-i18n="history.filter.label"></label>
+          <select id="historyStatusFilter">
+            <option value="all" data-i18n="history.filter.all"></option>
+            <option value="submitted" data-i18n="history.filter.submitted"></option>
+            <option value="needs_attention" data-i18n="history.filter.needsAttention"></option>
+            <option value="failed" data-i18n="history.filter.failed"></option>
+            <option value="already_submitted" data-i18n="history.filter.alreadySubmitted"></option>
+            <option value="rejected" data-i18n="history.filter.rejected"></option>
+          </select>
         </div>
 
         <div class="history-content">

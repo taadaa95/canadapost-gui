@@ -27,9 +27,9 @@ Kris performs physical, visual, and live release testing against the exact check
 - Use only an authorized Canada Post account owner for real API diagnostics, CAPTCHA/text verification, supervised claims, or account reconciliation.
 - Physical Windows validation remains distinct from the automated Windows package validation. Do not mark it passed unless Kris performs it.
 
-## Exact 0.4.2 release-candidate validation
+## Exact 0.4.4 release-candidate validation
 
-1. Compare the exact size and SHA-256 of every canonical 0.4.2 binary intended for publication with the combined `SHA256SUMS.txt` and release metadata.
+1. Compare the exact size and SHA-256 of every canonical 0.4.4 binary intended for publication with the combined `SHA256SUMS.txt` and release metadata.
 2. Validate the AppImage on physical Linux x64 and the NSIS installer on physical Windows x64.
 3. Validate the universal DMG on Intel x64 and Apple Silicon arm64 where hardware is available; record any architecture not physically tested.
 4. On macOS, verify the public candidate is Developer ID signed and notarized, mounts normally, can replace the copy in Applications, preserves application data, and has the expected Gatekeeper experience. Do not treat an unsigned TEST DMG as equivalent.
@@ -39,4 +39,4 @@ Kris performs physical, visual, and live release testing against the exact check
 8. Exercise the updater with a newer synthetic/test release: exact asset selection, size/hash verification, protected-operation lock, pre-update database backup, and platform install behavior.
 9. Record the source SHA, filename, size, SHA-256, signing/notarization status, physical platform/architecture, results, and exceptions.
 
-Do not publish `v0.4.2` until these gates are complete and Kris explicitly approves the exact packages.
+Do not publish `v0.4.4` until these gates are complete and Kris explicitly approves the exact packages.
