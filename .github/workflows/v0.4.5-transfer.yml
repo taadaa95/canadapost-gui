@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_SOURCE_BRANCH: feature/dev11-beta-release-hardening
+  RELEASE_SOURCE_COMMIT: 1ed752feb4fea66a4ecf03490688b368e5d9e163
+
 jobs:
   linux:
     if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
@@ -26,6 +30,15 @@ jobs:
       - run: npm run package:linux
       - run: npm run package:audit -- dist/packages/linux-unpacked
       - run: npm run package:size -- dist/packages
+      - run: npm run release:finalize
+        env:
+          RELEASE_PLATFORM: linux
+      - run: npm run release:validate
+        env:
+          RELEASE_PLATFORM: linux
+      - run: npm run release:provenance
+        env:
+          RELEASE_PLATFORM: linux
       - uses: actions/upload-artifact@v4
         with:
           name: v045-linux
@@ -51,6 +64,15 @@ jobs:
       - run: npm run package:windows
       - run: npm run package:audit -- dist/packages/win-unpacked
       - run: npm run package:size -- dist/packages
+      - run: npm run release:finalize
+        env:
+          RELEASE_PLATFORM: windows
+      - run: npm run release:validate
+        env:
+          RELEASE_PLATFORM: windows
+      - run: npm run release:provenance
+        env:
+          RELEASE_PLATFORM: windows
       - uses: actions/upload-artifact@v4
         with:
           name: v045-windows
