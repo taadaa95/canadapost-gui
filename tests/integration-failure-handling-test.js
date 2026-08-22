@@ -61,6 +61,7 @@ function estEnv(baseUrl, temporary) {
 function estHandler(mode) {
   return (request, response) => {
     response.setHeader('Content-Type', mode === 'html' ? 'text/html' : 'application/xml');
+    if (mode === 'unauthorized') { response.statusCode = 401; return response.end('<messages><message><code>401</code><description>Unauthorized</description></message></messages>'); }
     if (mode === 'html') return response.end('<!doctype html><html><title>Sign in</title><form>Login</form></html>');
     if (request.url === '/dop/connect') return response.end('<connect><status>ok</status></connect>');
     if (request.url.includes('/workgroup/customerNumber/')) return response.end('<list><string>13579</string></list>');
@@ -213,7 +214,7 @@ function detail(pin) {
 }
 
 async function testEstWorkers() {
-  for (const mode of ['empty', 'populated', 'html', 'unknown']) {
+  for (const mode of ['empty', 'populated', 'html', 'unknown', 'unauthorized']) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), `cp-est-${mode}-`));
     const { server, baseUrl } = await startServer(estHandler(mode));
     const env = estEnv(baseUrl, temporary); fs.mkdirSync(path.dirname(env.TRACKING_CSV), { recursive: true });
@@ -225,7 +226,10 @@ async function testEstWorkers() {
       assert.strictEqual(result.code, 0); assert.strictEqual(result.events.find(event => event.type === 'est_complete').outcome, 'IMPORTED');
       assert.ok(!result.events.some(event => event.type === 'est_imported')); assert.ok(result.events.some(event => event.type === 'est_imported_detail')); assert.ok(result.events.some(event => event.type === 'est_import_progress'));
       assert.ok(!result.stdout.includes('SYNTHETIC900001'));
-    } else { assert.notStrictEqual(result.code, 0); assert.strictEqual(fs.readFileSync(env.TRACKING_CSV, 'utf8'), sentinel); }
+    } else {
+      assert.notStrictEqual(result.code, 0); assert.strictEqual(fs.readFileSync(env.TRACKING_CSV, 'utf8'), sentinel);
+      if (mode === 'unauthorized') assert.strictEqual(result.events.find(event => event.type === 'error')?.message, 'Canada Post rejected the saved website username or password. Re-enter your website credentials in Settings and try again.');
+    }
     fs.rmSync(temporary, { recursive: true, force: true });
   }
 }

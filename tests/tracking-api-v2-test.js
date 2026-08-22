@@ -212,6 +212,11 @@ async function main() {
   const scope = parseCanadaPostError({ status: 403, headers: new Headers({ 'content-type': 'application/json' }), body: JSON.stringify({ error: 'insufficient_scope', error_description: 'merchant scope required' }), diagnosticStage: 'resource' });
   assert.strictEqual(scope.category, 'incorrect_scope');
 
+  const estAuthentication = parseCanadaPostError({ status: 401, headers: new Headers({ 'content-type': 'application/xml' }), body: '', endpointFamily: 'est-desktop-history', protocol: 'Basic/XML', diagnosticStage: 'resource' });
+  assert.strictEqual(estAuthentication.message, 'Canada Post rejected the saved website username or password. Re-enter your website credentials in Settings and try again.');
+  const trackingAuthentication = parseCanadaPostError({ status: 401, headers: new Headers({ 'content-type': 'application/json' }), body: '', endpointFamily: 'developer-portal-tracking-v1', protocol: 'REST/JSON', diagnosticStage: 'resource' });
+  assert.strictEqual(trackingAuthentication.message, 'Canada Post Tracking API rejected the Bearer [REDACTED] (HTTP 401).');
+
   const redirect = sanitizedRedirect('https://accounts.canadapost-postescanada.ca/account/login?token=private', new URL('https://api.canadapost-postescanada.ca/source'));
   const redirectDiagnostic = parseCanadaPostError({ status: 302, headers: new Headers({ location: 'redacted' }), body: '', endpointFamily: 'developer-portal-tracking-v1', protocol: 'REST/JSON', responseHostname: 'api.canadapost-postescanada.ca', redirect });
   assert.strictEqual(redirectDiagnostic.category, 'redirect');
