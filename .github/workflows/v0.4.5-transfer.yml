@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v0.4.5-artifact-transfer
+          ref: 1ed752feb4fea66a4ecf03490688b368e5d9e163
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -22,24 +22,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx install-electron --no
+      - run: npm run release:guard
       - run: npm run package:linux
       - run: npm run package:audit -- dist/packages/linux-unpacked
       - run: npm run package:size -- dist/packages
-      - name: Transfer Linux artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .ci-transfer && mkdir .ci-transfer
-          cp dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage .ci-transfer/
-          (cd .ci-transfer && sha256sum Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage > SHA256SUMS-linux.txt)
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          export GIT_INDEX_FILE="$RUNNER_TEMP/transfer-linux.index"
-          git read-tree --empty
-          git add -f .ci-transfer
-          tree="$(git write-tree)"
-          commit="$(git commit-tree -m 'ci: v0.4.5 Linux artifact transfer' "$tree")"
-          git push -f origin "$commit:refs/heads/ci-transfer-v0.4.5-linux"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v045-linux
+          path: dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage
+          if-no-files-found: error
+          retention-days: 1
 
   windows:
     if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
@@ -47,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v0.4.5-artifact-transfer
+          ref: 1ed752feb4fea66a4ecf03490688b368e5d9e163
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -55,22 +47,44 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx install-electron --no
+      - run: npm run release:guard
       - run: npm run package:windows
       - run: npm run package:audit -- dist/packages/win-unpacked
       - run: npm run package:size -- dist/packages
-      - name: Transfer Windows artifact
-        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v045-windows
+          path: dist/packages/Canada.Post.Claim.Runner-0.4.5-win-x64.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  transfer-release:
+    if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: v045-*
+          path: transfer
+          merge-multiple: true
+      - name: Verify and publish temporary transfer release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Remove-Item -Recurse -Force .ci-transfer -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory .ci-transfer | Out-Null
-          Copy-Item 'dist/packages/Canada.Post.Claim.Runner-0.4.5-win-x64.exe' '.ci-transfer/'
-          $hash = (Get-FileHash '.ci-transfer/Canada.Post.Claim.Runner-0.4.5-win-x64.exe' -Algorithm SHA256).Hash.ToLower()
-          "$hash  Canada.Post.Claim.Runner-0.4.5-win-x64.exe" | Out-File -Encoding ascii '.ci-transfer/SHA256SUMS-windows.txt'
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP 'transfer-windows.index'
-          git read-tree --empty
-          git add -f .ci-transfer
-          $tree = git write-tree
-          $commit = git commit-tree -m 'ci: v0.4.5 Windows artifact transfer' $tree
-          git push -f origin "$commit`:refs/heads/ci-transfer-v0.4.5-windows"
+          set -euo pipefail
+          cd transfer
+          test -f Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage
+          test -f Canada.Post.Claim.Runner-0.4.5-win-x64.exe
+          sha256sum Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage Canada.Post.Claim.Runner-0.4.5-win-x64.exe > SHA256SUMS-transfer.txt
+          tag='v0.4.5-transfer-1ed752f'
+          gh release delete "$tag" -R taadaa95/canadapost-gui --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" \
+            -R taadaa95/canadapost-gui \
+            Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage \
+            Canada.Post.Claim.Runner-0.4.5-win-x64.exe \
+            SHA256SUMS-transfer.txt \
+            --target 1ed752feb4fea66a4ecf03490688b368e5d9e163 \
+            --title 'Temporary v0.4.5 publication transfer' \
+            --notes 'Temporary transfer only. Public release is in canadapost-claim-runner-releases.' \
+            --prerelease
