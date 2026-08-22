@@ -17,4 +17,12 @@ assert.deepStrictEqual(calls[0].handler(), handler());
 assert.throws(() => register('config:load', handler), /more than once/);
 assert.throws(() => register('unknown:mutation', handler), /no focused module owner/);
 assert.throws(() => register('tracking:run', null), /must be a function/);
+
+const historyCalls = [];
+const historyIpc = [];
+const claimDb = { listClaimHistory: (_dbPath, options) => { historyCalls.push(options); return []; } };
+const registerHistory = createFocusedRegistrar({ handle: (channel, ipcHandler) => historyIpc.push({ channel, ipcHandler }) });
+registerHistory('history:list', (_event, options = {}) => ({ ok: true, items: claimDb.listClaimHistory('synthetic.db', options) }));
+assert.deepStrictEqual(historyIpc[0].ipcHandler({}, { limit: 500, offset: 0, latestOnly: true }), { ok: true, items: [] });
+assert.deepStrictEqual(historyCalls, [{ limit: 500, offset: 0, latestOnly: true }]);
 process.stdout.write('Focused IPC module ownership and registration tests passed.\n');

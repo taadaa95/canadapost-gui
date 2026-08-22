@@ -20,7 +20,15 @@ assert.deepStrictEqual(validateIpcPayload('privacy:delete', {
 });
 assert.throws(() => validateIpcPayload('privacy:delete', { surprise: true }), error => error.code === 'IPC_FIELD_UNEXPECTED');
 assert.throws(() => validateIpcPayload('config:save', []), error => error.code === 'IPC_PAYLOAD_INVALID');
-assert.deepStrictEqual(validateIpcPayload('history:list', { limit: 500, offset: 0 }), { limit: 500, offset: 0 });
+assert.deepStrictEqual(validateIpcPayload('history:list', {
+  limit: 500,
+  offset: 0,
+  latestOnly: true
+}), {
+  limit: 500,
+  offset: 0,
+  latestOnly: true
+});
 assert.throws(() => validateIpcPayload('history:list', { search: 'removed-filter' }), error => error.code === 'IPC_FIELD_UNEXPECTED');
 assert.throws(() => validateIpcPayload('history:export', { status: 'submitted' }), error => error.code === 'IPC_FIELD_UNEXPECTED');
 assert.throws(() => validateIpcPayload('submit:run', { selectedClassificationRecords: new Array(10001).fill({}) }), error => error.code === 'IPC_ARRAY_TOO_LARGE');

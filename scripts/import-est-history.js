@@ -302,6 +302,8 @@ async function main() {
     username: credentials.username,
     password: credentials.password,
     sensitiveValues: [customer, mobo],
+    endpointFamily: 'est-desktop-history',
+    protocol: 'Basic/XML',
     allowMock,
     retries: method === 'GET' ? 2 : 0
   });
