@@ -1,0 +1,76 @@
+name: v0.4.5 artifact transfer
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0.4.5-artifact-transfer
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx install-electron --no
+      - run: npm run package:linux
+      - run: npm run package:audit -- dist/packages/linux-unpacked
+      - run: npm run package:size -- dist/packages
+      - name: Transfer Linux artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .ci-transfer && mkdir .ci-transfer
+          cp dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage .ci-transfer/
+          (cd .ci-transfer && sha256sum Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage > SHA256SUMS-linux.txt)
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          export GIT_INDEX_FILE="$RUNNER_TEMP/transfer-linux.index"
+          git read-tree --empty
+          git add -f .ci-transfer
+          tree="$(git write-tree)"
+          commit="$(git commit-tree -m 'ci: v0.4.5 Linux artifact transfer' "$tree")"
+          git push -f origin "$commit:refs/heads/ci-transfer-v0.4.5-linux"
+
+  windows:
+    if: github.head_ref == 'agent/v0.4.5-artifact-transfer'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0.4.5-artifact-transfer
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx install-electron --no
+      - run: npm run package:windows
+      - run: npm run package:audit -- dist/packages/win-unpacked
+      - run: npm run package:size -- dist/packages
+      - name: Transfer Windows artifact
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force .ci-transfer -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory .ci-transfer | Out-Null
+          Copy-Item 'dist/packages/Canada.Post.Claim.Runner-0.4.5-win-x64.exe' '.ci-transfer/'
+          $hash = (Get-FileHash '.ci-transfer/Canada.Post.Claim.Runner-0.4.5-win-x64.exe' -Algorithm SHA256).Hash.ToLower()
+          "$hash  Canada.Post.Claim.Runner-0.4.5-win-x64.exe" | Out-File -Encoding ascii '.ci-transfer/SHA256SUMS-windows.txt'
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP 'transfer-windows.index'
+          git read-tree --empty
+          git add -f .ci-transfer
+          $tree = git write-tree
+          $commit = git commit-tree -m 'ci: v0.4.5 Windows artifact transfer' $tree
+          git push -f origin "$commit`:refs/heads/ci-transfer-v0.4.5-windows"
