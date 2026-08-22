@@ -30,6 +30,7 @@ jobs:
       - run: npm run package:linux
       - run: npm run package:audit -- dist/packages/linux-unpacked
       - run: npm run package:size -- dist/packages
+      - run: npm run sbom
       - run: npm run release:finalize
         env:
           RELEASE_PLATFORM: linux
@@ -64,6 +65,7 @@ jobs:
       - run: npm run package:windows
       - run: npm run package:audit -- dist/packages/win-unpacked
       - run: npm run package:size -- dist/packages
+      - run: npm run sbom
       - run: npm run release:finalize
         env:
           RELEASE_PLATFORM: windows
