@@ -1,6 +1,6 @@
 {
   "name": "canadapost-gui",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Local Canada Post tracking, eligibility, claim submission, reconciliation, backup and audit workflow.",
   "author": "Canada Post Claim Runner contributors",
   "desktopName": "Canada Post Claim Runner",
@@ -59,7 +59,7 @@
     "test:packaged-database-legacy": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked legacy",
     "test:packaged-database-advanced": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js dist/packages/linux-unpacked advanced",
     "test:packaged-isolated-profile": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js dist/packages/linux-unpacked",
-    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/Canada.Post.Claim.Runner-0.4.5-linux-x86_64.AppImage\"",
+    "test:packaged-isolated-appimage": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/Canada.Post.Claim.Runner-0.4.6-linux-x86_64.AppImage\"",
     "test:packaged-mac-worker": "node scripts/smoke-packaged-est-worker.js \"dist/packages/mac-universal/Canada Post Claim Runner.app\" populated",
     "test:packaged-mac-database": "node --unhandled-rejections=strict scripts/smoke-packaged-database-startup.js \"dist/packages/mac-universal/Canada Post Claim Runner.app\" legacy",
     "test:packaged-mac-startup": "node --unhandled-rejections=strict scripts/smoke-packaged-isolated-profile.js \"dist/packages/mac-universal/Canada Post Claim Runner.app\"",
