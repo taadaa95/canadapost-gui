@@ -4,6 +4,15 @@ Current public stable version: **0.4.1** for Linux x64 and Windows x64. Version 
 
 Electron application for importing Canada Post EST shipment history, checking delivery results, identifying late-delivery claim candidates, and submitting selected late-package support tickets under user supervision. Canada Post makes the final claim-eligibility decision.
 
+## Project at a glance
+
+**Purpose:** A desktop tool that reduces manual review of Canada Post shipment histories. It checks tracking results, identifies potentially late deliveries, and organizes candidates for human review.
+
+- **Workflow:** Import shipment history, check deliveries through Canada Post's Tracking API, review candidates, and prepare selected support claims in a supervised built-in browser.
+- **Technology:** Electron, Node.js, REST/JSON APIs, SQLite, and Playwright-based automation and testing.
+- **Operational safeguards:** Local audit records, retry controls, and explicit user selection before claim handling.
+- **Important distinction:** The tool identifies possible late-delivery claims; Canada Post determines final refund eligibility.
+
 ## Important operating rule
 
 The Step 3 queue contains only actionable `LATE_CANDIDATE` records: authoritative tracking has a usable original Delivery Standard and a successful-delivery date after that standard, and the current claim-attempt state permits execution. Previously submitted, already-submitted, terminal, unresolved, reconciliation-required, and otherwise blocked records are excluded automatically. Safe retry states already authorized by the claim-attempt rules remain available. A revised operational estimate is retained separately and does not replace an earlier original standard.
